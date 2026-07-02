@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: connect_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - connect_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: connect_api
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/connect
+      - JWT_ACCESS_SECRET=supersecretaccesskeyconnect123!@#
+      - JWT_REFRESH_SECRET=supersecretrefreshkeyconnect987!@#
+      - FRONTEND_URL=http://localhost:5173
+      - NODE_ENV=production
+    depends_on:
+      - mongodb
+    networks:
+      - connect_network
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: connect_client
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+      - VITE_SOCKET_URL=http://localhost:5000
+    depends_on:
+      - backend
+    networks:
+      - connect_network
+
+networks:
+  connect_network:
+    driver: bridge
+
+volumes:
+  mongo_data:
