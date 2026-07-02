@@ -170,9 +170,22 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
+const parseCookies = (cookieHeader: string | undefined): { [key: string]: string } => {
+  const cookies: { [key: string]: string } = {};
+  if (!cookieHeader) return cookies;
+  cookieHeader.split(';').forEach((cookie) => {
+    const parts = cookie.split('=');
+    if (parts.length >= 2) {
+      cookies[parts[0].trim()] = parts[1].trim();
+    }
+  });
+  return cookies;
+};
+
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const token = req.cookies.refreshToken || req.body.refreshToken;
+    const cookies = req.cookies || parseCookies(req.headers.cookie);
+    const token = cookies.refreshToken || req.body.refreshToken;
     if (token) {
       const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
       await DeviceSession.findOneAndDelete({ refreshToken: hashedToken });
@@ -186,7 +199,8 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
 
 export const refreshToken = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const token = req.cookies.refreshToken || req.body.refreshToken;
+    const cookies = req.cookies || parseCookies(req.headers.cookie);
+    const token = cookies.refreshToken || req.body.refreshToken;
     if (!token) {
       throw new CustomError('Refresh token required', 401);
     }

@@ -23,6 +23,10 @@
     "tailwind-merge": "^2.3.0",
     "zustand": "^4.5.2"
   },
+  "overrides": {
+    "react": "$react",
+    "react-dom": "$react-dom"
+  },
   "devDependencies": {
     "@types/react": "^19.0.0-rc.0",
     "@types/react-dom": "^19.0.0-rc.0",

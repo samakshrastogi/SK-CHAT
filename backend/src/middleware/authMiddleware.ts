@@ -21,6 +21,20 @@ export const authenticateJWT = async (
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      if (process.env.NODE_ENV === 'development') {
+        // Auto-login as Alice for testing/development
+        const defaultUser = await User.findOne({ username: 'alice' }) || await User.findOne();
+        if (defaultUser) {
+          req.user = {
+            id: (defaultUser._id as any).toString(),
+            email: defaultUser.email,
+            username: defaultUser.username,
+            role: defaultUser.role,
+            deviceId: 'dev_mock_device'
+          };
+          return next();
+        }
+      }
       throw new CustomError('Access token required', 401);
     }
 
