@@ -9,6 +9,12 @@ dist/
 build/
 .next/
 out/
+frontend/dist/
+backend/dist/
+
+# Vite temporary files
+vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
 
 # Environment files
 .env
@@ -36,9 +42,4 @@ Thumbs.db
 *.swp
 
 # Uploaded items fallback
-backend/uploads/emails/
-backend/uploads/attachments/
-backend/uploads/avatars/
-backend/uploads/covers/
-backend/uploads/statuses/
-backend/uploads/communities/
+backend/uploads/
