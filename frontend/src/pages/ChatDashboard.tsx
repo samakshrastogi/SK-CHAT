@@ -440,10 +440,10 @@ export default function ChatDashboard() {
   };
 
   return (
-    <div className="h-screen w-screen flex bg-slate-900 text-slate-100 overflow-hidden relative font-sans">
+    <div className="h-screen w-screen flex bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden relative font-sans">
       
       {/* 1. Main Left Sidebar (Compact Navigation) */}
-      <aside className="w-16 md:w-20 bg-slate-950/80 border-r border-slate-800/60 flex flex-col justify-between items-center py-6 z-20">
+      <aside className="w-16 md:w-20 bg-white/80 dark:bg-slate-950/80 border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col justify-between items-center py-6 z-20">
         <div className="flex flex-col gap-6 items-center w-full">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <span className="text-xl font-extrabold tracking-tighter text-white">C</span>
@@ -466,8 +466,8 @@ export default function ChatDashboard() {
                   onClick={() => { setActiveTab(btn.id as any); }}
                   className={`h-11 w-full rounded-xl flex items-center justify-center transition-all ${
                     active 
-                      ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30' 
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900/60'
+                      ? 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 dark:border-indigo-500/30' 
+                      : 'text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900/60'
                   }`}
                   title={btn.label}
                 >
@@ -485,8 +485,8 @@ export default function ChatDashboard() {
               onClick={() => { setActiveTab('admin'); }}
               className={`h-11 w-full rounded-xl flex items-center justify-center transition-all ${
                 activeTab === 'admin'
-                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                  : 'text-amber-500/60 hover:text-amber-400 hover:bg-slate-900/60'
+                  ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 dark:border-amber-500/30'
+                  : 'text-amber-600/60 dark:text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-900/60'
               }`}
               title="Admin Dashboard"
             >
@@ -496,7 +496,7 @@ export default function ChatDashboard() {
 
           <button
             onClick={() => { logout(); }}
-            className="h-11 w-full rounded-xl flex items-center justify-center text-red-500/60 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="h-11 w-full rounded-xl flex items-center justify-center text-red-600/60 dark:text-red-500/60 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/5 dark:hover:bg-red-500/10 transition-colors"
             title="Log Out"
           >
             <LogOut className="h-5.5 w-5.5" />
@@ -505,12 +505,12 @@ export default function ChatDashboard() {
       </aside>
 
       {/* 2. Middle Panel Listing (Sub-Menus) */}
-      <section className="w-80 md:w-96 bg-slate-900/80 border-r border-slate-800/60 flex flex-col z-10 shrink-0">
+      <section className="w-80 md:w-96 bg-white/70 dark:bg-slate-900/80 border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0">
         
         {/* Tab 1: Chats */}
         {activeTab === 'chats' && (
           <div className="flex flex-col h-full">
-            <div className="p-4 border-b border-slate-800/40">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800/40">
               <h2 className="text-xl font-bold mb-3 tracking-tight">Conversations</h2>
               <div className="relative">
                 <input
@@ -518,7 +518,7 @@ export default function ChatDashboard() {
                   placeholder="Search users or rooms..."
                   value={searchQuery}
                   onChange={(e) => handleUserSearch(e.target.value)}
-                  className="w-full h-10 pl-10 pr-4 rounded-xl text-xs font-medium glass-input text-white placeholder:text-slate-500"
+                  className="w-full h-10 pl-10 pr-4 rounded-xl text-xs font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
                 />
                 <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
               </div>
@@ -533,14 +533,14 @@ export default function ChatDashboard() {
                     <button
                       key={usr._id}
                       onClick={() => handleStartDirectChat(usr)}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-slate-800/50 rounded-2xl transition-colors text-left"
+                      className="w-full flex items-center gap-3 p-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-2xl transition-colors text-left"
                     >
-                      <div className="h-10 w-10 rounded-full bg-slate-700 flex-shrink-0 overflow-hidden">
+                      <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 flex-shrink-0 overflow-hidden">
                         {usr.avatar ? <img src={usr.avatar} alt="" className="h-full w-full object-cover" /> : null}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{usr.username}</p>
-                        <p className="text-xs text-slate-400 truncate">{usr.bio}</p>
+                        <p className="text-sm font-semibold truncate text-slate-800 dark:text-white">{usr.username}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{usr.bio}</p>
                       </div>
                     </button>
                   ))}
@@ -551,7 +551,7 @@ export default function ChatDashboard() {
                     <span className="text-xs text-slate-500 font-semibold">Active Chats</span>
                     <button 
                       onClick={() => setCreateGroupOpen(true)}
-                      className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                      className="text-xs font-bold text-indigo-550 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-1"
                     >
                       <Plus className="h-3.5 w-3.5" /> Group
                     </button>
@@ -570,11 +570,13 @@ export default function ChatDashboard() {
                         key={chat._id}
                         onClick={() => { setActiveChat(chat); }}
                         className={`w-full flex items-center gap-3.5 p-3 rounded-2xl transition-all text-left ${
-                          active ? 'bg-indigo-500/10 border border-indigo-500/20' : 'hover:bg-slate-800/30'
+                          active 
+                            ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400' 
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800/30'
                         }`}
                       >
                         <div className="relative flex-shrink-0">
-                          <div className="h-11 w-11 rounded-full bg-slate-800 border border-slate-700/50 overflow-hidden">
+                          <div className="h-11 w-11 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700/50 overflow-hidden">
                             {isGroup ? (
                               chat.avatar ? <img src={chat.avatar} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center font-bold text-slate-500">G</div>
                             ) : (
@@ -582,17 +584,17 @@ export default function ChatDashboard() {
                             )}
                           </div>
                           {!isGroup && targetParticipant?.status === 'online' && (
-                            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-slate-900" />
+                            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-center mb-0.5">
-                            <h4 className="text-sm font-semibold truncate text-slate-200">{titleName}</h4>
+                            <h4 className="text-sm font-semibold truncate text-slate-800 dark:text-slate-200">{titleName}</h4>
                             <span className="text-[10px] text-slate-500 font-medium">
                               {chat.lastMessage ? new Date(chat.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-400 truncate font-medium">{subtitle}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-medium">{subtitle}</p>
                         </div>
                       </button>
                     );
@@ -611,7 +613,7 @@ export default function ChatDashboard() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setTextStatusOpen(true)}
-                  className="p-2 rounded-xl bg-slate-800 text-indigo-400 hover:bg-slate-700 transition-colors"
+                  className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   title="Post text status"
                 >
                   <PlusCircle className="h-5 w-5" />
@@ -631,13 +633,13 @@ export default function ChatDashboard() {
                         setActiveStatusViewer(statuses);
                         setActiveStatusIndex(idx);
                       }}
-                      className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-800/40 text-left transition-colors"
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800/40 text-left transition-colors"
                     >
-                      <div className="h-11 w-11 rounded-full p-0.5 border-2 border-indigo-500 bg-slate-900 flex overflow-hidden">
+                      <div className="h-11 w-11 rounded-full p-0.5 border-2 border-indigo-500 bg-slate-200 dark:bg-slate-900 flex overflow-hidden">
                         {stat.userId.avatar ? <img src={stat.userId.avatar} alt="" className="rounded-full h-full w-full object-cover" /> : null}
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-200">{stat.userId.username}</h4>
+                        <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{stat.userId.username}</h4>
                         <p className="text-[11px] text-slate-500">{new Date(stat.createdAt).toLocaleTimeString()}</p>
                       </div>
                     </button>
@@ -661,13 +663,13 @@ export default function ChatDashboard() {
                 const displayUser = wasCaller ? call.receiverId : call.callerId;
                 const missed = call.status === 'missed';
                 return (
-                  <div key={call._id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-slate-800/30">
+                  <div key={call._id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800/30">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-slate-800 overflow-hidden">
+                      <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                         {displayUser?.avatar ? <img src={displayUser.avatar} alt="" className="h-full w-full object-cover" /> : null}
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-200">{displayUser?.username || 'Unknown Contact'}</h4>
+                        <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{displayUser?.username || 'Unknown Contact'}</h4>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500">
                           {missed ? <PhoneMissed className="h-3 w-3 text-red-500" /> : <Volume2 className="h-3 w-3" />}
                           <span>{new Date(call.createdAt).toLocaleDateString()} {new Date(call.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -692,7 +694,7 @@ export default function ChatDashboard() {
               <h2 className="text-xl font-bold tracking-tight">Communities</h2>
               <button
                 onClick={() => setCreateCommunityOpen(true)}
-                className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-1"
               >
                 <Plus className="h-4 w-4" /> Create
               </button>
@@ -705,7 +707,7 @@ export default function ChatDashboard() {
                 placeholder="Enter community invite code..."
                 value={joinCommunityCode}
                 onChange={(e) => setJoinCommunityCode(e.target.value)}
-                className="flex-1 h-9 rounded-lg text-xs font-medium glass-input px-3 text-white"
+                className="flex-1 h-9 rounded-lg text-xs font-medium glass-input px-3 text-slate-800 dark:text-white"
               />
               <button
                 onClick={handleJoinCommunity}
@@ -717,25 +719,25 @@ export default function ChatDashboard() {
 
             <div className="flex-1 overflow-y-auto space-y-4">
               {communities.map((comm) => (
-                <div key={comm._id} className="p-3 bg-slate-850 rounded-2xl border border-slate-800 space-y-2">
+                <div key={comm._id} className="p-3 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-slate-700 overflow-hidden">
+                    <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-700 overflow-hidden">
                       {comm.avatar ? <img src={comm.avatar} alt="" className="h-full w-full object-cover" /> : null}
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-slate-200">{comm.name}</h4>
+                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">{comm.name}</h4>
                       <p className="text-[10px] text-slate-500">Invite Code: {comm.inviteCode}</p>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-400">{comm.description}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{comm.description}</p>
                   
                   {/* Community groups navigation */}
-                  <div className="pt-2 border-t border-slate-800/40 space-y-1">
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800/40 space-y-1">
                     {comm.groupIds.map((channel: any) => (
                       <button
                         key={channel._id}
                         onClick={() => { setActiveChat(channel); }}
-                        className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:bg-slate-800 hover:text-white text-left"
+                        className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white text-left"
                       >
                         <span>#</span> {channel.name}
                       </button>
@@ -923,14 +925,14 @@ export default function ChatDashboard() {
       </section>
 
       {/* 3. Main Chat Panel (Active view on Right) */}
-      <main className="flex-1 bg-slate-950 flex flex-col justify-between relative">
+      <main className="flex-1 bg-slate-100 dark:bg-slate-950 flex flex-col justify-between relative">
         {activeChat ? (
           <div className="flex flex-col h-full">
             
             {/* Active chat header */}
-            <header className="h-16 border-b border-slate-800/60 px-6 flex items-center justify-between bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
+            <header className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-slate-850 overflow-hidden border border-slate-700/40">
+                <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-300 dark:border-slate-700/40">
                   {activeChat.isGroup ? (
                     activeChat.avatar ? <img src={activeChat.avatar} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center font-bold text-slate-500">G</div>
                   ) : (
@@ -942,7 +944,7 @@ export default function ChatDashboard() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-200">
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                     {activeChat.isGroup ? activeChat.name : (activeChat.participants.find(p => p._id !== user?.id)?.username || 'Connect User')}
                   </h3>
                   <p className="text-[10px] text-slate-500 font-semibold">
@@ -957,14 +959,14 @@ export default function ChatDashboard() {
                   <>
                     <button
                       onClick={() => makeCall(activeChat.participants.find(p => p._id !== user?.id)!._id, activeChat._id, 'voice')}
-                      className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-all"
+                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
                       title="Audio Call"
                     >
                       <Phone className="h-4.5 w-4.5" />
                     </button>
                     <button
                       onClick={() => makeCall(activeChat.participants.find(p => p._id !== user?.id)!._id, activeChat._id, 'video')}
-                      className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-all"
+                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
                       title="Video Call"
                     >
                       <Video className="h-4.5 w-4.5" />
@@ -974,7 +976,7 @@ export default function ChatDashboard() {
 
                 <button
                   onClick={handleSummarizeThread}
-                  className="p-2 text-indigo-400 hover:text-indigo-300 rounded-lg hover:bg-indigo-500/10 transition-all"
+                  className="p-2 text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-lg hover:bg-indigo-500/10 transition-all"
                   title="Summarize Recent Thread"
                 >
                   <Sparkles className="h-4.5 w-4.5" />
@@ -1001,7 +1003,7 @@ export default function ChatDashboard() {
                       className={`px-4.5 py-3 rounded-2xl relative group ${
                         isMe 
                           ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-none' 
-                          : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none'
+                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none'
                       }`}
                     >
                       {/* Replying indicator */}
