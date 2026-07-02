@@ -110,7 +110,7 @@ export default function ChatDashboard() {
 
   // Sync active message window scroll
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     
     // Fetch smart replies when active chat changes
     if (activeChat) {
