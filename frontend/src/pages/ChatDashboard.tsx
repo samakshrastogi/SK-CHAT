@@ -442,70 +442,31 @@ export default function ChatDashboard() {
   return (
     <div className="h-screen w-screen flex bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden relative font-sans">
       
-      {/* 1. Main Left Sidebar (Compact Navigation) */}
-      <aside className="w-16 md:w-20 bg-white/80 dark:bg-slate-950/80 border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col justify-between items-center py-6 z-20">
-        <div className="flex flex-col gap-6 items-center w-full">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <span className="text-xl font-extrabold tracking-tighter text-white">C</span>
+      {/* Soft colorful backdrop blobs for vibrant design aesthetics */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-400/20 dark:bg-indigo-600/10 blur-[120px] pointer-events-none z-0" />
+      <div className="absolute bottom-[-10%] left-[20%] w-[45%] h-[45%] rounded-full bg-pink-400/15 dark:bg-purple-600/10 blur-[130px] pointer-events-none z-0" />
+      <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] rounded-full bg-purple-400/15 dark:bg-indigo-600/10 blur-[120px] pointer-events-none z-0" />
+
+      {/* Left Column: List Panel + Bottom Navigation Bar */}
+      <section className="w-80 md:w-96 glass-panel border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0 relative overflow-hidden">
+        
+        {/* App Branding Top Header */}
+        <div className="p-4.5 pb-3 border-b border-slate-200 dark:border-slate-800/40 flex items-center justify-between bg-white/30 dark:bg-slate-900/30">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <span className="text-lg font-extrabold tracking-tighter text-white">C</span>
+            </div>
+            <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-200 dark:to-purple-300">Connect</span>
           </div>
-
-          <div className="flex flex-col gap-3 w-full px-2">
-            {[
-              { id: 'chats', label: 'Chats', icon: MessageSquare },
-              { id: 'status', label: 'Stories', icon: Compass },
-              { id: 'calls', label: 'Calls', icon: Phone },
-              { id: 'communities', label: 'Servers', icon: Globe },
-              { id: 'profile', label: 'My Bio', icon: UserIcon },
-              { id: 'settings', label: 'Settings', icon: Settings },
-            ].map((btn) => {
-              const Icon = btn.icon;
-              const active = activeTab === btn.id;
-              return (
-                <button
-                  key={btn.id}
-                  onClick={() => { setActiveTab(btn.id as any); }}
-                  className={`h-11 w-full rounded-xl flex items-center justify-center transition-all ${
-                    active 
-                      ? 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 dark:border-indigo-500/30' 
-                      : 'text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900/60'
-                  }`}
-                  title={btn.label}
-                >
-                  <Icon className="h-5.5 w-5.5" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4 items-center w-full px-2">
-          {/* Admin tab (conditional) */}
-          {(user?.role === 'admin' || user?.role === 'moderator') && (
-            <button
-              onClick={() => { setActiveTab('admin'); }}
-              className={`h-11 w-full rounded-xl flex items-center justify-center transition-all ${
-                activeTab === 'admin'
-                  ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 dark:border-amber-500/30'
-                  : 'text-amber-600/60 dark:text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-900/60'
-              }`}
-              title="Admin Dashboard"
-            >
-              <ShieldAlert className="h-5.5 w-5.5" />
-            </button>
-          )}
-
+          
           <button
-            onClick={() => { logout(); }}
-            className="h-11 w-full rounded-xl flex items-center justify-center text-red-600/60 dark:text-red-500/60 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/5 dark:hover:bg-red-500/10 transition-colors"
+            onClick={() => logout()}
+            className="p-2 rounded-xl text-red-500/70 hover:text-red-500 hover:bg-red-500/5 dark:hover:bg-red-500/10 transition-colors"
             title="Log Out"
           >
-            <LogOut className="h-5.5 w-5.5" />
+            <LogOut className="h-4.5 w-4.5" />
           </button>
         </div>
-      </aside>
-
-      {/* 2. Middle Panel Listing (Sub-Menus) */}
-      <section className="w-80 md:w-96 bg-white/70 dark:bg-slate-900/80 border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0">
         
         {/* Tab 1: Chats */}
         {activeTab === 'chats' && (
@@ -922,10 +883,55 @@ export default function ChatDashboard() {
           </div>
         )}
 
-      </section>
+          {/* Integrated Bottom Navigation Bar (Previously left sidebar) */}
+          <nav className="h-15 border-t border-slate-200 dark:border-slate-800/40 bg-white/60 dark:bg-slate-950/60 backdrop-blur-md flex items-center justify-around px-2 py-1.5 shrink-0 z-10">
+            {[
+              { id: 'chats', label: 'Chats', icon: MessageSquare },
+              { id: 'status', label: 'Stories', icon: Compass },
+              { id: 'calls', label: 'Calls', icon: Phone },
+              { id: 'communities', label: 'Servers', icon: Globe },
+              { id: 'profile', label: 'Bio', icon: UserIcon },
+              { id: 'settings', label: 'Settings', icon: Settings },
+            ].map((btn) => {
+              const Icon = btn.icon;
+              const active = activeTab === btn.id;
+              return (
+                <button
+                  key={btn.id}
+                  onClick={() => { setActiveTab(btn.id as any); }}
+                  className={`flex flex-col items-center justify-center h-11 w-11 rounded-xl transition-all relative ${
+                    active 
+                      ? 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10 dark:border-indigo-500/20' 
+                      : 'text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
+                  }`}
+                  title={btn.label}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span className="text-[9px] font-bold mt-0.5 scale-90">{btn.label}</span>
+                </button>
+              );
+            })}
+            
+            {/* Conditional Admin bottom link */}
+            {(user?.role === 'admin' || user?.role === 'moderator') && (
+              <button
+                onClick={() => { setActiveTab('admin'); }}
+                className={`flex flex-col items-center justify-center h-11 w-11 rounded-xl transition-all ${
+                  activeTab === 'admin'
+                    ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/10 dark:border-amber-500/20'
+                    : 'text-amber-600/60 dark:text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
+                }`}
+                title="Admin"
+              >
+                <Shield className="h-5 w-5" />
+                <span className="text-[9px] font-bold mt-0.5 scale-90">Admin</span>
+              </button>
+            )}
+          </nav>
+        </section>
 
-      {/* 3. Main Chat Panel (Active view on Right) */}
-      <main className="flex-1 bg-slate-100 dark:bg-slate-950 flex flex-col justify-between relative">
+        {/* 3. Main Chat Panel (Active view on Right) */}
+        <main className="flex-1 bg-gradient-to-tr from-slate-100 to-indigo-50/40 dark:from-slate-950 dark:to-slate-900/60 flex flex-col justify-between relative">
         {activeChat ? (
           <div className="flex flex-col h-full">
             
