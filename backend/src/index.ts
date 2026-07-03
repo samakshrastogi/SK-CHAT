@@ -1,13 +1,11 @@
+import 'dotenv/config';
 import http from 'http';
 import { Server } from 'socket.io';
 import app from './app.js';
 import { connectDB } from './config/db.js';
 import { socketHandler } from './socket/socketHandler.js';
 import { logger } from './utils/logger.js';
-import dotenv from 'dotenv';
-
-// Load environmental variables
-dotenv.config();
+import { rescheduleSelfDestructMessages } from './utils/selfDestruct.js';
 
 const port = process.env.PORT || 5000;
 
@@ -33,6 +31,9 @@ const startServer = async () => {
 
     // Bind Socket actions
     socketHandler(io);
+
+    // Reschedule outstanding self-destruct timers
+    await rescheduleSelfDestructMessages(io);
 
     // Start Server Listen
     server.listen(port, () => {

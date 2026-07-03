@@ -5,6 +5,7 @@ import { User } from '../models/User.js';
 import { CustomError } from '../utils/customError.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { uploadMedia } from '../services/cloudinaryService.js';
+import { scheduleSelfDestruct } from '../utils/selfDestruct.js';
 import crypto from 'crypto';
 
 export const createChat = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -130,7 +131,8 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       locationData,
       contactData,
       replyTo,
-      scheduledAt
+      scheduledAt,
+      expiresIn
     } = req.body;
 
     const chat = await Chat.findOne({ _id: chatId, participants: req.user!.id });
@@ -149,7 +151,6 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       mediaSize = req.file.size;
     }
 
-    // Process Polls Structure if type is poll
     let cleanPollData = undefined;
     if (messageType === 'poll' && pollData) {
       const parsedPoll = typeof pollData === 'string' ? JSON.parse(pollData) : pollData;
@@ -161,6 +162,11 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
           votes: []
         }))
       };
+    }
+
+    let expiresAt: Date | undefined;
+    if (expiresIn && Number(expiresIn) > 0) {
+      expiresAt = new Date(Date.now() + Number(expiresIn) * 1000);
     }
 
     const message = await Message.create({
@@ -176,6 +182,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       contactData: contactData ? (typeof contactData === 'string' ? JSON.parse(contactData) : contactData) : undefined,
       replyTo: replyTo || undefined,
       scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+      expiresAt,
       status: 'sent'
     });
 
@@ -191,6 +198,14 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       });
 
     res.status(201).json({ success: true, message: populated });
+
+    // Schedule self-destruction if configured
+    if (expiresIn && Number(expiresIn) > 0) {
+      const io = req.app.get('io');
+      if (io) {
+        scheduleSelfDestruct(io, (message._id as any).toString(), chatId, Number(expiresIn) * 1000);
+      }
+    }
   } catch (error) {
     next(error);
   }
@@ -360,7 +375,49 @@ export const castVote = async (req: AuthenticatedRequest, res: Response, next: N
 
     await message.save();
 
+    // Broadcast poll update to room
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${message.chatId}`).emit('poll:updated', { messageId: message._id, pollData: message.pollData });
+    }
+
     res.status(200).json({ success: true, pollData: message.pollData });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const togglePinMessage = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+    const { messageId } = req.body;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      throw new CustomError('Chat not found', 404);
+    }
+
+    if (!chat.participants.some(p => p.toString() === req.user!.id)) {
+      throw new CustomError('Access denied', 403);
+    }
+
+    const messageIndex = chat.pinnedMessages.indexOf(messageId as any);
+    if (messageIndex > -1) {
+      chat.pinnedMessages.splice(messageIndex, 1);
+    } else {
+      chat.pinnedMessages.push(messageId as any);
+    }
+
+    await chat.save();
+
+    const populated = await Chat.findById(chatId).populate('pinnedMessages');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chatId}`).emit('chat:pinned-updated', { chatId, pinnedMessages: populated?.pinnedMessages || [] });
+    }
+
+    res.status(200).json({ success: true, pinnedMessages: populated?.pinnedMessages || [] });
   } catch (error) {
     next(error);
   }

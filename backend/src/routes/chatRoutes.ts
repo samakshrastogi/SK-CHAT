@@ -10,7 +10,8 @@ import {
   toggleStarMessage,
   getStarredMessages,
   castVote,
-  searchMessages
+  searchMessages,
+  togglePinMessage
 } from '../controllers/chatController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -26,6 +27,7 @@ router.get('/starred', getStarredMessages as any);
 
 router.get('/:chatId/messages', getChatMessages as any);
 router.post('/:chatId/messages', upload.single('file'), sendMessage as any);
+router.post('/:chatId/pin', togglePinMessage as any);
 
 router.put('/messages/:messageId', editMessage as any);
 router.delete('/messages/:messageId', deleteMessage as any);

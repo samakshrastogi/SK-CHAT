@@ -12,7 +12,7 @@ export const useSocket = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   
-  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats } = useChatStore();
+  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages } = useChatStore();
   const { setIncomingCall, resetCallStore } = useCallStore();
 
   useEffect(() => {
@@ -82,6 +82,18 @@ export const useSocket = () => {
 
     socket.on('typing:stop', ({ chatId, userId }) => {
       setTypingUser(chatId, userId, null);
+    });
+
+    socket.on('message:deleted', ({ messageId }) => {
+      localDeleteMessage(messageId);
+    });
+
+    socket.on('poll:updated', ({ messageId, pollData }) => {
+      localUpdatePoll(messageId, pollData);
+    });
+
+    socket.on('chat:pinned-updated', ({ chatId, pinnedMessages }) => {
+      localUpdatePinnedMessages(chatId, pinnedMessages);
     });
 
     // Presence Toggles

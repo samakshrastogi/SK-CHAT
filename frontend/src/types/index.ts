@@ -72,6 +72,7 @@ export interface Message {
   reactions: Reaction[];
   scheduledAt?: string;
   isForwarded: boolean;
+  expiresAt?: string;
   createdAt: string;
   updatedAt: string;
 }

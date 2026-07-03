@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import dotenv from 'dotenv';
 import { User } from '../models/User.js';
 import { Chat } from '../models/Chat.js';
 import { Message } from '../models/Message.js';
@@ -9,8 +9,6 @@ import { Call } from '../models/Call.js';
 import { Community } from '../models/Community.js';
 import { logger } from './logger.js';
 import crypto from 'crypto';
-
-dotenv.config();
 
 const seed = async () => {
   try {

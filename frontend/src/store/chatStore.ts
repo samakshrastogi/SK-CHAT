@@ -14,7 +14,7 @@ interface ChatState {
   fetchChats: () => Promise<void>;
   fetchMessages: (chatId: string, refresh?: boolean) => Promise<void>;
   setActiveChat: (chat: Chat | null) => void;
-  sendChatMessage: (chatId: string, content: string, file?: File, type?: string, replyToId?: string) => Promise<void>;
+  sendChatMessage: (chatId: string, content: string, file?: File, type?: string, replyToId?: string, expiresIn?: number) => Promise<void>;
   optimisticAddMessage: (chatId: string, message: Message) => void;
   updateMessageStatus: (chatId: string, messageId: string, status: 'delivered' | 'seen') => void;
   editChatMessage: (messageId: string, content: string) => Promise<void>;
@@ -22,6 +22,10 @@ interface ChatState {
   reactToMessage: (messageId: string, emoji: string) => Promise<void>;
   starMessageToggle: (messageId: string) => Promise<void>;
   voteInPoll: (messageId: string, optionId: string) => Promise<void>;
+  togglePinChatMessage: (chatId: string, messageId: string) => Promise<void>;
+  localDeleteMessage: (messageId: string) => void;
+  localUpdatePoll: (messageId: string, pollData: any) => void;
+  localUpdatePinnedMessages: (chatId: string, pinnedMessages: any[]) => void;
   setTypingUser: (chatId: string, userId: string, username: string | null) => void;
 }
 
@@ -88,7 +92,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendChatMessage: async (chatId, content, file, type = 'text', replyToId) => {
+  sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn) => {
     try {
       const formData = new FormData();
       formData.append('content', content);
@@ -98,6 +102,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       if (replyToId) {
         formData.append('replyTo', replyToId);
+      }
+      if (expiresIn) {
+        formData.append('expiresIn', String(expiresIn));
       }
 
       const response = await apiClient.post(`/chats/${chatId}/messages`, formData, {
@@ -270,6 +277,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       throw error;
     }
+  },
+
+  togglePinChatMessage: async (chatId, messageId) => {
+    try {
+      const response = await apiClient.post(`/chats/${chatId}/pin`, { messageId });
+      const pinnedMessages = response.data.pinnedMessages;
+      
+      set((state) => {
+        const updatedChats = state.chats.map((c) =>
+          c._id === chatId ? { ...c, pinnedMessages } : c
+        );
+        const updatedActiveChat = state.activeChat?._id === chatId
+          ? { ...state.activeChat, pinnedMessages }
+          : state.activeChat;
+        return { chats: updatedChats, activeChat: updatedActiveChat };
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  localDeleteMessage: (messageId) => {
+    set((state) => {
+      const newMessages = { ...state.messages };
+      for (const chatId in newMessages) {
+        newMessages[chatId] = newMessages[chatId].filter((m) => m._id !== messageId);
+      }
+      return { messages: newMessages };
+    });
+  },
+
+  localUpdatePoll: (messageId, pollData) => {
+    set((state) => {
+      const newMessages = { ...state.messages };
+      for (const chatId in newMessages) {
+        newMessages[chatId] = newMessages[chatId].map((m) =>
+          m._id === messageId ? { ...m, pollData } : m
+        );
+      }
+      return { messages: newMessages };
+    });
+  },
+
+  localUpdatePinnedMessages: (chatId, pinnedMessages) => {
+    set((state) => {
+      const updatedChats = state.chats.map((c) =>
+        c._id === chatId ? { ...c, pinnedMessages } : c
+      );
+      const updatedActiveChat = state.activeChat?._id === chatId
+        ? { ...state.activeChat, pinnedMessages }
+        : state.activeChat;
+      return { chats: updatedChats, activeChat: updatedActiveChat };
+    });
   },
 
   setTypingUser: (chatId, userId, username) => {

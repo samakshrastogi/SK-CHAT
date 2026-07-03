@@ -48,6 +48,7 @@ export interface IMessage extends Document {
   reactions: IReaction[];
   scheduledAt?: Date;
   isForwarded: boolean;
+  expiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,6 +111,7 @@ const MessageSchema = new Schema<IMessage>({
   reactions: [ReactionSchema],
   scheduledAt: { type: Date },
   isForwarded: { type: Boolean, default: false },
+  expiresAt: { type: Date },
 }, {
   timestamps: true,
 });

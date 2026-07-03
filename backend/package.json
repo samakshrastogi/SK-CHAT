@@ -2,6 +2,7 @@
   "name": "connect-backend",
   "version": "1.0.0",
   "description": "Production-ready backend for Connect messaging platform",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

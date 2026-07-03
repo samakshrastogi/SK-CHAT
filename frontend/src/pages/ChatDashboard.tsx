@@ -16,16 +16,34 @@ import {
 } from 'lucide-react';
 import { Chat, Message, User, Status, Call, DeviceSession, Community } from '../types/index.js';
 
+const wallpaperClasses: { [key: string]: string } = {
+  'gradient-mesh': 'bg-gradient-to-tr from-slate-100 to-indigo-50/40 dark:from-slate-950 dark:to-slate-900/60',
+  'deep-space': 'bg-gradient-to-tr from-slate-200 to-purple-100 dark:from-indigo-950 dark:to-slate-950',
+  'sunset-glow': 'bg-gradient-to-tr from-orange-100 to-pink-100/60 dark:from-amber-950/30 dark:to-purple-950/40',
+  'emerald-forest': 'bg-gradient-to-tr from-emerald-50 to-teal-50 dark:from-stone-900 dark:to-emerald-950/20'
+};
+
 export default function ChatDashboard() {
   const { user, logout, fetchSessions, sessions, terminateSession, terminateAllSessions } = useAuthStore();
   const {
     chats, fetchChats, activeChat, setActiveChat, messages, sendChatMessage,
     editChatMessage, deleteChatMessage, reactToMessage, starMessageToggle, voteInPoll,
-    typingUsers, setTypingUser
+    typingUsers, setTypingUser, togglePinChatMessage
   } = useChatStore();
   
   const callStore = useCallStore();
   const themeStore = useThemeStore();
+
+  const [expiresIn, setExpiresIn] = useState<number>(0);
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [wallpaperPreset, setWallpaperPreset] = useState<string>(localStorage.getItem('wallpaper') || 'gradient-mesh');
+  const [isAiOpen, setIsAiOpen] = useState(false);
+  const [aiChatMessages, setAiChatMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([
+    { sender: 'ai', text: 'Hello! I am your AI Companion. Tell me what you need, like drafting a message, summarizing chat history, or checking facts!' }
+  ]);
+  const [aiChatInput, setAiChatInput] = useState('');
+  const [aiChatLoading, setAiChatLoading] = useState(false);
 
   const { socket, emitEvent } = useSocket();
   const {
@@ -287,7 +305,8 @@ export default function ChatDashboard() {
         messageText,
         selectedFile || undefined,
         selectedFile ? getMessageTypeFromFile(selectedFile) : 'text',
-        replyingTo?._id
+        replyingTo?._id,
+        expiresIn || undefined
       );
 
       setMessageText('');
@@ -430,6 +449,48 @@ export default function ChatDashboard() {
     }
   };
 
+  const handleSendAiChatMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!aiChatInput.trim()) return;
+
+    const userPrompt = aiChatInput;
+    setAiChatMessages((prev) => [...prev, { sender: 'user', text: userPrompt }]);
+    setAiChatInput('');
+    setAiChatLoading(true);
+
+    try {
+      const recentMsgs = (messages[activeChat?._id || ''] || []).slice(-5).map(m => {
+        const isSelf = typeof m.senderId === 'string' ? m.senderId === user?.id : m.senderId._id === user?.id;
+        return `${isSelf ? 'You' : 'Other'}: ${m.content}`;
+      }).join('\n');
+      const context = activeChat ? `Conversation history:\n${recentMsgs}` : undefined;
+
+      const resp = await apiClient.post('/ai/ask', {
+        prompt: userPrompt,
+        context
+      });
+      setAiChatMessages((prev) => [...prev, { sender: 'ai', text: resp.data.response }]);
+    } catch (e) {
+      setAiChatMessages((prev) => [...prev, { sender: 'ai', text: 'Sorry, I failed to respond. Make sure GEMINI_API_KEY is configured in the backend.' }]);
+    } finally {
+      setAiChatLoading(false);
+    }
+  };
+
+  const handleAiSummarizeInSidebar = async () => {
+    if (!activeChat) return;
+    setAiChatLoading(true);
+    setAiChatMessages((prev) => [...prev, { sender: 'user', text: 'Please summarize this chat history for me.' }]);
+    try {
+      const resp = await apiClient.get(`/ai/summarize/${activeChat._id}`);
+      setAiChatMessages((prev) => [...prev, { sender: 'ai', text: resp.data.summary || 'There are no recent messages to summarize!' }]);
+    } catch (e) {
+      setAiChatMessages((prev) => [...prev, { sender: 'ai', text: 'Failed to summarize thread. Make sure GEMINI_API_KEY is configured.' }]);
+    } finally {
+      setAiChatLoading(false);
+    }
+  };
+
   // Moderator actions
   const handleToggleBanUser = async (uId: string) => {
     try {
@@ -520,7 +581,7 @@ export default function ChatDashboard() {
                   {chats.map((chat) => {
                     const active = activeChat?._id === chat._id;
                     const isGroup = chat.isGroup;
-                    const targetParticipant = chat.participants.find(p => p._id !== user?.id);
+                    const targetParticipant = chat.participants.find(p => p._id !== (user?._id || user?.id));
                     const titleName = isGroup ? chat.name : (targetParticipant?.username || 'Chat room');
                     const subtitle = chat.lastMessage?.isDeleted 
                       ? 'Deleted message' 
@@ -620,7 +681,7 @@ export default function ChatDashboard() {
             <h2 className="text-xl font-bold tracking-tight mb-4">Calling History</h2>
             <div className="flex-1 overflow-y-auto space-y-2">
               {callHistory.map((call) => {
-                const wasCaller = call.callerId._id === user?.id;
+                const wasCaller = call.callerId._id === (user?._id || user?.id);
                 const displayUser = wasCaller ? call.receiverId : call.callerId;
                 const missed = call.status === 'missed';
                 return (
@@ -738,7 +799,7 @@ export default function ChatDashboard() {
                     form.append('bio', e.target.value);
                     await useAuthStore.getState().updateProfileData(form);
                   }}
-                  className="w-full min-h-[80px] rounded-xl text-xs font-medium p-3.5 glass-input text-white"
+                  className="w-full min-h-[80px] rounded-xl text-xs font-medium p-3.5 glass-input text-slate-800 dark:text-white"
                   placeholder="Tell people about yourself..."
                 />
               </div>
@@ -760,8 +821,10 @@ export default function ChatDashboard() {
                     <button
                       key={th}
                       onClick={() => themeStore.setTheme(th as any)}
-                      className={`flex-1 py-2 text-xs font-semibold rounded-xl border border-slate-800 ${
-                        themeStore.theme === th ? 'bg-indigo-500 text-white' : 'bg-slate-900 hover:bg-slate-800'
+                      className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-all ${
+                        themeStore.theme === th
+                          ? 'bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/10'
+                          : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-350 border-slate-200 dark:border-slate-800'
                       }`}
                     >
                       {th}
@@ -778,15 +841,42 @@ export default function ChatDashboard() {
                       key={color}
                       onClick={() => themeStore.setAccentColor(color)}
                       style={{ backgroundColor: color }}
-                      className={`h-7 w-7 rounded-full transition-transform ${
-                        themeStore.accentColor === color ? 'ring-2 ring-white scale-110' : ''
+                      className={`h-7 w-7 rounded-full transition-transform border border-slate-200 dark:border-slate-700/40 ${
+                        themeStore.accentColor === color ? 'ring-2 ring-indigo-500 ring-offset-2 scale-110' : 'hover:scale-105'
                       }`}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/40">
+              <div>
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Chat Background Wallpaper</span>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {[
+                    { id: 'gradient-mesh', name: 'Gradient Mesh' },
+                    { id: 'deep-space', name: 'Deep Space' },
+                    { id: 'sunset-glow', name: 'Sunset Glow' },
+                    { id: 'emerald-forest', name: 'Emerald Forest' }
+                  ].map((wall) => (
+                    <button
+                      key={wall.id}
+                      onClick={() => {
+                        setWallpaperPreset(wall.id);
+                        localStorage.setItem('wallpaper', wall.id);
+                      }}
+                      className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${
+                        wallpaperPreset === wall.id
+                          ? 'bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/10'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-350 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {wall.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800/40">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Device Logins</span>
                   <button
@@ -863,7 +953,7 @@ export default function ChatDashboard() {
                       </div>
                     </div>
 
-                    {usr._id !== user?.id && (
+                    {usr._id !== (user?._id || user?.id) && (
                       <button
                         onClick={() => handleToggleBanUser(usr._id)}
                         className={`p-1.5 rounded-lg border ${
@@ -931,93 +1021,165 @@ export default function ChatDashboard() {
         </section>
 
         {/* 3. Main Chat Panel (Active view on Right) */}
-        <main className="flex-1 bg-gradient-to-tr from-slate-100 to-indigo-50/40 dark:from-slate-950 dark:to-slate-900/60 flex flex-col justify-between relative">
-        {activeChat ? (
-          <div className="flex flex-col h-full">
-            
-            {/* Active chat header */}
-            <header className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-300 dark:border-slate-700/40">
-                  {activeChat.isGroup ? (
-                    activeChat.avatar ? <img src={activeChat.avatar} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center font-bold text-slate-500">G</div>
-                  ) : (
-                    activeChat.participants.find(p => p._id !== user?.id)?.avatar ? (
-                      <img src={activeChat.participants.find(p => p._id !== user?.id)?.avatar} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center font-bold text-slate-500">U</div>
-                    )
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                    {activeChat.isGroup ? activeChat.name : (activeChat.participants.find(p => p._id !== user?.id)?.username || 'Connect User')}
-                  </h3>
-                  <p className="text-[10px] text-slate-500 font-semibold">
-                    {activeChat.isGroup ? `${activeChat.participants.length} members` : (activeChat.participants.find(p => p._id !== user?.id)?.status || 'offline')}
-                  </p>
-                </div>
-              </div>
+        <main className={`flex-1 flex flex-col justify-between relative overflow-hidden transition-all duration-500 ${wallpaperClasses[wallpaperPreset] || wallpaperClasses['gradient-mesh']}`}>
+        {activeChat ?
+          (() => {
+            const opponent = activeChat.isGroup ? null : activeChat.participants.find(p => p._id !== (user?._id || user?.id));
+            return (
+              <div className="flex-1 flex overflow-hidden h-full relative">
+                {/* Message List Pane */}
+                <div className="flex-1 flex flex-col h-full justify-between overflow-hidden border-r border-slate-200 dark:border-slate-800/40">
+                
+                {/* Active chat header */}
+                <header className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-300 dark:border-slate-700/40">
+                      {activeChat.isGroup ? (
+                        activeChat.avatar ? <img src={activeChat.avatar} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center font-bold text-slate-500">G</div>
+                      ) : (
+                        opponent?.avatar ? (
+                          <img src={opponent.avatar} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center font-bold text-slate-500">U</div>
+                        )
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                        {activeChat.isGroup ? activeChat.name : (opponent?.username || 'Connect User')}
+                      </h3>
+                      <p className="text-[10px] text-slate-500 font-semibold">
+                        {activeChat.isGroup ? `${activeChat.participants.length} members` : (opponent?.status || 'offline')}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-3">
-                {/* Voice/Video calling controls (Direct only) */}
-                {!activeChat.isGroup && (
-                  <>
+                  <div className="flex items-center gap-3">
+                    {/* Search Messages Toggle */}
                     <button
-                      onClick={() => makeCall(activeChat.participants.find(p => p._id !== user?.id)!._id, activeChat._id, 'voice')}
-                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
-                      title="Audio Call"
+                      onClick={() => setChatSearchOpen(!chatSearchOpen)}
+                      className={`p-2 rounded-lg transition-all ${chatSearchOpen ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+                      title="Search Messages"
                     >
-                      <Phone className="h-4.5 w-4.5" />
+                      <Search className="h-4.5 w-4.5" />
                     </button>
-                    <button
-                      onClick={() => makeCall(activeChat.participants.find(p => p._id !== user?.id)!._id, activeChat._id, 'video')}
-                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
-                      title="Video Call"
-                    >
-                      <Video className="h-4.5 w-4.5" />
-                    </button>
-                  </>
-                )}
 
+                    {/* Voice/Video calling controls (Direct only) */}
+                    {!activeChat.isGroup && opponent && (
+                      <>
+                        <button
+                          onClick={() => makeCall(opponent._id, activeChat._id, 'voice')}
+                          className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
+                          title="Audio Call"
+                        >
+                          <Phone className="h-4.5 w-4.5" />
+                        </button>
+                        <button
+                          onClick={() => makeCall(opponent._id, activeChat._id, 'video')}
+                          className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
+                          title="Video Call"
+                        >
+                          <Video className="h-4.5 w-4.5" />
+                        </button>
+                      </>
+                    )}
+
+                    {/* AI Companion Toggle */}
+                    <button
+                      onClick={() => setIsAiOpen(!isAiOpen)}
+                      className={`p-2 rounded-lg transition-all ${isAiOpen ? 'bg-indigo-500/10 text-indigo-500' : 'text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10'}`}
+                      title="AI Companion"
+                    >
+                      <Sparkles className="h-4.5 w-4.5" />
+                    </button>
+                  </div>
+                </header>
+            {chatSearchOpen && (
+              <div className="px-6 py-2 border-b border-slate-200 dark:border-slate-800/60 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md flex gap-3 items-center shrink-0 z-10">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={chatSearchQuery}
+                    onChange={(e) => setChatSearchQuery(e.target.value)}
+                    placeholder="Search messages..."
+                    className="w-full h-9 pl-9 pr-4 rounded-xl text-xs font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
+                  />
+                </div>
                 <button
-                  onClick={handleSummarizeThread}
-                  className="p-2 text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-lg hover:bg-indigo-500/10 transition-all"
-                  title="Summarize Recent Thread"
+                  onClick={() => {
+                    setChatSearchOpen(false);
+                    setChatSearchQuery('');
+                  }}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white"
                 >
-                  <Sparkles className="h-4.5 w-4.5" />
+                  Close
                 </button>
               </div>
-            </header>
+            )}
+
+            {(() => {
+              const pinnedMsg = (messages[activeChat._id] || []).find(m => activeChat.pinnedMessages?.includes(m._id));
+              return pinnedMsg ? (
+                <div className="bg-indigo-500/10 border-b border-indigo-500/20 px-6 py-2 flex items-center justify-between text-[11px] text-indigo-600 dark:text-indigo-400 backdrop-blur-md z-10 shrink-0">
+                  <div 
+                    className="flex items-center gap-2 cursor-pointer truncate mr-4" 
+                    onClick={() => {
+                      const el = document.getElementById(`msg-${pinnedMsg._id}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                  >
+                    <Pin className="h-3 w-3 rotate-45 text-indigo-500" />
+                    <span className="font-bold">Pinned Message:</span>
+                    <span className="truncate max-w-[500px] text-slate-600 dark:text-slate-350">{pinnedMsg.content || '[Attachment]'}</span>
+                  </div>
+                  <button 
+                    onClick={() => togglePinChatMessage(activeChat._id, pinnedMsg._id)} 
+                    className="font-bold hover:text-red-500 transition-colors shrink-0"
+                  >
+                    Unpin
+                  </button>
+                </div>
+              ) : null;
+            })()}
 
             {/* Message Area */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {(messages[activeChat._id] || []).map((msg) => {
-                const isMe = msg.senderId === user?.id || (msg.senderId as any)?._id === user?.id;
-                const senderName = isMe ? 'You' : ((msg.senderId as any)?.username || 'User');
+              {(() => {
+                const rawMsgs = messages[activeChat._id] || [];
+                const filteredMsgs = chatSearchQuery.trim()
+                  ? rawMsgs.filter(m => m.content.toLowerCase().includes(chatSearchQuery.toLowerCase()))
+                  : rawMsgs;
                 
-                return (
-                  <div
-                    key={msg._id}
-                    className={`flex flex-col gap-1 max-w-[70%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'}`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-500">{senderName}</span>
-                    </div>
-
+                return filteredMsgs.map((msg) => {
+                  const currentUserId = user?._id || user?.id;
+                  const msgSenderId = typeof msg.senderId === 'object' ? (msg.senderId as any)?._id || (msg.senderId as any)?.id : msg.senderId;
+                  const isMe = !!(currentUserId && msgSenderId && currentUserId.toString() === msgSenderId.toString());
+                  const senderName = isMe ? 'You' : ((msg.senderId as any)?.username || 'User');
+                  
+                  return (
                     <div
-                      className={`px-4.5 py-3 rounded-2xl relative group ${
-                        isMe 
-                          ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-none' 
-                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none'
-                      }`}
+                      key={msg._id}
+                      id={`msg-${msg._id}`}
+                      className={`flex flex-col gap-1 max-w-[70%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'}`}
                     >
-                      {/* Replying indicator */}
-                      {msg.replyTo && (
-                        <div className="mb-2 p-2 rounded-lg bg-black/10 border-l-2 border-indigo-400 text-xs text-slate-300 truncate">
-                          {msg.replyTo.content}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-500">{senderName}</span>
+                      </div>
+
+                      <div
+                        className={`px-4.5 py-3 rounded-2xl relative group ${
+                          isMe 
+                            ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-none' 
+                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none'
+                        }`}
+                      >
+                        {/* Replying indicator */}
+                        {msg.replyTo && (
+                          <div className="mb-2 p-2 rounded-lg bg-black/10 border-l-2 border-indigo-400 text-xs text-slate-300 truncate">
+                            {msg.replyTo.content}
+                          </div>
+                        )}
 
                       {/* Document Attachment */}
                       {msg.messageType === 'document' && msg.mediaUrl && (
@@ -1089,6 +1251,13 @@ export default function ChatDashboard() {
                         <button onClick={() => handleTranslateMessage(msg, 'Spanish')} className="text-indigo-400 hover:text-white" title="Translate">
                           <Languages className="h-3.5 w-3.5" />
                         </button>
+                        <button 
+                          onClick={() => togglePinChatMessage(activeChat._id, msg._id)} 
+                          className={`transition-colors ${activeChat.pinnedMessages?.includes(msg._id) ? 'text-amber-500 hover:text-red-500' : 'text-slate-400 hover:text-amber-400'}`} 
+                          title={activeChat.pinnedMessages?.includes(msg._id) ? 'Unpin' : 'Pin'}
+                        >
+                          <Pin className="h-3.5 w-3.5 rotate-45" />
+                        </button>
                       </div>
                     </div>
 
@@ -1106,18 +1275,19 @@ export default function ChatDashboard() {
                     </div>
                   </div>
                 );
-              })}
-              <div ref={messagesEndRef} />
+              });
+            })()}
+            <div ref={messagesEndRef} />
             </div>
 
             {/* Bottom input area */}
-            <div className="p-4 border-t border-slate-800/40 bg-slate-900/20 backdrop-blur-md shrink-0">
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shrink-0">
               
               {/* Replying feedback */}
               {replyingTo && (
-                <div className="mb-2 p-2 px-3.5 rounded-xl bg-slate-900 border border-slate-800 flex justify-between items-center text-xs">
-                  <span className="text-slate-400">Replying to message: <i>"{replyingTo.content}"</i></span>
-                  <button onClick={() => setReplyingTo(null)} className="text-slate-500 hover:text-white">
+                <div className="mb-2 p-2 px-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
+                  <span>Replying to message: <i>"{replyingTo.content}"</i></span>
+                  <button onClick={() => setReplyingTo(null)} className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -1125,25 +1295,8 @@ export default function ChatDashboard() {
 
               {/* Upload loading bar */}
               {uploadProgress > 0 && (
-                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-3">
+                <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mb-3">
                   <div className="bg-indigo-500 h-full transition-all" style={{ width: `${uploadProgress}%` }}></div>
-                </div>
-              )}
-
-              {/* Suggestions chips */}
-              {smartReplies.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-3.5">
-                  {smartReplies.map((reply) => (
-                    <button
-                      key={reply}
-                      onClick={() => {
-                        setMessageText(reply);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 text-xs font-semibold border border-indigo-500/20 shrink-0 transition-colors"
-                    >
-                      {reply}
-                    </button>
-                  ))}
                 </div>
               )}
 
@@ -1159,10 +1312,26 @@ export default function ChatDashboard() {
                   className="hidden"
                 />
 
+                {/* Disappearing Messages Duration Picker */}
+                <div className="relative">
+                  <select
+                    value={expiresIn}
+                    onChange={(e) => setExpiresIn(Number(e.target.value))}
+                    className="h-11 px-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-450 text-[10px] font-bold hover:text-slate-800 dark:hover:text-white transition-all cursor-pointer outline-none min-w-[70px] text-center"
+                    title="Self-Destruct Timer"
+                  >
+                    <option value={0}>⏲️ Off</option>
+                    <option value={5}>⏲️ 5s</option>
+                    <option value={60}>⏲️ 1m</option>
+                    <option value={3600}>⏲️ 1h</option>
+                    <option value={86400}>⏲️ 1d</option>
+                  </select>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="h-11 w-11 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+                  className="h-11 w-11 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors"
                   title="Attach file"
                 >
                   <Paperclip className="h-5 w-5" />
@@ -1184,7 +1353,7 @@ export default function ChatDashboard() {
                       }
                     }}
                     placeholder="Type a message..."
-                    className="w-full h-11 px-4 rounded-xl text-sm font-medium glass-input text-white placeholder:text-slate-500"
+                    className="w-full h-11 px-4 rounded-xl text-sm font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
                   />
                   
                   {/* Voice note triggers */}
@@ -1206,7 +1375,86 @@ export default function ChatDashboard() {
               </form>
             </div>
           </div>
-        ) : (
+
+          {/* AI companion sidebar panel */}
+          {isAiOpen && (
+            <div className="w-80 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden">
+              {/* AI Header */}
+              <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
+                <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400">
+                  <Sparkles className="h-5 w-5 animate-pulse" />
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200">AI Companion</span>
+                </div>
+                <button 
+                  onClick={() => setIsAiOpen(false)} 
+                  className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              {/* AI Messages List */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {aiChatMessages.map((m, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex flex-col max-w-[85%] ${m.sender === 'user' ? 'self-end ml-auto items-end' : 'items-start'}`}
+                  >
+                    <span className="text-[9px] font-bold text-slate-500 mb-1">
+                      {m.sender === 'user' ? 'You' : 'Companion'}
+                    </span>
+                    <div 
+                      className={`px-3 py-2.5 rounded-2xl text-xs leading-relaxed ${
+                        m.sender === 'user'
+                          ? 'bg-indigo-500 text-white rounded-tr-none'
+                          : 'bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-250 border border-slate-200 dark:border-slate-800 rounded-tl-none'
+                      }`}
+                    >
+                      {m.text}
+                    </div>
+                  </div>
+                ))}
+                {aiChatLoading && (
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                    <Sparkles className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                    <span>Thinking...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* AI Toolbar Quick Actions */}
+              <div className="p-3 border-t border-slate-200 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-950/20 flex gap-2">
+                <button
+                  onClick={handleAiSummarizeInSidebar}
+                  className="flex-1 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold border border-indigo-500/20 transition-colors"
+                >
+                  📝 Summarize Chat
+                </button>
+              </div>
+
+              {/* AI Input Form */}
+              <form 
+                onSubmit={handleSendAiChatMessage} 
+                className="p-3 border-t border-slate-200 dark:border-slate-800/60 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md flex gap-2 items-center"
+              >
+                <input
+                  type="text"
+                  value={aiChatInput}
+                  onChange={(e) => setAiChatInput(e.target.value)}
+                  placeholder="Ask AI companion..."
+                  className="flex-1 h-9 px-3 rounded-xl text-xs font-semibold glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
+                />
+                <button
+                  type="submit"
+                  className="h-9 w-9 rounded-xl bg-indigo-500 hover:bg-indigo-650 flex items-center justify-center text-white"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      ) })() : (
           <div className="h-full w-full flex flex-col justify-center items-center p-6 text-center">
             <div className="h-16 w-16 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-6 shadow-xl shadow-indigo-500/5">
               <MessageSquare className="h-8 w-8" />
@@ -1363,7 +1611,7 @@ export default function ChatDashboard() {
                     value={groupName}
                     onChange={(e) => setGroupName(e.target.value)}
                     placeholder="e.g. Design Review Crew"
-                    className="w-full h-10 rounded-xl text-xs font-semibold px-3 glass-input text-white"
+                    className="w-full h-10 rounded-xl text-xs font-semibold px-3 glass-input text-slate-800 dark:text-white"
                   />
                 </div>
               </div>
@@ -1399,7 +1647,7 @@ export default function ChatDashboard() {
                     value={communityName}
                     onChange={(e) => setCommunityName(e.target.value)}
                     placeholder="e.g. UI Designers Hub"
-                    className="w-full h-10 rounded-xl text-xs font-semibold px-3 glass-input text-white"
+                    className="w-full h-10 rounded-xl text-xs font-semibold px-3 glass-input text-slate-800 dark:text-white"
                   />
                 </div>
                 <div>
@@ -1408,7 +1656,7 @@ export default function ChatDashboard() {
                     value={communityDesc}
                     onChange={(e) => setCommunityDesc(e.target.value)}
                     placeholder="Explain the purpose of this network..."
-                    className="w-full min-h-[60px] rounded-xl text-xs font-semibold p-3 glass-input text-white"
+                    className="w-full min-h-[60px] rounded-xl text-xs font-semibold p-3 glass-input text-slate-800 dark:text-white"
                   />
                 </div>
               </div>

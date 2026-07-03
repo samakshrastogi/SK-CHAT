@@ -13,7 +13,7 @@ const generateAccessToken = (user: any, deviceId: string) => {
   return jwt.sign(
     { id: user._id, email: user.email, username: user.username, role: user.role, deviceId },
     process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#',
-    { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m' }
+    { expiresIn: (process.env.JWT_ACCESS_EXPIRY || '15m') as any }
   );
 };
 
@@ -21,7 +21,7 @@ const generateRefreshToken = (user: any, deviceId: string) => {
   return jwt.sign(
     { id: user._id, deviceId },
     process.env.JWT_REFRESH_SECRET || 'supersecretrefreshkeyconnect987!@#',
-    { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' }
+    { expiresIn: (process.env.JWT_REFRESH_EXPIRY || '7d') as any }
   );
 };
 
@@ -49,6 +49,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       password: hashedPassword,
       verificationToken,
       verificationTokenExpires,
+      isVerified: true,
     });
 
     // Send email
@@ -56,7 +57,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful. Please check your email to verify your account.',
+      message: 'Registration successful! Your account is active. You can now log in.',
     });
   } catch (error) {
     next(error);
