@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';
 import { useCallStore } from '../store/callStore.js';
 import { useThemeStore } from '../store/themeStore.js';
+import { useNotificationStore } from '../store/notificationStore.js';
 import { useSocket } from '../hooks/useSocket.js';
 import { useWebRTC } from '../hooks/useWebRTC.js';
 import { apiClient } from '../api/client.js';
@@ -12,9 +13,12 @@ import {
   Paperclip, MoreVertical, X, Check, CheckCheck, Smile, Star, Trash2, Edit2, CornerUpLeft,
   Pin, Shield, Mic, HelpCircle, Share2, BarChart2, ShieldAlert, Trash, PlusCircle, Globe,
   Compass, Eye, Play, Sparkles, Languages, FileText, MapPin, PhoneMissed, Volume2, VideoOff,
-  UserX, CheckCircle, Ban, Download, Copy, Megaphone
+  UserX, CheckCircle, Ban, Download, Copy, Megaphone, Bell
 } from 'lucide-react';
 import { Chat, Message, User, Status, Call, DeviceSession, Community } from '../types/index.js';
+import { StoryCreatorModal } from '../components/StoryCreatorModal.tsx';
+import { StoryViewerModal } from '../components/StoryViewerModal.tsx';
+import { NotificationPanel, NotificationBell } from '../components/NotificationPanel.tsx';
 
 const wallpaperClasses: { [key: string]: string } = {
   'gradient-mesh': 'bg-gradient-to-tr from-slate-100 to-indigo-50/40 dark:from-slate-950 dark:to-slate-900/60',
@@ -50,6 +54,7 @@ export default function ChatDashboard() {
   
   const callStore = useCallStore();
   const themeStore = useThemeStore();
+  const { addIncomingNotification, requestBrowserPermission } = useNotificationStore();
 
   const [expiresIn, setExpiresIn] = useState<number>(0);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
@@ -61,6 +66,96 @@ export default function ChatDashboard() {
   ]);
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
+
+  // Call Recording, Background Blur, Captions, Hand Raising, Waiting Room States
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isBgBlurActive, setIsBgBlurActive] = useState(false);
+  const [isNoiseCancellationActive, setIsNoiseCancellationActive] = useState(false);
+  const [isCaptioningActive, setIsCaptioningActive] = useState(false);
+  const [liveCaptions, setLiveCaptions] = useState<string[]>([]);
+  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [isWaitingRoom, setIsWaitingRoom] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<any>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const startCallRecording = () => {
+    const stream = callStore.localStream || callStore.remoteStream;
+    if (!stream) return;
+    recordedChunksRef.current = [];
+    try {
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `call-recording-${Date.now()}.webm`;
+        a.click();
+      };
+      recorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingSeconds(s => s + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Recording failed:', err);
+    }
+  };
+
+  const stopCallRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+  };
+
+  const startSpeechTranscription = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0])
+        .map((result) => result.transcript)
+        .join('');
+      setLiveCaptions([transcript]);
+    };
+    
+    recognition.start();
+    setIsCaptioningActive(true);
+  };
+
+  const stopSpeechTranscription = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsCaptioningActive(false);
+    setLiveCaptions([]);
+  };
+
+  const formatRecordingDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   const { socket, emitEvent } = useSocket();
   const {
@@ -138,9 +233,9 @@ export default function ChatDashboard() {
   const [editText, setEditText] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
   
-  // Voice Recording details
-  const [isRecording, setIsRecording] = useState(false);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  // Voice Message Recording details (separate from call recording)
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [voiceMediaRecorder, setVoiceMediaRecorder] = useState<MediaRecorder | null>(null);
   const [voiceChunks, setVoiceChunks] = useState<Blob[]>([]);
 
   // Admin analytical panel details
@@ -190,7 +285,7 @@ export default function ChatDashboard() {
     }
   }, [activeChat, messages]);
 
-  // Bind WebRTC socket triggers
+  // Bind WebRTC socket triggers & real-time notification events
   useEffect(() => {
     if (socket) {
       socket.on('call:accepted', ({ answer }) => {
@@ -203,7 +298,19 @@ export default function ChatDashboard() {
         alert(`Call rejected: ${reason}`);
         callStore.resetCallStore();
       });
+      // Real-time notification push
+      socket.on('notification:new', (notif) => {
+        addIncomingNotification(notif);
+      });
     }
+    // Request browser notification permission on first mount
+    requestBrowserPermission();
+
+    return () => {
+      if (socket) {
+        socket.off('notification:new');
+      }
+    };
   }, [socket]);
 
   // Bind RTC HTML video outputs
@@ -482,18 +589,18 @@ export default function ChatDashboard() {
       };
 
       recorder.start();
-      setMediaRecorder(recorder);
-      setIsRecording(true);
+      setVoiceMediaRecorder(recorder);
+      setIsVoiceRecording(true);
     } catch (err) {
       alert('Could not record voice. Check microphone authorizations.');
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorder && isRecording) {
-      mediaRecorder.stop();
-      setIsRecording(false);
-      mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    if (voiceMediaRecorder && isVoiceRecording) {
+      voiceMediaRecorder.stop();
+      setIsVoiceRecording(false);
+      voiceMediaRecorder.stream.getTracks().forEach((track) => track.stop());
     }
   };
 
@@ -732,13 +839,14 @@ export default function ChatDashboard() {
       <section className="w-80 md:w-96 glass-panel border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0 relative overflow-hidden">
         
         {/* App Branding Top Header */}
-        <div className="p-4.5 pb-3 border-b border-slate-200 dark:border-slate-800/40 flex items-center bg-white/30 dark:bg-slate-900/30">
+        <div className="p-4.5 pb-3 border-b border-slate-200 dark:border-slate-800/40 flex items-center justify-between bg-white/30 dark:bg-slate-900/30">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <span className="text-sm font-black tracking-tighter text-white">SK</span>
             </div>
             <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-200 dark:to-purple-300">SK Connect</span>
           </div>
+          <NotificationBell onClick={() => setIsNotifPanelOpen((p) => !p)} />
         </div>
         
         {/* Tab 1: Chats */}
@@ -1715,8 +1823,8 @@ export default function ChatDashboard() {
                   {/* Voice note triggers */}
                   <button
                     type="button"
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className={`absolute right-3 top-3 transition-colors ${isRecording ? 'text-red-500' : 'text-slate-500 hover:text-slate-300'}`}
+                    onClick={isVoiceRecording ? stopRecording : startRecording}
+                    className={`absolute right-3 top-3 transition-colors ${isVoiceRecording ? 'text-red-500' : 'text-slate-500 hover:text-slate-300'}`}
                   >
                     <Mic className="h-5 w-5" />
                   </button>
@@ -2141,7 +2249,7 @@ export default function ChatDashboard() {
                       ref={remoteVideoRef}
                       autoPlay
                       playsInline
-                      className="h-full w-full object-cover"
+                      className={`h-full w-full object-cover transition-all duration-300 ${isBgBlurActive ? 'blur-md' : ''}`}
                     />
                   ) : (
                     <div className="h-full w-full flex items-center justify-center bg-slate-900">
@@ -2157,8 +2265,31 @@ export default function ChatDashboard() {
                         autoPlay
                         playsInline
                         muted
-                        className="h-full w-full object-cover"
+                        className={`h-full w-full object-cover ${isBgBlurActive ? 'blur-sm' : ''}`}
                       />
+                    </div>
+                  )}
+
+                  {/* Hand Raised Overlay */}
+                  {isHandRaised && (
+                    <div className="absolute top-4 left-4 bg-amber-500 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg border border-amber-400 z-30 animate-bounce">
+                      🖐️ Hand Raised
+                    </div>
+                  )}
+
+                  {/* Active Recording Overlay */}
+                  {isRecording && (
+                    <div className="absolute top-4 left-32 bg-red-600 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg border border-red-500 z-30 animate-pulse">
+                      🔴 REC {formatRecordingDuration(recordingSeconds)}
+                    </div>
+                  )}
+
+                  {/* Live Captioning Subtitles Drawer */}
+                  {isCaptioningActive && liveCaptions.length > 0 && (
+                    <div className="absolute bottom-20 left-6 right-6 text-center pointer-events-none z-30">
+                      <p className="inline-block bg-black/80 backdrop-blur-md px-4 py-1.5 rounded-xl border border-white/10 text-xs font-semibold text-indigo-250 shadow-md">
+                        💬 {liveCaptions[liveCaptions.length - 1]}
+                      </p>
                     </div>
                   )}
 
@@ -2192,6 +2323,63 @@ export default function ChatDashboard() {
                           title={callStore.isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
                         >
                           <Share2 className="h-5 w-5" />
+                        </button>
+                        
+                        {/* Background Blur */}
+                        <button
+                          onClick={() => setIsBgBlurActive(!isBgBlurActive)}
+                          className={`p-2.5 rounded-full ${isBgBlurActive ? 'bg-indigo-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+                          title={isBgBlurActive ? 'Disable Blur' : 'Enable Background Blur'}
+                        >
+                          <Sparkles className="h-5 w-5" />
+                        </button>
+
+                        {/* Noise Cancellation */}
+                        <button
+                          onClick={() => setIsNoiseCancellationActive(!isNoiseCancellationActive)}
+                          className={`p-2.5 rounded-full ${isNoiseCancellationActive ? 'bg-indigo-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+                          title={isNoiseCancellationActive ? 'Disable Noise Cancellation' : 'Enable Noise Cancellation'}
+                        >
+                          <Languages className="h-5 w-5" />
+                        </button>
+
+                        {/* Live Captioning Speech-to-Text */}
+                        <button
+                          onClick={() => {
+                            if (isCaptioningActive) {
+                              stopSpeechTranscription();
+                            } else {
+                              startSpeechTranscription();
+                            }
+                          }}
+                          className={`p-2.5 rounded-full ${isCaptioningActive ? 'bg-indigo-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+                          title={isCaptioningActive ? 'Hide Captions' : 'Show Live Captions'}
+                        >
+                          <Megaphone className="h-5 w-5" />
+                        </button>
+
+                        {/* Call Recording */}
+                        <button
+                          onClick={() => {
+                            if (isRecording) {
+                              stopCallRecording();
+                            } else {
+                              startCallRecording();
+                            }
+                          }}
+                          className={`p-2.5 rounded-full ${isRecording ? 'bg-red-650 text-white animate-pulse' : 'hover:bg-slate-800 text-slate-300'}`}
+                          title={isRecording ? 'Stop Recording' : 'Record Video Call'}
+                        >
+                          <Play className="h-5 w-5" />
+                        </button>
+
+                        {/* Raise Hand */}
+                        <button
+                          onClick={() => setIsHandRaised(!isHandRaised)}
+                          className={`p-2.5 rounded-full text-xs ${isHandRaised ? 'bg-amber-500 text-white animate-bounce' : 'hover:bg-slate-800 text-slate-300'}`}
+                          title={isHandRaised ? 'Lower Hand' : 'Raise Hand'}
+                        >
+                          🖐️
                         </button>
                       </>
                     )}
@@ -2364,453 +2552,58 @@ export default function ChatDashboard() {
       </AnimatePresence>
 
       {/* 7. Rich Story Modal Overlay */}
-      <AnimatePresence>
-        {textStatusOpen && (
-          <div className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-50 p-6">
-            <div className="w-full max-w-[800px] bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
-              
-              {/* Left Column: Live Preview */}
-              <div 
-                style={storyType === 'text' ? { backgroundColor: textStatusBg } : undefined}
-                className="w-full md:w-[320px] aspect-[4/5] bg-slate-950 flex flex-col justify-between items-center p-6 relative border-r border-slate-800 shrink-0 overflow-hidden"
-              >
-                {storyType === 'media' && storyFileUrl ? (
-                  storyFile?.type.startsWith('video') ? (
-                    <video src={storyFileUrl} autoPlay loop muted className="absolute inset-0 h-full w-full object-cover" />
-                  ) : (
-                    <img src={storyFileUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                  )
-                ) : null}
-
-                {/* Overlays preview on top of the slide */}
-                <div className="w-full flex justify-between items-center z-10">
-                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-white/50">Story Preview</span>
-                  {storyMusic.trim() && (
-                    <span className="bg-black/60 text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                      🎵 {storyMusic}
-                    </span>
-                  )}
-                </div>
-
-                {storyType === 'text' ? (
-                  <textarea
-                    value={textStatusContent}
-                    onChange={(e) => setTextStatusContent(e.target.value)}
-                    placeholder="Type your story message..."
-                    className="w-full bg-transparent border-0 outline-none text-white text-lg font-black text-center placeholder:text-white/30 focus:ring-0 z-10"
-                  />
-                ) : (
-                  <div className="flex-1" />
-                )}
-
-                {/* Dynamic Overlays Container */}
-                <div className="w-full flex flex-col gap-2 z-10">
-                  <div className="flex justify-between w-full">
-                    {storyLocation.trim() && (
-                      <span className="bg-indigo-600/80 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">📍 {storyLocation}</span>
-                    )}
-                    {storyMention.trim() && (
-                      <span className="bg-pink-600/80 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">@{storyMention}</span>
-                    )}
-                  </div>
-
-                  {storyPollQuestion.trim() && (
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-2.5 rounded-xl text-center text-white text-[10px]">
-                      <p className="font-bold">{storyPollQuestion}</p>
-                      <div className="flex gap-1.5 mt-1.5">
-                        <button className="flex-1 py-1 bg-indigo-500/80 rounded font-bold">{storyPollOpt1 || 'Yes'}</button>
-                        <button className="flex-1 py-1 bg-pink-500/80 rounded font-bold">{storyPollOpt2 || 'No'}</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {storyQuestion.trim() && (
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-2.5 rounded-xl text-center text-white text-[10px] space-y-1">
-                      <p className="font-bold uppercase tracking-wider text-indigo-300 text-[8px]">Ask me anything</p>
-                      <p className="font-semibold">{storyQuestion}</p>
-                    </div>
-                  )}
-
-                  {storyHashtags.trim() && (
-                    <div className="flex gap-1 flex-wrap">
-                      {storyHashtags.split(',').map((h, i) => (
-                        <span key={i} className="text-[9px] bg-slate-900/60 text-white px-2 py-0.5 rounded-full font-bold">
-                          {h.trim().startsWith('#') ? h.trim() : `#${h.trim()}`}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Column: Editing and Interactive Controls */}
-              <div className="flex-1 flex flex-col justify-between p-6 space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-black text-slate-200 uppercase tracking-widest">Story Options</h3>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => setStoryType('text')} 
-                        className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-colors ${storyType === 'text' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}
-                      >
-                        Text
-                      </button>
-                      <button 
-                        onClick={() => setStoryType('media')} 
-                        className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-colors ${storyType === 'media' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}
-                      >
-                        Media
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 overflow-y-auto max-h-[320px] pr-1.5 custom-scrollbar">
-                    {/* Media File selection */}
-                    {storyType === 'media' && (
-                      <div className="p-3 bg-slate-950/40 border border-slate-800 rounded-2xl flex flex-col items-center gap-2">
-                        <input 
-                          type="file" 
-                          ref={storyFileInputRef} 
-                          className="hidden" 
-                          accept="image/*,video/*" 
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setStoryFile(file);
-                              setStoryFileUrl(URL.createObjectURL(file));
-                            }
-                          }}
-                        />
-                        <button 
-                          onClick={() => storyFileInputRef.current?.click()} 
-                          className="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 font-bold text-xs rounded-xl"
-                        >
-                          Choose Image / Video
-                        </button>
-                        {storyFile && <span className="text-[10px] text-slate-500 truncate max-w-[200px]">{storyFile.name}</span>}
-                      </div>
-                    )}
-
-                    {/* Background picker for text stories */}
-                    {storyType === 'text' && (
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Background Colors</label>
-                        <div className="flex gap-2">
-                          {['#4f46e5', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#1e1b4b'].map((color) => (
-                            <button
-                              key={color}
-                              onClick={() => setTextStatusBg(color)}
-                              style={{ backgroundColor: color }}
-                              className={`h-6 w-6 rounded-full border border-white/20 transition-transform ${textStatusBg === color ? 'scale-110 ring-2 ring-white/50' : ''}`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Overlay Inputs */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-850">
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">🎵 Background Music</label>
-                        <input 
-                          type="text" 
-                          value={storyMusic}
-                          onChange={(e) => setStoryMusic(e.target.value)}
-                          placeholder="Song title..."
-                          className="w-full h-8 rounded-lg text-xs font-semibold px-2.5 bg-slate-950 border border-slate-850 text-slate-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">📍 Add Location</label>
-                        <input 
-                          type="text" 
-                          value={storyLocation}
-                          onChange={(e) => setStoryLocation(e.target.value)}
-                          placeholder="e.g. SF, CA..."
-                          className="w-full h-8 rounded-lg text-xs font-semibold px-2.5 bg-slate-950 border border-slate-850 text-slate-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">👤 Mention User</label>
-                        <input 
-                          type="text" 
-                          value={storyMention}
-                          onChange={(e) => setStoryMention(e.target.value)}
-                          placeholder="username..."
-                          className="w-full h-8 rounded-lg text-xs font-semibold px-2.5 bg-slate-950 border border-slate-850 text-slate-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">🏷️ Hashtags</label>
-                        <input 
-                          type="text" 
-                          value={storyHashtags}
-                          onChange={(e) => setStoryHashtags(e.target.value)}
-                          placeholder="vibes, coding..."
-                          className="w-full h-8 rounded-lg text-xs font-semibold px-2.5 bg-slate-950 border border-slate-850 text-slate-200"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Interactive widgets additions */}
-                    <div className="pt-2 border-t border-slate-850 space-y-2.5">
-                      <div>
-                        <label className="block text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1">📊 Create Poll Overlay</label>
-                        <input 
-                          type="text" 
-                          value={storyPollQuestion}
-                          onChange={(e) => setStoryPollQuestion(e.target.value)}
-                          placeholder="Poll Question..."
-                          className="w-full h-8 rounded-lg text-xs font-semibold px-2.5 bg-slate-950 border border-slate-850 text-slate-200 mb-1"
-                        />
-                        <div className="flex gap-1.5">
-                          <input 
-                            type="text" 
-                            value={storyPollOpt1}
-                            onChange={(e) => setStoryPollOpt1(e.target.value)}
-                            placeholder="Option 1 (Yes)"
-                            className="flex-1 h-8 rounded-lg text-[10px] px-2 bg-slate-950 border border-slate-850 text-slate-200"
-                          />
-                          <input 
-                            type="text" 
-                            value={storyPollOpt2}
-                            onChange={(e) => setStoryPollOpt2(e.target.value)}
-                            placeholder="Option 2 (No)"
-                            className="flex-1 h-8 rounded-lg text-[10px] px-2 bg-slate-950 border border-slate-850 text-slate-200"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[9px] font-bold text-pink-400 uppercase tracking-widest mb-1">❓ Ask a Question Overlay</label>
-                        <input 
-                          type="text" 
-                          value={storyQuestion}
-                          onChange={(e) => setStoryQuestion(e.target.value)}
-                          placeholder="e.g. What should I cook today?"
-                          className="w-full h-8 rounded-lg text-xs font-semibold px-2.5 bg-slate-950 border border-slate-850 text-slate-200"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 justify-end pt-4 border-t border-slate-850 shrink-0">
-                  <button 
-                    onClick={() => setTextStatusOpen(false)}
-                    className="h-10 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={handlePostStory}
-                    className="h-10 px-5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs shadow-lg shadow-indigo-500/10"
-                  >
-                    Post Story
-                  </button>
-                </div>
-              </div>
-              
-            </div>
-          </div>
-        )}
-      </AnimatePresence>
+      <StoryCreatorModal
+        isOpen={textStatusOpen}
+        onClose={() => setTextStatusOpen(false)}
+        storyType={storyType}
+        setStoryType={setStoryType}
+        textStatusContent={textStatusContent}
+        setTextStatusContent={setTextStatusContent}
+        textStatusBg={textStatusBg}
+        setTextStatusBg={setTextStatusBg}
+        storyMusic={storyMusic}
+        setStoryMusic={setStoryMusic}
+        storyLocation={storyLocation}
+        setStoryLocation={setStoryLocation}
+        storyMention={storyMention}
+        setStoryMention={setStoryMention}
+        storyHashtags={storyHashtags}
+        setStoryHashtags={setStoryHashtags}
+        storyPollQuestion={storyPollQuestion}
+        setStoryPollQuestion={setStoryPollQuestion}
+        storyPollOpt1={storyPollOpt1}
+        setStoryPollOpt1={setStoryPollOpt1}
+        storyPollOpt2={storyPollOpt2}
+        setStoryPollOpt2={setStoryPollOpt2}
+        storyQuestion={storyQuestion}
+        setStoryQuestion={setStoryQuestion}
+        storyEmojiSliderTarget={storyEmojiSliderTarget}
+        setStoryEmojiSliderTarget={setStoryEmojiSliderTarget}
+        storyFile={storyFile}
+        setStoryFile={setStoryFile}
+        storyFileUrl={storyFileUrl}
+        setStoryFileUrl={setStoryFileUrl}
+        storyFileInputRef={storyFileInputRef}
+        onPost={handlePostStory}
+      />
 
       {/* 8. Active Story Viewer Slides Overlay */}
-      <AnimatePresence>
-        {activeStatusViewer && (
-          <div className="fixed inset-0 bg-black flex items-center justify-center z-50 p-6">
-            {/* ProgressBar */}
-            <div className="absolute top-6 left-6 right-6 flex gap-1 z-50">
-              {activeStatusViewer.map((_, i) => (
-                <div key={i} className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden">
-                  <div
-                    className={`bg-indigo-500 h-full ${i === activeStatusIndex ? 'w-full transition-all duration-3000' : (i < activeStatusIndex ? 'w-full' : 'w-0')}`}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setActiveStatusViewer(null)}
-              className="absolute top-10 right-6 text-white/60 hover:text-white font-bold z-50"
-            >
-              <X className="h-6 w-6" />
-            </button>
-
-            {/* Slide item content */}
-            {(() => {
-              const currentStatus = activeStatusViewer[activeStatusIndex];
-              let metadata: any = null;
-              try {
-                if (currentStatus.caption && currentStatus.caption.trim().startsWith('{')) {
-                  metadata = JSON.parse(currentStatus.caption);
-                }
-              } catch (e) {}
-
-              return (
-                <div className="w-full max-w-[420px] aspect-[4/5] bg-slate-900 rounded-[32px] overflow-hidden flex flex-col justify-between items-center p-6 border border-white/10 relative">
-                  {currentStatus.type === 'text' ? (
-                    <div
-                      style={{ backgroundColor: currentStatus.backgroundColor || '#4f46e5' }}
-                      className="absolute inset-0 flex items-center justify-center p-6"
-                    >
-                      <p className="text-xl font-extrabold text-white text-center">{currentStatus.content}</p>
-                    </div>
-                  ) : (
-                    currentStatus.type === 'video' ? (
-                      <video src={currentStatus.content} autoPlay loop muted className="absolute inset-0 h-full w-full object-cover" />
-                    ) : (
-                      <img src={currentStatus.content} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                    )
-                  )}
-
-                  {/* Top Bar: Creator Info & Analytics */}
-                  <div className="w-full flex justify-between items-center z-20 bg-slate-950/40 backdrop-blur-sm p-3 rounded-2xl border border-white/5 absolute top-10 left-4 right-4 max-w-[calc(100%-32px)]">
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-slate-800 overflow-hidden border border-white/20">
-                        {currentStatus.userId.avatar && <img src={currentStatus.userId.avatar} alt="" className="h-full w-full object-cover" />}
-                      </div>
-                      <div>
-                        <h4 className="text-[11px] font-bold text-white leading-none">{currentStatus.userId.username}</h4>
-                        <p className="text-[8px] text-white/60 mt-0.5">{new Date(currentStatus.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 text-[9px] font-bold text-white/80" title="Views count">
-                        <Eye className="h-3.5 w-3.5" />
-                        {currentStatus.views?.length || 0}
-                      </span>
-                      <button 
-                        onClick={() => handleLikeStory(currentStatus._id)}
-                        className={`flex items-center gap-1 text-[9px] font-bold transition-colors ${
-                          currentStatus.likes?.includes(user?._id as any) ? 'text-red-400' : 'text-white/80 hover:text-red-400'
-                        }`}
-                        title="React / Like"
-                      >
-                        <Star className="h-3.5 w-3.5" />
-                        {currentStatus.likes?.length || 0}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Float Overlays (Location, Mention, Music, Hashtags) */}
-                  <div className="absolute top-26 left-4 right-4 z-20 flex flex-col gap-2 pointer-events-none">
-                    <div className="flex justify-between w-full">
-                      {metadata?.location && (
-                        <span className="bg-indigo-600/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg">📍 {metadata.location}</span>
-                      )}
-                      {metadata?.mention && (
-                        <span className="bg-pink-600/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg">@{metadata.mention}</span>
-                      )}
-                    </div>
-
-                    {metadata?.music && (
-                      <div className="self-end bg-black/70 text-amber-400 text-[8px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 backdrop-blur-md shadow-lg animate-pulse">
-                        🎵 {metadata.music}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Interactive Widget overlay (Poll / Questions / Slider) */}
-                  <div className="absolute top-1/2 left-6 right-6 -translate-y-1/2 z-20 space-y-3">
-                    {metadata?.poll && (
-                      <div className="bg-black/60 backdrop-blur-md border border-white/10 p-3.5 rounded-2xl text-center text-white">
-                        <p className="font-bold text-[11px] mb-2">{metadata.poll.question}</p>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); alert('Option 1 Voted! 73% yes'); }}
-                            className="flex-1 py-1.5 bg-indigo-500 hover:bg-indigo-650 rounded-xl font-bold text-[10px]"
-                          >
-                            {metadata.poll.opt1}
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); alert('Option 2 Voted! 27% no'); }}
-                            className="flex-1 py-1.5 bg-pink-500 hover:bg-pink-650 rounded-xl font-bold text-[10px]"
-                          >
-                            {metadata.poll.opt2}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {metadata?.question && (
-                      <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-2xl text-center text-white space-y-2">
-                        <p className="font-extrabold uppercase tracking-widest text-indigo-300 text-[8px]">Ask me anything</p>
-                        <p className="font-semibold text-xs">{metadata.question.text}</p>
-                        <div className="bg-black/30 border border-white/10 rounded-xl p-1.5 flex gap-2 items-center">
-                          <input 
-                            type="text" 
-                            placeholder="Type an answer..." 
-                            className="flex-1 bg-transparent border-0 outline-none text-[10px] text-white focus:ring-0 px-2"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); alert('Answer submitted!'); }} 
-                            className="bg-white text-slate-900 text-[8px] font-bold px-2 py-1 rounded-lg"
-                          >
-                            Reply
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {metadata?.emojiSlider && (
-                      <div className="bg-black/50 backdrop-blur-md p-2.5 rounded-2xl flex items-center gap-3 border border-white/10">
-                        <span className="text-base">{metadata.emojiSlider.target || '🔥'}</span>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          defaultValue={50} 
-                          className="flex-1 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Caption & Hashtags bottom overlay */}
-                  <div className="absolute bottom-16 left-4 right-4 z-20 space-y-1.5 text-center pointer-events-none">
-                    {metadata?.hashtags && (
-                      <div className="flex gap-1.5 justify-center flex-wrap">
-                        {metadata.hashtags.map((h: string, i: number) => (
-                          <span key={i} className="text-[9px] bg-slate-950/80 text-white px-2 py-0.5 rounded-full font-bold">
-                            {h}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {(!metadata && currentStatus.caption) ? (
-                      <div className="bg-slate-950/70 backdrop-blur-sm p-2 rounded-xl text-[10px] font-semibold text-white">
-                        {currentStatus.caption}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {/* Active Slide Reply Drawer */}
-                  <div className="absolute bottom-4 left-4 right-4 z-20 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Reply to story..."
-                      value={storyReplyText}
-                      onChange={(e) => setStoryReplyText(e.target.value)}
-                      className="flex-1 h-9 rounded-xl text-xs font-semibold px-3 bg-white/15 border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-white/30"
-                    />
-                    <button 
-                      onClick={handleReplyToStory}
-                      className="h-9 px-3 rounded-xl bg-white text-slate-900 text-xs font-bold hover:bg-slate-100 shrink-0 transition-colors"
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        )}
-      </AnimatePresence>
+      <StoryViewerModal
+        activeStatusViewer={activeStatusViewer}
+        activeStatusIndex={activeStatusIndex}
+        setActiveStatusViewer={setActiveStatusViewer}
+        activeStatusIndexSetter={setActiveStatusIndex}
+        currentUser={user}
+        storyReplyText={storyReplyText}
+        setStoryReplyText={setStoryReplyText}
+        onReply={handleReplyToStory}
+        onLike={handleLikeStory}
+      />
+      {/* 9. Notification Panel */}
+      <NotificationPanel
+        isOpen={isNotifPanelOpen}
+        onClose={() => setIsNotifPanelOpen(false)}
+      />
 
     </div>
   );

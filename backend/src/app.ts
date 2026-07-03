@@ -18,6 +18,7 @@ import callRoutes from './routes/callRoutes.js';
 import communityRoutes from './routes/communityRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -67,14 +68,15 @@ if (!fs.existsSync(uploadsDir)) {
 app.use('/uploads', express.static(uploadsDir));
 
 // Register API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/chats', chatRoutes);
-app.use('/api/status', statusRoutes);
-app.use('/api/calls', callRoutes);
-app.use('/api/community', communityRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/auth',          authRoutes);
+app.use('/api/users',         userRoutes);
+app.use('/api/chats',         chatRoutes);
+app.use('/api/status',        statusRoutes);
+app.use('/api/calls',         callRoutes);
+app.use('/api/community',     communityRoutes);
+app.use('/api/ai',            aiRoutes);
+app.use('/api/admin',         adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Base Check-in Route
 app.get('/health', (req, res) => {

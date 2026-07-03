@@ -158,3 +158,32 @@ export interface Community {
   inviteCode: string;
   createdAt: string;
 }
+export type NotificationType =
+  | 'new_message'
+  | 'mention'
+  | 'friend_request'
+  | 'friend_request_accepted'
+  | 'community_invitation'
+  | 'community_join_request'
+  | 'community_join_approved'
+  | 'event_reminder'
+  | 'reaction'
+  | 'reply'
+  | 'call_missed'
+  | 'group_added'
+  | 'system';
+
+export interface Notification {
+  _id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  imageUrl?: string;
+  referenceId?: string;
+  referenceType?: 'chat' | 'community' | 'message' | 'user' | 'call';
+  actorId?: string | User;
+  isRead: boolean;
+  isDelivered: boolean;
+  createdAt: string;
+  expiresAt?: string;
+}

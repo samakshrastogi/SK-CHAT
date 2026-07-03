@@ -56,6 +56,7 @@ const UserSchema = new Schema<IUser>({
   mutedChats: [{ type: Schema.Types.ObjectId, ref: 'Chat' }],
   archivedChats: [{ type: Schema.Types.ObjectId, ref: 'Chat' }],
   starredMessages: [{ type: Schema.Types.ObjectId, ref: 'Message' }],
+  pushSubscription: { type: Schema.Types.Mixed }, // Web Push PushSubscription object
 }, {
   timestamps: true,
 });
