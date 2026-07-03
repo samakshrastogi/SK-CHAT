@@ -1,15 +1,23 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore.js';
 import { Mail, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 
 export default function LoginPage() {
   const { register, handleSubmit, formState: { errors } } = useForm();
-  const { login, isLoading } = useAuthStore();
+  const { login, isLoading, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      const from = location.state?.from?.pathname || '/';
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location]);
 
   const onSubmit = async (data: any) => {
     setErrorMsg('');
@@ -24,7 +32,8 @@ export default function LoginPage() {
       else if (agent.includes('Android')) device = 'Android Device';
 
       await login(data.emailOrUsername, data.password, device);
-      navigate('/chat');
+      const from = location.state?.from?.pathname || '/';
+      navigate(from, { replace: true });
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Login failed. Please verify credentials.');
     }
@@ -38,10 +47,10 @@ export default function LoginPage() {
       <div className="w-full max-w-[440px] z-10">
         <div className="text-center mb-8">
           <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-4">
-            <span className="text-2xl font-extrabold tracking-tighter text-white">C</span>
+            <span className="text-xl font-black tracking-tighter text-white">SK</span>
           </div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">Welcome back</h2>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sign in to your Connect account to continue</p>
+          <p className="mt-2 text-sm text-slate-505 dark:text-slate-400">Sign in to your SK Connect account to continue</p>
         </div>
 
         {/* Form panel */}

@@ -11,7 +11,10 @@ import {
   getStarredMessages,
   castVote,
   searchMessages,
-  togglePinMessage
+  togglePinMessage,
+  generateInviteLink,
+  joinChatGroup,
+  updateChatSettings
 } from '../controllers/chatController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -24,6 +27,9 @@ router.post('/', createChat as any);
 router.get('/', getChats as any);
 router.get('/search/messages', searchMessages as any);
 router.get('/starred', getStarredMessages as any);
+router.post('/:chatId/invite-link', generateInviteLink as any);
+router.post('/join/:codeOrToken', joinChatGroup as any);
+router.patch('/:chatId/settings', updateChatSettings as any);
 
 router.get('/:chatId/messages', getChatMessages as any);
 router.post('/:chatId/messages', upload.single('file'), sendMessage as any);

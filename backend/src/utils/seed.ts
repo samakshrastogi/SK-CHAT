@@ -10,7 +10,7 @@ import { Community } from '../models/Community.js';
 import { logger } from './logger.js';
 import crypto from 'crypto';
 
-const seed = async () => {
+const seed = async (disconnect = true) => {
   try {
     const connUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/connect';
     logger.info(`Seeding database: ${connUri}`);
@@ -288,11 +288,23 @@ const seed = async () => {
     logger.info('Seeded Developers Community with default sub-channels.');
 
     logger.info('Database seeding completed successfully!');
-    await mongoose.disconnect();
+    if (disconnect) {
+      await mongoose.disconnect();
+    }
   } catch (err: any) {
     logger.error(`Database seeding failed: ${err.message}`);
-    process.exit(1);
+    if (disconnect) {
+      process.exit(1);
+    } else {
+      throw err;
+    }
   }
 };
 
-seed();
+export { seed };
+
+import { fileURLToPath } from 'url';
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  seed(true);
+}

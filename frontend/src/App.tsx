@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './store/authStore.js';
 import { useThemeStore } from './store/themeStore.js';
 import ChatDashboard from './pages/ChatDashboard.tsx';
@@ -7,9 +7,11 @@ import LoginPage from './pages/LoginPage.tsx';
 import RegisterPage from './pages/RegisterPage.tsx';
 import VerifyEmailPage from './pages/VerifyEmailPage.tsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx';
+import JoinGroupPage from './pages/JoinGroupPage.tsx';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -19,7 +21,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" state={{ from: location }} replace />;
 }
 
 function App() {
@@ -40,6 +42,7 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/join/:codeOrToken" element={<ProtectedRoute><JoinGroupPage /></ProtectedRoute>} />
         
         {/* Render the Dashboard directly on the root path and sub-paths */}
         <Route path="/" element={<ProtectedRoute><ChatDashboard /></ProtectedRoute>} />

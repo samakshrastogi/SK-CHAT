@@ -14,9 +14,9 @@ export default function LandingPage() {
       <header className="max-w-7xl mx-auto w-full px-6 py-6 flex items-center justify-between z-10">
         <div className="flex items-center gap-2">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <span className="text-xl font-extrabold tracking-tighter text-white">C</span>
+            <span className="text-sm font-black tracking-tighter text-white">SK</span>
           </div>
-          <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-purple-400">Connect</span>
+          <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-purple-400">SK Connect</span>
         </div>
         <div className="flex items-center gap-4">
           <Link to="/login" className="px-4 py-2 text-sm font-medium hover:text-indigo-400 transition-colors">Sign In</Link>
@@ -33,7 +33,7 @@ export default function LandingPage() {
             transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-xs font-semibold text-indigo-400 w-fit"
           >
-            <Sparkles className="h-3.5 w-3.5" /> Introducing Connect 1.0
+            <Sparkles className="h-3.5 w-3.5" /> Introducing SK Connect 1.0
           </motion.div>
 
           <motion.h1
@@ -42,7 +42,7 @@ export default function LandingPage() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-4xl md:text-6xl font-extrabold tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-100 to-purple-200"
           >
-            Connect Instantly.<br />Communicate Beautifully.
+            SK Connect Instantly.<br />Communicate Beautifully.
           </motion.h1>
 
           <motion.p
@@ -146,7 +146,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-slate-800/50 py-8 text-center text-slate-500 text-xs">
-        <p>&copy; {new Date().getFullYear()} Connect Platform. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} SK Connect Platform. All rights reserved.</p>
       </footer>
     </div>
   );

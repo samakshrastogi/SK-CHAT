@@ -219,6 +219,15 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
         return next(new CustomError('Active session not found', 401));
       }
 
+      // Enforce 48 hours inactivity expiry
+      const fortyEightHours = 48 * 60 * 60 * 1000;
+      if (session.lastActive && (Date.now() - session.lastActive.getTime() > fortyEightHours)) {
+        session.isActive = false;
+        await session.save();
+        res.clearCookie('refreshToken');
+        return next(new CustomError('Session has expired due to 48 hours of inactivity', 401));
+      }
+
       const user = await User.findById(decoded.id);
       if (!user) {
         return next(new CustomError('User not found', 401));

@@ -40,12 +40,13 @@ export const createCommunity = async (req: AuthenticatedRequest, res: Response, 
       groupIds: []
     });
 
-    // 2. Create the default announcement channel (which is a Chat document)
+    // 2. Create the default announcement channel
     const announcementChat = await Chat.create({
-      name: `${name} Announcements`,
+      name: `announcements`,
       description: `Official announcements for ${name}`,
       isGroup: true,
       isCommunity: true,
+      channelType: 'announcement',
       creatorId: req.user!.id,
       admins: [req.user!.id],
       participants: [req.user!.id],
@@ -58,6 +59,59 @@ export const createCommunity = async (req: AuthenticatedRequest, res: Response, 
       description: `General discussion channel for ${name}`,
       isGroup: true,
       isCommunity: true,
+      channelType: 'text',
+      creatorId: req.user!.id,
+      admins: [req.user!.id],
+      participants: [req.user!.id],
+      communityId: community._id
+    });
+
+    // 3b. Create Q&A channel
+    const qaChat = await Chat.create({
+      name: `q-and-a`,
+      description: `Questions and answers channel`,
+      isGroup: true,
+      isCommunity: true,
+      channelType: 'qa',
+      creatorId: req.user!.id,
+      admins: [req.user!.id],
+      participants: [req.user!.id],
+      communityId: community._id
+    });
+
+    // 3c. Create Media channel
+    const mediaChat = await Chat.create({
+      name: `media`,
+      description: `Photos, videos and links hub`,
+      isGroup: true,
+      isCommunity: true,
+      channelType: 'media',
+      creatorId: req.user!.id,
+      admins: [req.user!.id],
+      participants: [req.user!.id],
+      communityId: community._id
+    });
+
+    // 3d. Create Events channel
+    const eventsChat = await Chat.create({
+      name: `events`,
+      description: `Upcoming meetups and events list`,
+      isGroup: true,
+      isCommunity: true,
+      channelType: 'events',
+      creatorId: req.user!.id,
+      admins: [req.user!.id],
+      participants: [req.user!.id],
+      communityId: community._id
+    });
+
+    // 3e. Create Voice Room channel
+    const voiceChat = await Chat.create({
+      name: `voice-room`,
+      description: `Drop in audio voice chats`,
+      isGroup: true,
+      isCommunity: true,
+      channelType: 'voice',
       creatorId: req.user!.id,
       admins: [req.user!.id],
       participants: [req.user!.id],
@@ -66,7 +120,14 @@ export const createCommunity = async (req: AuthenticatedRequest, res: Response, 
 
     // 4. Update and save the community
     community.announcementChannelId = announcementChat._id as any;
-    community.groupIds = [announcementChat._id as any, generalChat._id as any];
+    community.groupIds = [
+      announcementChat._id as any,
+      generalChat._id as any,
+      qaChat._id as any,
+      mediaChat._id as any,
+      eventsChat._id as any,
+      voiceChat._id as any
+    ];
     await community.save();
 
     const populated = await Community.findById(community._id)

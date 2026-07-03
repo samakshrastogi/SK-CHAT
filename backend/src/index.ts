@@ -6,6 +6,7 @@ import { connectDB } from './config/db.js';
 import { socketHandler } from './socket/socketHandler.js';
 import { logger } from './utils/logger.js';
 import { rescheduleSelfDestructMessages } from './utils/selfDestruct.js';
+import { User } from './models/User.js';
 
 const port = process.env.PORT || 5000;
 
@@ -13,6 +14,14 @@ const startServer = async () => {
   try {
     // Initialize Database connection
     await connectDB();
+
+    // Auto-seed if database is empty
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      logger.info('Database is empty. Automatically seeding default data...');
+      const { seed } = await import('./utils/seed.js');
+      await seed(false);
+    }
 
     const server = http.createServer(app);
 

@@ -1,4 +1,6 @@
 import { Response, NextFunction } from 'express';
+import { Types } from 'mongoose';
+import jwt from 'jsonwebtoken';
 import { Chat } from '../models/Chat.js';
 import { Message } from '../models/Message.js';
 import { User } from '../models/User.js';
@@ -10,7 +12,7 @@ import crypto from 'crypto';
 
 export const createChat = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { isGroup, participantId, name, description, isCommunity, communityId } = req.body;
+    const { isGroup, participantId, name, description, isCommunity, communityId, isBroadcast } = req.body;
 
     if (!isGroup) {
       // 1-on-1 Chat
@@ -53,6 +55,7 @@ export const createChat = async (req: AuthenticatedRequest, res: Response, next:
       description: description || '',
       isGroup: true,
       isCommunity: !!isCommunity,
+      isBroadcast: !!isBroadcast,
       communityId: communityId || undefined,
       creatorId: req.user!.id,
       admins: [req.user!.id],
@@ -140,6 +143,42 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       throw new CustomError('Chat not found or access denied', 403);
     }
 
+    // Check Group Settings: Announcement Mode & Slow Mode
+    if (chat.isGroup) {
+      const isOwner = chat.creatorId?.toString() === req.user!.id.toString();
+      const isAdmin = chat.admins.some(adm => adm.toString() === req.user!.id.toString());
+      const isMod = chat.moderators?.some(mod => mod.toString() === req.user!.id.toString());
+      
+      if (chat.announcementMode && !isOwner && !isAdmin && !isMod) {
+        throw new CustomError('Only administrators and moderators can send messages in this announcement-only group.', 403);
+      }
+      
+      if (chat.slowMode > 0 && !isOwner && !isAdmin && !isMod) {
+        const lastMsg = await Message.findOne({ chatId: chat._id, senderId: req.user!.id }).sort({ createdAt: -1 });
+        if (lastMsg) {
+          const secondsElapsed = Math.floor((Date.now() - new Date(lastMsg.createdAt).getTime()) / 1000);
+          if (secondsElapsed < chat.slowMode) {
+            throw new CustomError(`Slow mode is active. Please wait ${chat.slowMode - secondsElapsed} more second(s).`, 429);
+          }
+        }
+      }
+    }
+
+    if (!chat.isGroup) {
+      const otherParticipantId = chat.participants.find(p => p.toString() !== req.user!.id);
+      if (otherParticipantId) {
+        const otherUser = await User.findById(otherParticipantId);
+        const currentUser = await User.findById(req.user!.id);
+        
+        if (otherUser?.blockedUsers.some(id => id.toString() === req.user!.id.toString())) {
+          throw new CustomError('You cannot send messages to this user because they have blocked you.', 403);
+        }
+        if (currentUser?.blockedUsers.some(id => id.toString() === otherParticipantId.toString())) {
+          throw new CustomError('You cannot send messages to this user because you have blocked them.', 403);
+        }
+      }
+    }
+
     let mediaUrl = undefined;
     let fileName = undefined;
     let mediaSize = undefined;
@@ -169,10 +208,23 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       expiresAt = new Date(Date.now() + Number(expiresIn) * 1000);
     }
 
+    let finalContent = content || '';
+    if (chat.isCommunity && chat.communityId && (!messageType || messageType === 'text')) {
+      const CommunityModel = (await import('../models/Community.js')).Community;
+      const communityObj = await CommunityModel.findById(chat.communityId);
+      if (communityObj && communityObj.autoModeration !== false) {
+        const bannedWords = ['scam', 'spam', 'hack', 'virus', 'abuse', 'profanity', 'badword'];
+        for (const word of bannedWords) {
+          const regex = new RegExp(`\\b${word}\\b`, 'gi');
+          finalContent = finalContent.replace(regex, '****');
+        }
+      }
+    }
+
     const message = await Message.create({
       chatId,
       senderId: req.user!.id,
-      content: content || '',
+      content: finalContent,
       messageType: messageType || 'text',
       mediaUrl,
       fileName,
@@ -196,6 +248,71 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
         path: 'replyTo',
         populate: { path: 'senderId', select: 'username' }
       });
+
+    const io = req.app.get('io');
+
+    // Handle Broadcast Group logic
+    if (chat.isGroup && chat.isBroadcast) {
+      // 1. Verify initiator is the sender
+      if (chat.creatorId && chat.creatorId.toString() !== req.user!.id.toString()) {
+        throw new CustomError('Only the broadcast creator can send messages to this broadcast list.', 403);
+      }
+
+      // 2. Loop through all other participants to send separately
+      const otherMembers = chat.participants.filter(p => p.toString() !== req.user!.id.toString());
+      for (const memberId of otherMembers) {
+        // Find or create direct chat
+        let directChat = await Chat.findOne({
+          isGroup: false,
+          participants: { $all: [req.user!.id, memberId] }
+        });
+        if (!directChat) {
+          directChat = await Chat.create({
+            isGroup: false,
+            participants: [req.user!.id, memberId]
+          });
+        }
+
+        // Save message copy under direct chat
+        const copyMsg = await Message.create({
+          chatId: directChat._id,
+          senderId: req.user!.id,
+          content: content || '',
+          messageType: messageType || 'text',
+          mediaUrl,
+          fileName,
+          mediaSize,
+          pollData: cleanPollData,
+          locationData: locationData ? (typeof locationData === 'string' ? JSON.parse(locationData) : locationData) : undefined,
+          contactData: contactData ? (typeof contactData === 'string' ? JSON.parse(contactData) : contactData) : undefined,
+          replyTo: replyTo || undefined,
+          expiresAt,
+          status: 'sent'
+        });
+
+        directChat.lastMessage = copyMsg._id as any;
+        await directChat.save();
+
+        const populatedCopy = await Message.findById(copyMsg._id)
+          .populate('senderId', 'username avatar')
+          .populate({
+            path: 'replyTo',
+            populate: { path: 'senderId', select: 'username' }
+          });
+
+        if (io) {
+          // Emit to direct chat room
+          io.to(`chat:${directChat._id}`).emit('message:receive', populatedCopy);
+          // Emit to receiver user room specifically
+          io.to(`user:${memberId}`).emit('message:receive', populatedCopy);
+        }
+      }
+    }
+
+    // Regular socket emit to the main chat room
+    if (io) {
+      io.to(`chat:${chatId}`).emit('message:receive', populated);
+    }
 
     res.status(201).json({ success: true, message: populated });
 
@@ -449,6 +566,175 @@ export const searchMessages = async (req: AuthenticatedRequest, res: Response, n
       .limit(50);
 
     res.status(200).json({ success: true, messages });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generateInviteLink = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      throw new CustomError('Chat not found', 404);
+    }
+    if (!chat.isGroup) {
+      throw new CustomError('Only group chats support invite links', 400);
+    }
+
+    // Generate public invite code if missing
+    if (!chat.inviteCode) {
+      chat.inviteCode = crypto.randomBytes(4).toString('hex');
+      await chat.save();
+    }
+
+    // Generate signed private token (valid for 24h)
+    const privateToken = jwt.sign(
+      { chatId: chat._id, type: 'private' },
+      process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#',
+      { expiresIn: '1d' }
+    );
+
+    res.status(200).json({
+      success: true,
+      inviteCode: chat.inviteCode,
+      privateToken
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const joinChatGroup = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { codeOrToken } = req.params;
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new CustomError('User context required', 401);
+    }
+
+    let chatId: string;
+    let joinType = 'public';
+
+    // Check if codeOrToken is a JWT (contains dots)
+    if (codeOrToken.includes('.')) {
+      try {
+        const decoded: any = jwt.verify(
+          codeOrToken,
+          process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#'
+        );
+        chatId = decoded.chatId;
+        joinType = 'private';
+      } catch (err) {
+        throw new CustomError('Private invite token is invalid or has expired', 400);
+      }
+    } else {
+      // Find chat by public code
+      const chatByCode = await Chat.findOne({ inviteCode: codeOrToken });
+      if (!chatByCode) {
+        throw new CustomError('Group invite link is invalid', 400);
+      }
+      chatId = (chatByCode._id as any).toString();
+    }
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      throw new CustomError('Chat group no longer exists', 404);
+    }
+
+    const participantObjectId = new Types.ObjectId(userId);
+    // Check if already a participant
+    if (chat.participants.some(p => p.toString() === userId.toString())) {
+      return res.status(200).json({
+        success: true,
+        message: 'You are already a member of this group chat',
+        chat
+      });
+    }
+
+    // Add user as participant
+    chat.participants.push(participantObjectId);
+    await chat.save();
+
+    // Create a system message in the chat that this user joined
+    const userDoc = await User.findById(userId);
+    const systemMessage = await Message.create({
+      chatId: chat._id,
+      senderId: new Types.ObjectId('668270117e3b9a2b9c3d4e5f'), // Admin/System sender
+      content: `${userDoc?.username || 'A new user'} joined the group via ${joinType} invite link!`,
+      messageType: 'text',
+      status: 'sent'
+    });
+
+    chat.lastMessage = systemMessage._id as any;
+    await chat.save();
+
+    // Broadcast member joined socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chat._id}`).emit('chat:member-joined', {
+        chatId: chat._id,
+        user: {
+          _id: userDoc?._id,
+          username: userDoc?.username,
+          avatar: userDoc?.avatar,
+          status: userDoc?.status
+        },
+        message: systemMessage
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Successfully joined group chat',
+      chat
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateChatSettings = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+    const { slowMode, announcementMode, approvalRequired, groupRules, moderators, admins } = req.body;
+    
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      throw new CustomError('Chat group not found', 404);
+    }
+    
+    // Authorization: Must be owner/creator or admin
+    const isOwner = chat.creatorId?.toString() === req.user!.id.toString() || chat.ownerId?.toString() === req.user!.id.toString();
+    const isAdmin = chat.admins.some(adm => adm.toString() === req.user!.id.toString());
+    if (!isOwner && !isAdmin) {
+      throw new CustomError('Administrator access required to modify group settings', 403);
+    }
+
+    if (slowMode !== undefined) chat.slowMode = Number(slowMode);
+    if (announcementMode !== undefined) chat.announcementMode = Boolean(announcementMode);
+    if (approvalRequired !== undefined) chat.approvalRequired = Boolean(approvalRequired);
+    if (groupRules !== undefined) chat.groupRules = String(groupRules);
+    
+    // Only owner can promote/demote admins & mods
+    if (isOwner) {
+      if (moderators !== undefined) {
+        chat.moderators = moderators.map((id: string) => new Types.ObjectId(id));
+      }
+      if (admins !== undefined) {
+        chat.admins = admins.map((id: string) => new Types.ObjectId(id));
+      }
+    }
+    
+    await chat.save();
+    
+    // Populate and return updated chat
+    const populated = await Chat.findById(chat._id)
+      .populate('admins', 'username avatar bio')
+      .populate('participants', 'username avatar bio')
+      .populate('moderators', 'username avatar bio');
+      
+    res.status(200).json({ success: true, chat: populated });
   } catch (error) {
     next(error);
   }

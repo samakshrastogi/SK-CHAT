@@ -82,6 +82,14 @@ export interface Chat {
   name?: string;
   isGroup: boolean;
   isCommunity: boolean;
+  isBroadcast?: boolean;
+  channelType?: 'text' | 'announcement' | 'qa' | 'media' | 'events' | 'voice';
+  ownerId?: string;
+  moderators?: (User | string)[];
+  approvalRequired?: boolean;
+  slowMode?: number;
+  groupRules?: string;
+  announcementMode?: boolean;
   avatar?: string;
   description?: string;
   creatorId?: string;
@@ -134,6 +142,13 @@ export interface Community {
   name: string;
   description: string;
   avatar: string;
+  privacyType?: 'public' | 'private' | 'invite-only';
+  tags?: string[];
+  welcomeMessage?: string;
+  guidelines?: string;
+  autoModeration?: boolean;
+  verificationBadge?: boolean;
+  communityLevel?: number;
   banner: string;
   creatorId: string;
   admins: (User | string)[];

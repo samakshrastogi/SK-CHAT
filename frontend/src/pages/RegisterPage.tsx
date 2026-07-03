@@ -6,9 +6,16 @@ import { Mail, Lock, User, AlertTriangle, CheckCircle } from 'lucide-react';
 
 export default function RegisterPage() {
   const { register, handleSubmit, watch, formState: { errors } } = useForm();
-  const { registerUser, isLoading } = useAuthStore();
+  const { registerUser, isLoading, isAuthenticated } = useAuthStore();
+  const navigate = useNavigate();
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   const onSubmit = async (data: any) => {
     setErrorMsg('');
@@ -47,10 +54,10 @@ export default function RegisterPage() {
       <div className="w-full max-w-[440px] z-10">
         <div className="text-center mb-8">
           <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-4">
-            <span className="text-2xl font-extrabold tracking-tighter text-white">C</span>
+            <span className="text-xl font-black tracking-tighter text-white">SK</span>
           </div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">Create an account</h2>
-          <p className="mt-2 text-sm text-slate-505 dark:text-slate-400">Join Connect today to experience next-gen chatting</p>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Join SK Connect today to experience next-gen chatting</p>
         </div>
 
         <div className="bg-white/60 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl rounded-[32px] p-8 shadow-2xl">
