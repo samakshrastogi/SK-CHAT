@@ -323,9 +323,15 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       }
     }
 
-    // Regular socket emit to the main chat room
+    // Regular socket emit to the main chat room and all participant user rooms in real-time
     if (io) {
       io.to(`chat:${chatId}`).emit('message:receive', populated);
+
+      chat.participants.forEach((participantId) => {
+        if (participantId.toString() !== req.user!.id.toString()) {
+          io.to(`user:${participantId}`).emit('message:receive', populated);
+        }
+      });
     }
 
     res.status(201).json({ success: true, message: populated });

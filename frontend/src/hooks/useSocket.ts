@@ -71,7 +71,15 @@ export const useSocket = () => {
 
     // Handle receiving messages
     socket.on('message:receive', (message) => {
-      optimisticAddMessage(message.chatId, message);
+      const currentChats = useChatStore.getState().chats;
+      const chatExists = currentChats.some((c) => c._id === message.chatId);
+
+      if (!chatExists) {
+        // Dynamically fetch chats to pull the new chat metadata
+        useChatStore.getState().fetchChats();
+      } else {
+        optimisticAddMessage(message.chatId, message);
+      }
 
       // Check if this chat is currently active
       const { activeChat } = useChatStore.getState();
