@@ -43,9 +43,9 @@ export const resetPasswordValidator = [
   body('email')
     .isEmail()
     .withMessage('Please provide a valid email address'),
-  body('token')
-    .notEmpty()
-    .withMessage('Reset token is required'),
+  body('otp')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('OTP must be exactly 6 digits'),
   body('newPassword')
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters long'),

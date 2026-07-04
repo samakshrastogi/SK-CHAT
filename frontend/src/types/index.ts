@@ -17,6 +17,8 @@ export interface User {
   role: 'user' | 'moderator' | 'admin';
   themeSettings: ThemeSettings;
   blockedUsers: string[];
+  mutedUsers: string[];
+  friends: string[];
   mutedChats: string[];
   archivedChats: string[];
   starredMessages: string[];

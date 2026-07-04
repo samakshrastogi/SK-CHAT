@@ -11,7 +11,8 @@ interface AuthState {
   login: (emailOrUsername: string, password: string, deviceType?: string) => Promise<void>;
   logout: () => Promise<void>;
   registerUser: (email: string, username: string, password: string) => Promise<void>;
-  verifyEmailCode: (token: string, email: string) => Promise<void>;
+  verifyEmailCode: (otp: string, email: string) => Promise<void>;
+  googleLogin: (email: string, username: string, googleId: string) => Promise<void>;
   checkAuth: () => Promise<boolean>;
   updateProfileData: (formData: FormData) => Promise<void>;
   updateThemePreferences: (theme: 'dark'|'light'|'system', accentColor: string, wallpaper?: string) => Promise<void>;
@@ -65,11 +66,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  verifyEmailCode: async (token, email) => {
+  verifyEmailCode: async (otp, email) => {
     set({ isLoading: true });
     try {
-      await apiClient.get(`/auth/verify?token=${token}&email=${encodeURIComponent(email)}`);
+      await apiClient.post('/auth/verify-otp', { otp, email });
       set({ isLoading: false });
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  googleLogin: async (email, username, googleId) => {
+    set({ isLoading: true });
+    try {
+      const response = await apiClient.post('/auth/google-sso', { email, username, googleId });
+      const { accessToken, user } = response.data;
+      setAccessTokenInMemory(accessToken);
+      set({ user, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;

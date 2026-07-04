@@ -5,7 +5,17 @@ import {
   searchUsers,
   updateThemeSettings,
   blockUser,
-  getBlockedUsers
+  getBlockedUsers,
+  getDiscoveryUsers,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  cancelFriendRequest,
+  removeFriend,
+  getFriendsList,
+  getFriendRequests,
+  muteUser,
+  getMutedUsers
 } from '../controllers/userController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -28,5 +38,16 @@ router.get('/search', searchUsers as any);
 router.put('/theme', updateThemeSettings as any);
 router.post('/block', blockUser as any);
 router.get('/blocked', getBlockedUsers as any);
+
+router.get('/discovery', getDiscoveryUsers as any);
+router.post('/friends/request', sendFriendRequest as any);
+router.post('/friends/accept', acceptFriendRequest as any);
+router.post('/friends/reject', rejectFriendRequest as any);
+router.post('/friends/cancel', cancelFriendRequest as any);
+router.post('/friends/remove', removeFriend as any);
+router.get('/friends', getFriendsList as any);
+router.get('/friends/requests', getFriendRequests as any);
+router.post('/mute', muteUser as any);
+router.get('/muted', getMutedUsers as any);
 
 export default router;

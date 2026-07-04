@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { DeviceSession } from '../models/DeviceSession.js';
 import { CustomError } from '../utils/customError.js';
-import { sendVerificationEmail, sendResetPasswordEmail } from '../services/emailService.js';
+import { sendVerificationOTP, sendResetPasswordOTP } from '../services/emailService.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 
 // JWT Generation Helpers
@@ -39,25 +39,25 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    // Generate 6-digit OTP code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     const newUser = await User.create({
       email,
       username,
       password: hashedPassword,
-      verificationToken,
+      verificationToken: otp,
       verificationTokenExpires,
-      isVerified: true,
+      isVerified: false, // OTP verification required!
     });
 
-    // Send email
-    await sendVerificationEmail(email, username, verificationToken);
+    // Send email with OTP
+    await sendVerificationOTP(email, username, otp);
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Your account is active. You can now log in.',
+      message: 'Registration successful! Please check your email for the 6-digit verification code.',
     });
   } catch (error) {
     next(error);
@@ -66,20 +66,20 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
 export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { token, email } = req.query;
+    const { otp, email } = req.body;
 
-    if (!token || !email) {
-      throw new CustomError('Invalid verification link parameters', 400);
+    if (!otp || !email) {
+      throw new CustomError('Email and OTP code are required', 400);
     }
 
     const user = await User.findOne({
-      email: (email as string).toLowerCase(),
-      verificationToken: token as string,
+      email: email.toLowerCase(),
+      verificationToken: otp,
       verificationTokenExpires: { $gt: new Date() },
     });
 
     if (!user) {
-      throw new CustomError('Verification link is invalid or has expired', 400);
+      throw new CustomError('Verification OTP code is invalid or has expired', 400);
     }
 
     user.isVerified = true;
@@ -267,24 +267,23 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     const user = await User.findOne({ email: email.toLowerCase() });
 
     if (!user) {
-      // Avoid enumerating users, return a generic success message
       res.status(200).json({
         success: true,
-        message: 'If a matching account exists, a password reset link has been sent to that address.',
+        message: 'If a matching account exists, a 6-digit OTP has been sent to that address.',
       });
       return;
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetPasswordToken = resetToken;
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetPasswordToken = otp;
     user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await user.save();
 
-    await sendResetPasswordEmail(user.email, user.username, resetToken);
+    await sendResetPasswordOTP(user.email, user.username, otp);
 
     res.status(200).json({
       success: true,
-      message: 'If a matching account exists, a password reset link has been sent to that address.',
+      message: 'If a matching account exists, a 6-digit OTP has been sent to that address.',
     });
   } catch (error) {
     next(error);
@@ -293,16 +292,16 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { token, email, newPassword } = req.body;
+    const { otp, email, newPassword } = req.body;
 
     const user = await User.findOne({
       email: email.toLowerCase(),
-      resetPasswordToken: token,
+      resetPasswordToken: otp,
       resetPasswordExpires: { $gt: new Date() }
     });
 
     if (!user) {
-      throw new CustomError('Reset link is invalid or has expired', 400);
+      throw new CustomError('Reset OTP is invalid or has expired', 400);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -377,6 +376,78 @@ export const logoutAllSessions = async (req: AuthenticatedRequest, res: Response
     res.status(200).json({
       success: true,
       message: 'Logged out of all devices successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const googleSSO = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, username, googleId } = req.body;
+
+    if (!email || !username || !googleId) {
+      throw new CustomError('Google SSO payload missing key fields', 400);
+    }
+
+    let user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      let finalUsername = username;
+      const existingUser = await User.findOne({ username: finalUsername });
+      if (existingUser) {
+        finalUsername = `${username}_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(randomPassword, salt);
+
+      user = await User.create({
+        email: email.toLowerCase(),
+        username: finalUsername,
+        password: hashedPassword,
+        isVerified: true
+      });
+    }
+
+    const deviceId = crypto.randomUUID();
+    const cleanDeviceType = 'Google SSO Web Client';
+    const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+    const accessToken = generateAccessToken(user, deviceId);
+    const refreshToken = generateRefreshToken(user, deviceId);
+
+    const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    await DeviceSession.create({
+      userId: user._id,
+      refreshToken: hashedToken,
+      deviceId,
+      deviceType: cleanDeviceType,
+      ipAddress,
+      lastActive: new Date()
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    res.status(200).json({
+      success: true,
+      accessToken,
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        avatar: user.avatar,
+        coverImage: user.coverImage,
+        bio: user.bio,
+        role: user.role,
+        themeSettings: user.themeSettings
+      }
     });
   } catch (error) {
     next(error);

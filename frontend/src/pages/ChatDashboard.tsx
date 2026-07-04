@@ -4,6 +4,7 @@ import { useChatStore } from '../store/chatStore.js';
 import { useCallStore } from '../store/callStore.js';
 import { useThemeStore } from '../store/themeStore.js';
 import { useNotificationStore } from '../store/notificationStore.js';
+import { useConnectionsStore } from '../store/connectionsStore.js';
 import { useSocket } from '../hooks/useSocket.js';
 import { useWebRTC } from '../hooks/useWebRTC.js';
 import { apiClient } from '../api/client.js';
@@ -13,7 +14,7 @@ import {
   Paperclip, MoreVertical, X, Check, CheckCheck, Smile, Star, Trash2, Edit2, CornerUpLeft,
   Pin, Shield, Mic, HelpCircle, Share2, BarChart2, ShieldAlert, Trash, PlusCircle, Globe,
   Compass, Eye, Play, Sparkles, Languages, FileText, MapPin, PhoneMissed, Volume2, VideoOff,
-  UserX, CheckCircle, Ban, Download, Copy, Megaphone, Bell
+  UserX, CheckCircle, Ban, Download, Copy, Megaphone, Bell, Users, UserPlus, UserCheck, VolumeX
 } from 'lucide-react';
 import { Chat, Message, User, Status, Call, DeviceSession, Community } from '../types/index.js';
 import { StoryCreatorModal } from '../components/StoryCreatorModal.tsx';
@@ -21,7 +22,7 @@ import { StoryViewerModal } from '../components/StoryViewerModal.tsx';
 import { NotificationPanel, NotificationBell } from '../components/NotificationPanel.tsx';
 
 const wallpaperClasses: { [key: string]: string } = {
-  'gradient-mesh': 'bg-gradient-to-tr from-slate-100 to-indigo-50/40 dark:from-slate-950 dark:to-slate-900/60',
+  'gradient-mesh': 'bg-white dark:bg-slate-950',
   'deep-space': 'bg-gradient-to-tr from-slate-200 to-purple-100 dark:from-indigo-950 dark:to-slate-950',
   'sunset-glow': 'bg-gradient-to-tr from-orange-100 to-pink-100/60 dark:from-amber-950/30 dark:to-purple-950/40',
   'emerald-forest': 'bg-gradient-to-tr from-emerald-50 to-teal-50 dark:from-stone-900 dark:to-emerald-950/20'
@@ -164,10 +165,47 @@ export default function ChatDashboard() {
   } = useWebRTC(emitEvent);
 
   // Active Main Sidebar Tab
-  const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'communities' | 'settings' | 'profile' | 'admin'>('chats');
+  const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'communities' | 'settings' | 'profile' | 'admin' | 'connections'>('chats');
+  const [connectionsSubTab, setConnectionsSubTab] = useState<'friends' | 'requests' | 'discover' | 'privacy'>('friends');
+  const [connectionsSearchQuery, setConnectionsSearchQuery] = useState('');
+  const [connectionsSearchResults, setConnectionsSearchResults] = useState<any[]>([]);
+  const [isSearchingConnections, setIsSearchingConnections] = useState(false);
+
+  const handleConnectionsSearch = async (val: string) => {
+    setConnectionsSearchQuery(val);
+    if (!val.trim()) {
+      setConnectionsSearchResults([]);
+      return;
+    }
+    setIsSearchingConnections(true);
+    try {
+      const resp = await apiClient.get(`/users/search?q=${encodeURIComponent(val)}`);
+      setConnectionsSearchResults(resp.data.users);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSearchingConnections(false);
+    }
+  };
+
+  const connStore = useConnectionsStore();
   
   // Group Info Sidebar & Invite States
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
+  const [isEditingGroupProfile, setIsEditingGroupProfile] = useState(false);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupDesc, setEditGroupDesc] = useState('');
+  const [editGroupFile, setEditGroupFile] = useState<File | null>(null);
+  const [groupSharedMedia, setGroupSharedMedia] = useState<any[]>([]);
+  const [groupSharedFiles, setGroupSharedFiles] = useState<any[]>([]);
+  const [activeCommunity, setActiveCommunity] = useState<any>(null);
+  const [communityRequests, setCommunityRequests] = useState<any[]>([]);
+  const [isEditingCommunity, setIsEditingCommunity] = useState(false);
+  const [editCommName, setEditCommName] = useState('');
+  const [editCommDesc, setEditCommDesc] = useState('');
+  const [editCommPrivacy, setEditCommPrivacy] = useState<'public' | 'private'>('public');
+  const [editCommWelcome, setEditCommWelcome] = useState('');
+  const [editCommRules, setEditCommRules] = useState('');
   const [inviteLinks, setInviteLinks] = useState<{ publicLink: string; privateLink: string } | null>(null);
   const [generatingInvite, setGeneratingInvite] = useState(false);
   const [copiedLink, setCopiedLink] = useState<'public' | 'private' | null>(null);
@@ -177,6 +215,9 @@ export default function ChatDashboard() {
     setIsGroupInfoOpen(false);
     setInviteLinks(null);
     setCopiedLink(null);
+    setActiveCommunity(null);
+    setCommunityRequests([]);
+    setIsEditingCommunity(false);
   }, [activeChat]);
 
   // Searching/Creating models
@@ -267,6 +308,29 @@ export default function ChatDashboard() {
       fetchSessions();
     }
   }, [activeTab, fetchSessions]);
+
+  // Fetch group media/files when sidebar is opened
+  useEffect(() => {
+    if (isGroupInfoOpen && activeChat?.isGroup) {
+      apiClient.get(`/chats/${activeChat._id}/media`)
+        .then(res => setGroupSharedMedia(res.data.media))
+        .catch(e => console.error(e));
+      apiClient.get(`/chats/${activeChat._id}/files`)
+        .then(res => setGroupSharedFiles(res.data.files))
+        .catch(e => console.error(e));
+    }
+  }, [isGroupInfoOpen, activeChat]);
+
+  // Fetch connections lists on Tab change
+  useEffect(() => {
+    if (activeTab === 'connections') {
+      connStore.fetchFriends();
+      connStore.fetchRequests();
+      connStore.fetchDiscovery();
+      connStore.fetchBlocked();
+      connStore.fetchMuted();
+    }
+  }, [activeTab]);
 
   // Request Desktop notifications permission on mount
   useEffect(() => {
@@ -422,6 +486,154 @@ export default function ChatDashboard() {
     }
   };
 
+  const handleLeaveGroup = async () => {
+    if (!activeChat) return;
+    if (!confirm('Are you sure you want to leave this group?')) return;
+    try {
+      await apiClient.post(`/chats/${activeChat._id}/leave`);
+      setActiveChat(null);
+      fetchChats();
+      setIsGroupInfoOpen(false);
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to leave group');
+    }
+  };
+
+  const handleRemoveGroupMember = async (userId: string) => {
+    if (!activeChat) return;
+    if (!confirm('Remove this member from the group?')) return;
+    try {
+      const resp = await apiClient.delete(`/chats/${activeChat._id}/members/${userId}`);
+      setActiveChat(resp.data.chat);
+      fetchChats();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to remove member');
+    }
+  };
+
+  const handleAddGroupMember = async (userId: string) => {
+    if (!activeChat) return;
+    try {
+      const resp = await apiClient.post(`/chats/${activeChat._id}/members`, { userId });
+      setActiveChat(resp.data.chat);
+      fetchChats();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to add member');
+    }
+  };
+
+  const handlePromoteMember = async (userId: string, targetRole: 'admin' | 'moderator' | 'member') => {
+    if (!activeChat) return;
+    try {
+      let admins = activeChat.admins?.map((a: any) => typeof a === 'string' ? a : a._id) || [];
+      let moderators = activeChat.moderators?.map((m: any) => typeof m === 'string' ? m : m._id) || [];
+
+      if (targetRole === 'admin') {
+        admins = [...new Set([...admins, userId])];
+        moderators = moderators.filter((id: string) => id !== userId);
+      } else if (targetRole === 'moderator') {
+        moderators = [...new Set([...moderators, userId])];
+        admins = admins.filter((id: string) => id !== userId);
+      } else {
+        admins = admins.filter((id: string) => id !== userId);
+        moderators = moderators.filter((id: string) => id !== userId);
+      }
+
+      const resp = await apiClient.patch(`/chats/${activeChat._id}/settings`, { admins, moderators });
+      setActiveChat(resp.data.chat);
+      fetchChats();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to promote member');
+    }
+  };
+
+  const handleUpdateGroupProfile = async (name: string, description: string, file?: File) => {
+    if (!activeChat) return;
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('description', description);
+    if (file) {
+      formData.append('avatar', file);
+    }
+    try {
+      const resp = await apiClient.put(`/chats/${activeChat._id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setActiveChat(resp.data.chat);
+      fetchChats();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to update group profile');
+    }
+  };
+
+  const fetchActiveCommunity = async () => {
+    if (!activeChat?.communityId) return;
+    try {
+      const resp = await apiClient.get('/community');
+      const commId = activeChat.communityId;
+      const target = resp.data.communities.find((c: any) => c._id === commId);
+      if (target) {
+        setActiveCommunity(target);
+        const isAdm = target.admins.some((a: any) => (typeof a === 'string' ? a === user?._id : a._id === user?._id));
+        const isCre = target.creatorId === user?._id;
+        if (isAdm || isCre) {
+          const reqs = await apiClient.get(`/community/${target._id}/requests`);
+          setCommunityRequests(reqs.data.requests);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch active community:', e);
+    }
+  };
+
+  const handleUpdateCommunity = async (name: string, description: string, privacyType: string, welcomeMessage: string, guidelines: string, avatarFile?: File, bannerFile?: File) => {
+    if (!activeCommunity) return;
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('description', description);
+    formData.append('privacyType', privacyType);
+    formData.append('welcomeMessage', welcomeMessage);
+    formData.append('guidelines', guidelines);
+    if (avatarFile) formData.append('avatar', avatarFile);
+    if (bannerFile) formData.append('banner', bannerFile);
+
+    try {
+      const resp = await apiClient.put(`/community/${activeCommunity._id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setActiveCommunity(resp.data.community);
+      fetchCommunities();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to update community settings');
+    }
+  };
+
+  const handleLeaveCommunity = async () => {
+    if (!activeCommunity) return;
+    if (!confirm('Are you sure you want to leave this community? All community channels will be removed.')) return;
+    try {
+      await apiClient.delete(`/community/${activeCommunity._id}/leave`);
+      setActiveCommunity(null);
+      setActiveChat(null);
+      fetchCommunities();
+      setIsGroupInfoOpen(false);
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to leave community');
+    }
+  };
+
+  const handleActionJoinRequest = async (requestId: string, action: 'accept' | 'reject') => {
+    if (!activeCommunity) return;
+    try {
+      await apiClient.post(`/community/requests/${requestId}`, { action });
+      const reqs = await apiClient.get(`/community/${activeCommunity._id}/requests`);
+      setCommunityRequests(reqs.data.requests);
+      fetchActiveCommunity();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to process request');
+    }
+  };
+
   const copyToClipboard = (text: string, type: 'public' | 'private') => {
     navigator.clipboard.writeText(text);
     setCopiedLink(type);
@@ -501,14 +713,14 @@ export default function ChatDashboard() {
   const handleJoinCommunity = async () => {
     if (!joinCommunityCode.trim()) return;
     try {
-      const resp = await apiClient.post('/community/join', {
+      const resp = await apiClient.post('/community/join-request', {
         inviteCode: joinCommunityCode
       });
       setJoinCommunityCode('');
       fetchCommunities();
-      alert(`Successfully joined community: ${resp.data.community.name}`);
+      alert(resp.data.message);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Could not join community.');
+      alert(e.response?.data?.message || 'Could not request to join community.');
     }
   };
 
@@ -1397,10 +1609,429 @@ export default function ChatDashboard() {
           </div>
         )}
 
+        {/* Tab 8: Connections Panel */}
+        {activeTab === 'connections' && (
+          <div className="flex flex-col h-full overflow-hidden">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800/40">
+              <h2 className="text-xl font-bold mb-3 tracking-tight">People</h2>
+              
+              {/* Sub tabs switches */}
+              <div className="flex gap-1.5 p-1 bg-slate-100/80 dark:bg-slate-900/60 rounded-xl">
+                {[
+                  { id: 'friends', label: 'Friends' },
+                  { id: 'requests', label: 'Requests' },
+                  { id: 'discover', label: 'Discover' },
+                  { id: 'privacy', label: 'Privacy' }
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => setConnectionsSubTab(st.id as any)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      connectionsSubTab === st.id
+                        ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50 dark:border-slate-800/50'
+                        : 'text-slate-500 dark:text-slate-450 hover:text-slate-800 dark:hover:text-slate-350'
+                    }`}
+                  >
+                    {st.id === 'requests' && (connStore.incomingRequests.length > 0) ? (
+                      <span className="flex items-center justify-center gap-1">
+                        {st.label}
+                        <span className="bg-indigo-600 text-white text-[9px] h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">
+                          {connStore.incomingRequests.length}
+                        </span>
+                      </span>
+                    ) : st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* List area */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              {connStore.isLoading && (
+                <div className="flex items-center justify-center h-48">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
+                </div>
+              )}
+
+              {!connStore.isLoading && (
+                <>
+                  {/* FRIENDS SUBTAB */}
+                  {connectionsSubTab === 'friends' && (
+                    <div className="space-y-3">
+                      {connStore.friends.length === 0 ? (
+                        <div className="text-center py-12 text-slate-500 dark:text-slate-455">
+                          <Users className="h-10 w-10 mx-auto mb-3 text-slate-400 dark:text-slate-500 opacity-60 animate-pulse-slow" />
+                          <p className="text-sm font-semibold">No friends yet</p>
+                          <p className="text-xs text-slate-500 mt-1">Explore the Discover tab to find new connections!</p>
+                        </div>
+                      ) : (
+                        connStore.friends.map((friend: any) => (
+                          <div
+                            key={friend._id}
+                            onClick={() => {
+                              const existingChat = chats.find(c => !c.isGroup && !c.isCommunity && c.participants.some(p => p._id === friend._id));
+                              if (existingChat) {
+                                setActiveChat(existingChat);
+                                setActiveTab('chats');
+                              } else {
+                                handleStartDirectChat(friend);
+                              }
+                            }}
+                            className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition-all flex items-center justify-between cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="relative">
+                                <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                  {friend.avatar ? <img src={friend.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                </div>
+                                <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-slate-900 ${friend.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{friend.username}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-450">{friend.mutualFriends || 0} mutual friends</p>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => connStore.muteUserToggle(friend._id)}
+                                className={`p-1.5 rounded-lg border transition-colors ${
+                                  connStore.mutedUsers.some(m => m._id === friend._id)
+                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-450'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-400'
+                                }`}
+                                title={connStore.mutedUsers.some(m => m._id === friend._id) ? 'Unmute User' : 'Mute User'}
+                              >
+                                <VolumeX className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => connStore.blockUserToggle(friend._id)}
+                                className="p-1.5 rounded-lg hover:bg-red-500/10 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-red-500 transition-colors"
+                                title="Block User"
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to remove this friend?')) {
+                                    connStore.removeFriend(friend._id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-red-500/10 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-red-500 transition-colors"
+                                title="Remove Friend"
+                              >
+                                <UserX className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* REQUESTS SUBTAB */}
+                  {connectionsSubTab === 'requests' && (
+                    <div className="space-y-4">
+                      {/* Incoming Requests */}
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Incoming Requests ({connStore.incomingRequests.length})</span>
+                        {connStore.incomingRequests.length === 0 ? (
+                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No incoming pending request</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {connStore.incomingRequests.map((req: any) => (
+                              <div key={req._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                    {req.senderId?.avatar ? <img src={req.senderId.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{req.senderId?.username}</p>
+                                    <p className="text-[10px] text-slate-500">{req.senderId?.bio}</p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1.5">
+                                  <button
+                                    onClick={() => connStore.acceptRequest(req._id)}
+                                    className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors"
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    onClick={() => connStore.rejectRequest(req._id)}
+                                    className="px-2.5 py-1 bg-slate-200 dark:bg-slate-850 hover:bg-slate-300 dark:hover:bg-slate-800 text-slate-650 dark:text-slate-350 font-bold text-[10px] rounded-lg transition-colors"
+                                  >
+                                    Ignore
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Outgoing Requests */}
+                      <div className="pt-2">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Sent Requests ({connStore.outgoingRequests.length})</span>
+                        {connStore.outgoingRequests.length === 0 ? (
+                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No sent request pending</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {connStore.outgoingRequests.map((req: any) => (
+                              <div key={req._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                    {req.receiverId?.avatar ? <img src={req.receiverId.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{req.receiverId?.username}</p>
+                                    <p className="text-[10px] text-slate-500">{req.receiverId?.bio}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => connStore.cancelRequest(req._id)}
+                                  className="px-2.5 py-1 bg-red-500/10 border border-red-500/20 text-red-500 font-bold text-[10px] rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DISCOVER SUBTAB */}
+                  {connectionsSubTab === 'discover' && (
+                    <div className="space-y-4">
+                      {/* Search box */}
+                      <div className="relative mb-2">
+                        <input
+                          type="text"
+                          placeholder="Search users to add..."
+                          value={connectionsSearchQuery}
+                          onChange={(e) => handleConnectionsSearch(e.target.value)}
+                          className="w-full h-10 pl-10 pr-4 rounded-xl text-xs font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
+                        />
+                        <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                      </div>
+
+                      {connectionsSearchQuery ? (
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Search Results</span>
+                          {isSearchingConnections ? (
+                            <div className="flex justify-center py-6">
+                              <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
+                            </div>
+                          ) : connectionsSearchResults.length === 0 ? (
+                            <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No users found matching "{connectionsSearchQuery}"</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {connectionsSearchResults.map((usr: any) => {
+                                const isFriend = connStore.friends.some(f => f._id === usr._id);
+                                const isPendingOutgoing = connStore.outgoingRequests.some(o => o.receiverId?._id === usr._id || o.receiverId === usr._id);
+                                const incomingReq = connStore.incomingRequests.find(i => i.senderId?._id === usr._id || i.senderId === usr._id);
+
+                                return (
+                                  <div key={usr._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                        {usr.avatar ? <img src={usr.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{usr.username}</p>
+                                        <p className="text-[10px] text-slate-555 dark:text-slate-450 truncate max-w-[150px]">{usr.bio || 'No bio yet'}</p>
+                                      </div>
+                                    </div>
+                                    
+                                    {isFriend ? (
+                                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                        Friends
+                                      </span>
+                                    ) : isPendingOutgoing ? (
+                                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400">
+                                        Sent
+                                      </span>
+                                    ) : incomingReq ? (
+                                      <button
+                                        onClick={() => connStore.acceptRequest(incomingReq._id)}
+                                        className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors animate-pulse"
+                                      >
+                                        Accept
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => connStore.sendRequest(usr._id)}
+                                        className="px-2.5 py-1 bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-[10px] rounded-lg shadow-sm shadow-indigo-500/10 transition-all flex items-center gap-1"
+                                      >
+                                        <UserPlus className="h-3 w-3" /> Connect
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          {/* Suggested */}
+                          <div>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Suggested Users</span>
+                            {connStore.suggestedUsers.length === 0 ? (
+                              <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No suggestions available</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {connStore.suggestedUsers.map((su: any) => {
+                                  const sent = connStore.outgoingRequests.some(o => o.receiverId?._id === su._id);
+                                  return (
+                                    <div key={su._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                          {su.avatar ? <img src={su.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                        </div>
+                                        <div>
+                                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{su.username}</p>
+                                          <p className="text-[10px] text-slate-500">{su.mutualFriends || 0} mutual friends</p>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => !sent && connStore.sendRequest(su._id)}
+                                        disabled={sent}
+                                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg shadow-sm transition-all flex items-center gap-1 ${
+                                          sent 
+                                            ? 'bg-slate-105 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                            : 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/10'
+                                        }`}
+                                      >
+                                        {sent ? 'Sent' : <><UserPlus className="h-3 w-3" /> Connect</>}
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Recently Joined */}
+                          <div className="pt-2">
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Recently Joined</span>
+                            {connStore.recentlyJoined.length === 0 ? (
+                              <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No recently joined users</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {connStore.recentlyJoined.map((ru: any) => {
+                                  const sent = connStore.outgoingRequests.some(o => o.receiverId?._id === ru._id);
+                                  return (
+                                    <div key={ru._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                          {ru.avatar ? <img src={ru.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                        </div>
+                                        <div>
+                                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{ru.username}</p>
+                                          <p className="text-[10px] text-slate-500 dark:text-slate-450 truncate max-w-[150px]">{ru.bio}</p>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => !sent && connStore.sendRequest(ru._id)}
+                                        disabled={sent}
+                                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg shadow-sm transition-all flex items-center gap-1 ${
+                                          sent 
+                                            ? 'bg-slate-105 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                            : 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/10'
+                                        }`}
+                                      >
+                                        {sent ? 'Sent' : <><UserPlus className="h-3 w-3" /> Connect</>}
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* PRIVACY SUBTAB */}
+                  {connectionsSubTab === 'privacy' && (
+                    <div className="space-y-4">
+                      {/* Blocked Users list */}
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Blocked Users ({connStore.blockedUsers.length})</span>
+                        {connStore.blockedUsers.length === 0 ? (
+                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No blocked user</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {connStore.blockedUsers.map((bu: any) => (
+                              <div key={bu._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                    {bu.avatar ? <img src={bu.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{bu.username}</p>
+                                    <p className="text-[10px] text-slate-500">{bu.bio}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => connStore.blockUserToggle(bu._id)}
+                                  className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] rounded-lg hover:bg-emerald-500 hover:text-white transition-colors"
+                                >
+                                  Unblock
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Muted Users list */}
+                      <div className="pt-2">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Muted Users ({connStore.mutedUsers.length})</span>
+                        {connStore.mutedUsers.length === 0 ? (
+                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No muted user</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {connStore.mutedUsers.map((mu: any) => (
+                              <div key={mu._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                    {mu.avatar ? <img src={mu.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-semibold text-slate-850 dark:text-slate-200">{mu.username}</p>
+                                    <p className="text-[10px] text-slate-500">{mu.bio}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => connStore.muteUserToggle(mu._id)}
+                                  className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-[10px] rounded-lg hover:bg-amber-500 hover:text-white transition-colors"
+                                >
+                                  Unmute
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
           {/* Integrated Bottom Navigation Bar (Previously left sidebar) */}
           <nav className="h-15 border-t border-slate-200 dark:border-slate-800/40 bg-white/60 dark:bg-slate-950/60 backdrop-blur-md flex items-center justify-around px-2 py-1.5 shrink-0 z-10">
             {[
               { id: 'chats', label: 'Chats', icon: MessageSquare },
+              { id: 'connections', label: 'People', icon: Users },
               { id: 'status', label: 'Stories', icon: Compass },
               { id: 'calls', label: 'Calls', icon: Phone },
               { id: 'communities', label: 'Servers', icon: Globe },
@@ -1580,7 +2211,7 @@ export default function ChatDashboard() {
             })()}
 
             {/* Message Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto px-12 py-6 space-y-7 custom-scrollbar">
               {(() => {
                 const rawMsgs = messages[activeChat._id] || [];
                 const filteredMsgs = chatSearchQuery.trim()
@@ -1597,7 +2228,7 @@ export default function ChatDashboard() {
                     <div
                       key={msg._id}
                       id={`msg-${msg._id}`}
-                      className={`flex flex-col gap-1 max-w-[70%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'}`}
+                      className={`flex flex-col gap-2 max-w-[82%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'}`}
                     >
                       {activeChat.isGroup && (
                         <div className="flex items-center gap-1.5">
@@ -1606,10 +2237,10 @@ export default function ChatDashboard() {
                       )}
 
                       <div
-                        className={`px-4.5 py-3 rounded-2xl relative group ${
+                        className={`pl-5 pr-14 pt-3.5 pb-4 rounded-2xl relative group shadow-sm transition-all duration-200 ${
                           isMe 
-                            ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-none' 
-                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none'
+                            ? 'bg-slate-100 dark:bg-gradient-to-br dark:from-indigo-500 dark:to-indigo-650 text-slate-900 dark:text-white rounded-tr-none border border-slate-250 dark:border-transparent' 
+                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 rounded-tl-none'
                         }`}
                       >
                         {/* Replying indicator */}
@@ -1627,13 +2258,13 @@ export default function ChatDashboard() {
                           rel="noreferrer"
                           className={`flex items-center justify-between gap-3 mb-2.5 p-3 rounded-xl border transition-all duration-300 ${
                             isMe 
-                              ? 'bg-white/10 hover:bg-white/15 border-white/20 text-white' 
-                              : 'bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
+                              ? 'bg-white dark:bg-white/10 hover:bg-slate-50 dark:hover:bg-white/15 border-slate-200 dark:border-white/20 text-slate-900 dark:text-white' 
+                              : 'bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200'
                           }`}
                         >
                           <div className="flex items-center gap-2.5 truncate">
                             <div className={`p-2 rounded-xl shrink-0 ${
-                              isMe ? 'bg-white/20 text-white' : 'bg-indigo-500/10 text-indigo-500 dark:text-indigo-400'
+                              isMe ? 'bg-indigo-50 dark:bg-white/20 text-indigo-500 dark:text-white' : 'bg-indigo-500/10 text-indigo-500 dark:text-indigo-400'
                             }`}>
                               <FileText className="h-5 w-5" />
                             </div>
@@ -1723,26 +2354,28 @@ export default function ChatDashboard() {
                           <Pin className="h-3.5 w-3.5 rotate-45" />
                         </button>
                       </div>
-                    </div>
-
-                    <div className="flex gap-2 items-center text-[9px] text-slate-500 font-semibold px-2">
-                      <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      {isMe && (
-                        <span>
-                          {msg.status === 'seen' ? (
-                            <CheckCheck className="h-3.5 w-3.5 text-indigo-400" />
-                          ) : (
-                            <Check className="h-3.5 w-3.5" />
-                          )}
-                        </span>
-                      )}
+                      {/* Absolute inline timestamp inside bubble */}
+                      <div className={`absolute bottom-1 right-2 flex gap-1 items-center text-[9px] font-semibold select-none leading-none opacity-80 ${
+                        isMe ? 'text-slate-500 dark:text-slate-350' : 'text-slate-500 dark:text-slate-400'
+                      }`}>
+                        <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                        {isMe && (
+                          <span>
+                            {msg.status === 'seen' ? (
+                              <CheckCheck className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
+                            ) : (
+                              <Check className="h-3 w-3 text-slate-400 dark:text-slate-550" />
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               });
             })()}
             <div ref={messagesEndRef} />
-            </div>
+          </div>
 
             {/* Bottom input area */}
             <div className="p-4 border-t border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shrink-0">
@@ -1919,7 +2552,7 @@ export default function ChatDashboard() {
           )}
 
           {/* Group Details Info sidebar panel */}
-          {isGroupInfoOpen && activeChat.isGroup && (
+          {isGroupInfoOpen && activeChat.isGroup && !activeChat.isCommunity && (
             <div className="w-80 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden">
               {/* Header */}
               <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
@@ -1934,13 +2567,86 @@ export default function ChatDashboard() {
 
               {/* Group Metadata Details */}
               <div className="flex-1 overflow-y-auto p-5 space-y-6">
-                <div className="text-center">
-                  <div className="h-20 w-20 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-indigo-500/10 mx-auto mb-4 border-2 border-white dark:border-slate-800">
-                    {activeChat.avatar ? <img src={activeChat.avatar} alt="" className="h-full w-full rounded-full object-cover" /> : (activeChat.name?.charAt(0) || 'G')}
+                {isEditingGroupProfile ? (
+                  <div className="space-y-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-left">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Edit Group Details</h4>
+                    <div className="space-y-2">
+                      <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-400">Group Name</label>
+                      <input
+                        type="text"
+                        value={editGroupName}
+                        onChange={(e) => setEditGroupName(e.target.value)}
+                        className="w-full h-9 rounded-lg text-xs px-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-400">Description</label>
+                      <textarea
+                        value={editGroupDesc}
+                        onChange={(e) => setEditGroupDesc(e.target.value)}
+                        className="w-full min-h-[60px] text-xs p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none resize-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-400">Group Icon</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setEditGroupFile(e.target.files?.[0] || null)}
+                        className="text-xs text-slate-500"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={async () => {
+                          await handleUpdateGroupProfile(editGroupName, editGroupDesc, editGroupFile || undefined);
+                          setIsEditingGroupProfile(false);
+                          setEditGroupFile(null);
+                        }}
+                        className="flex-1 py-1.5 bg-indigo-500 hover:bg-indigo-650 text-white font-bold text-xs rounded-xl shadow-sm transition-colors"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingGroupProfile(false);
+                          setEditGroupFile(null);
+                        }}
+                        className="flex-1 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                  <h3 className="text-base font-bold text-slate-800 dark:text-white truncate">{activeChat.name}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{activeChat.description || 'No group description provided.'}</p>
-                </div>
+                ) : (
+                  <div className="text-center relative group">
+                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-indigo-500/10 mx-auto mb-4 border-2 border-white dark:border-slate-800">
+                      {activeChat.avatar ? <img src={activeChat.avatar} alt="" className="h-full w-full rounded-full object-cover" /> : (activeChat.name?.charAt(0) || 'G')}
+                    </div>
+                    <h3 className="text-base font-bold text-slate-850 dark:text-white truncate">{activeChat.name}</h3>
+                    <p className="text-xs text-slate-500 mt-1">{activeChat.description || 'No group description provided.'}</p>
+                    
+                    {(() => {
+                      const isOwner = activeChat.creatorId === user?._id || activeChat.ownerId === user?._id;
+                      const isAdmin = activeChat.admins?.some((adm: any) => (typeof adm === 'string' ? adm === user?._id : adm._id === user?._id));
+                      if (isOwner || isAdmin) {
+                        return (
+                          <button
+                            onClick={() => {
+                              setEditGroupName(activeChat.name || '');
+                              setEditGroupDesc(activeChat.description || '');
+                              setIsEditingGroupProfile(true);
+                            }}
+                            className="mt-3 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg transition-colors border border-slate-200 dark:border-slate-800"
+                          >
+                            Edit Profile
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
 
                 {/* Invite Links Action Card */}
                 <div className="p-4 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
@@ -2079,6 +2785,37 @@ export default function ChatDashboard() {
                   );
                 })()}
 
+                {/* Add Member Block */}
+                {(() => {
+                  const isOwner = activeChat.creatorId === user?._id || activeChat.ownerId === user?._id;
+                  const isAdmin = activeChat.admins?.some((adm: any) => (typeof adm === 'string' ? adm === user?._id : adm._id === user?._id));
+                  if (!isOwner && !isAdmin) return null;
+
+                  const addableFriends = connStore.friends.filter(f => !activeChat.participants.some(p => p._id === f._id));
+                  if (addableFriends.length === 0) return null;
+
+                  return (
+                    <div className="p-3 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/10 dark:border-indigo-500/20 rounded-2xl text-left space-y-2">
+                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                        <UserPlus className="h-3.5 w-3.5" /> Add Direct Members
+                      </span>
+                      <div className="max-h-24 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+                        {addableFriends.map(f => (
+                          <div key={f._id} className="flex items-center justify-between text-xs">
+                            <span className="truncate text-slate-800 dark:text-slate-200 font-semibold">{f.username}</span>
+                            <button
+                              onClick={() => handleAddGroupMember(f._id)}
+                              className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[9px] rounded-lg transition-colors"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Group Members List */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-300">
@@ -2090,31 +2827,359 @@ export default function ChatDashboard() {
                       const isAdmin = activeChat.admins?.some((adm: any) => (typeof adm === 'string' ? adm === member._id : adm._id === member._id));
                       const isMod = activeChat.moderators?.some((mod: any) => (typeof mod === 'string' ? mod === member._id : mod._id === member._id));
                       
+                      const isMe = member._id === (user?._id || user?.id);
+                      const myRole = activeChat.creatorId === user?._id || activeChat.ownerId === user?._id
+                        ? 'owner'
+                        : activeChat.admins?.some((adm: any) => (typeof adm === 'string' ? adm === user?._id : adm._id === user?._id))
+                          ? 'admin'
+                          : 'member';
+
                       return (
-                        <div key={member._id} className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-200 dark:border-slate-850 shrink-0">
-                            {member.avatar ? (
-                              <img src={member.avatar} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center font-bold text-xs text-slate-500 bg-indigo-500/10 text-indigo-500">
-                                {member.username?.charAt(0).toUpperCase() || 'U'}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 text-left min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-slate-800 dark:text-slate-250 truncate">{member.username}</span>
-                              {isOwner && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 leading-none">Owner</span>}
-                              {!isOwner && isAdmin && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 leading-none">Admin</span>}
-                              {!isOwner && !isAdmin && isMod && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 leading-none">Mod</span>}
-                              {!isOwner && !isAdmin && !isMod && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-500 leading-none">Member</span>}
+                        <div key={member._id} className="flex items-center justify-between gap-3 group/member p-1.5 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-200 dark:border-slate-850 shrink-0">
+                              {member.avatar ? (
+                                <img src={member.avatar} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="h-full w-full flex items-center justify-center font-bold text-xs text-slate-500 bg-indigo-500/10 text-indigo-500">
+                                  {member.username?.charAt(0).toUpperCase() || 'U'}
+                                </div>
+                              )}
                             </div>
-                            <p className="text-[10px] text-slate-500 truncate capitalize">{member.bio || 'Available'}</p>
+                            <div className="text-left min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-slate-800 dark:text-slate-250 truncate">{member.username}</span>
+                                {isOwner && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 leading-none">Owner</span>}
+                                {!isOwner && isAdmin && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 leading-none">Admin</span>}
+                                {!isOwner && !isAdmin && isMod && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 leading-none">Mod</span>}
+                                {!isOwner && !isAdmin && !isMod && <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-500 leading-none">Member</span>}
+                              </div>
+                              <p className="text-[9px] text-slate-500 truncate capitalize">{member.bio || 'Available'}</p>
+                            </div>
+                          </div>
+
+                          {!isMe && !isOwner && (myRole === 'owner' || myRole === 'admin') && (
+                            <div className="opacity-0 group-hover/member:opacity-100 flex items-center gap-1 transition-opacity shrink-0 animate-in fade-in-20">
+                              {myRole === 'owner' && (
+                                <button
+                                  onClick={() => handlePromoteMember(member._id, isAdmin ? 'member' : 'admin')}
+                                  className="text-[9px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-850 text-slate-700 dark:text-slate-350 rounded font-semibold hover:bg-indigo-650 hover:text-white transition-colors"
+                                  title={isAdmin ? 'Demote to Member' : 'Promote to Admin'}
+                                >
+                                  {isAdmin ? 'Demote' : 'Admin'}
+                                </button>
+                              )}
+                              {(myRole === 'owner' || (myRole === 'admin' && !isAdmin)) && (
+                                <button
+                                  onClick={() => handleRemoveGroupMember(member._id)}
+                                  className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                                  title="Kick from Group"
+                                >
+                                  <UserX className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Shared Media list */}
+                {groupSharedMedia.length > 0 && (
+                  <div className="space-y-2 text-left pt-2 border-t border-slate-200 dark:border-slate-800/40">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Shared Media</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {groupSharedMedia.slice(0, 6).map((item, idx) => (
+                        <a
+                          key={idx}
+                          href={item.mediaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="h-14 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden block border border-slate-200 dark:border-slate-800 relative hover:opacity-85 transition-opacity"
+                        >
+                          {item.messageType === 'image' ? (
+                            <img src={item.mediaUrl} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center text-[10px] font-bold text-slate-500 uppercase">
+                              {item.messageType}
+                            </div>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Shared Files list */}
+                {groupSharedFiles.length > 0 && (
+                  <div className="space-y-2 text-left pt-2 border-t border-slate-200 dark:border-slate-800/40">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Shared Files</span>
+                    <div className="space-y-1.5">
+                      {groupSharedFiles.slice(0, 5).map((item, idx) => (
+                        <a
+                          key={idx}
+                          href={item.mediaUrl}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-4 w-4 text-indigo-500 shrink-0" />
+                            <span className="text-[10px] font-medium text-slate-800 dark:text-slate-300 truncate max-w-[150px]">{item.fileName || 'document.pdf'}</span>
+                          </div>
+                          <Download className="h-3 w-3 text-slate-400 hover:text-indigo-500 shrink-0" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Leave Group Action Button */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800/40">
+                  <button
+                    onClick={handleLeaveGroup}
+                    className="w-full py-2.5 bg-red-500/10 hover:bg-red-500 border border-red-500/20 text-red-550 hover:text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <LogOut className="h-4 w-4 animate-pulse-slow" /> Leave Group Chat
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Community Details Info sidebar panel */}
+          {isGroupInfoOpen && activeChat.isGroup && activeChat.isCommunity && activeCommunity && (
+            <div className="w-80 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden animate-in slide-in-from-right-2 duration-200">
+              {/* Header */}
+              <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Server Info</span>
+                <button onClick={() => setIsGroupInfoOpen(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white">
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              {/* Scroll Container */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                
+                {/* Banner & Logo */}
+                <div className="relative rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center pb-4">
+                  <div className="h-20 w-full bg-indigo-500 overflow-hidden">
+                    {activeCommunity.banner ? <img src={activeCommunity.banner} alt="" className="h-full w-full object-cover" /> : null}
+                  </div>
+                  <div className="-mt-8 h-16 w-16 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 shadow-md flex items-center justify-center font-black text-slate-800 dark:text-white text-xl overflow-hidden mx-auto">
+                    {activeCommunity.avatar ? <img src={activeCommunity.avatar} alt="" className="h-full w-full object-cover" /> : activeCommunity.name.charAt(0)}
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-white mt-2 px-2 truncate">{activeCommunity.name}</h3>
+                  <p className="text-[10px] text-slate-500 px-3 mt-1 line-clamp-2">{activeCommunity.description || 'Welcome to our server!'}</p>
+                </div>
+
+                {/* Welcome Message Card */}
+                {activeCommunity.welcomeMessage && (
+                  <div className="p-3 bg-indigo-500/5 dark:bg-indigo-550/10 border border-indigo-550/10 dark:border-indigo-550/20 rounded-2xl text-left">
+                    <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mb-1">Welcome Message</span>
+                    <p className="text-[10.5px] text-slate-650 dark:text-slate-350 leading-relaxed italic">"{activeCommunity.welcomeMessage}"</p>
+                  </div>
+                )}
+
+                {/* Rules & Guidelines Card */}
+                {activeCommunity.guidelines && (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl text-left">
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1">Server Rules</span>
+                    <p className="text-[10.5px] text-slate-600 dark:text-slate-455 leading-relaxed whitespace-pre-line">{activeCommunity.guidelines}</p>
+                  </div>
+                )}
+
+                {/* Join Request Queue (Only visible to Server Admins/Owners) */}
+                {(() => {
+                  const isOwner = activeCommunity.creatorId === user?._id;
+                  const isAdmin = activeCommunity.admins?.some((adm: any) => (typeof adm === 'string' ? adm === user?._id : adm._id === user?._id));
+                  if ((isOwner || isAdmin) && communityRequests.length > 0) {
+                    return (
+                      <div className="space-y-2 text-left">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Join Requests ({communityRequests.length})</span>
+                        <div className="space-y-2">
+                          {communityRequests.map((req) => (
+                            <div key={req._id} className="p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between gap-2 animate-in fade-in-30">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="h-7 w-7 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                                  {req.userId?.avatar ? <img src={req.userId.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate">{req.userId?.username}</span>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <button
+                                  onClick={() => handleActionJoinRequest(req._id, 'accept')}
+                                  className="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[8.5px] rounded"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={() => handleActionJoinRequest(req._id, 'reject')}
+                                  className="px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-655 dark:text-slate-300 font-bold text-[8.5px] rounded"
+                                >
+                                  Decline
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Channels Quick Navigator list */}
+                <div className="space-y-2 text-left">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Channels</span>
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/40 p-2 rounded-2xl border border-slate-200/60 dark:border-slate-800/40">
+                    {activeCommunity.groupIds?.map((channel: any) => (
+                      <button
+                        key={channel._id}
+                        onClick={() => { setActiveChat(channel); }}
+                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors text-left ${
+                          activeChat._id === channel._id
+                            ? 'bg-indigo-500 text-white shadow-sm'
+                            : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white'
+                        }`}
+                      >
+                        {getChannelIcon(channel.channelType)}
+                        <span className="truncate">{channel.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Server Settings Form (Creator/Admin) */}
+                {(() => {
+                  const isOwner = activeCommunity.creatorId === user?._id;
+                  const isAdmin = activeCommunity.admins?.some((adm: any) => (typeof adm === 'string' ? adm === user?._id : adm._id === user?._id));
+                  if (!isOwner && !isAdmin) return null;
+
+                  return (
+                    <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-250 dark:border-slate-800/80 rounded-2xl text-left space-y-4">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Server Settings</span>
+                      
+                      {isEditingCommunity ? (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="block text-[8.5px] uppercase tracking-wider font-bold text-slate-400">Server Name</label>
+                            <input
+                              type="text"
+                              value={editCommName}
+                              onChange={(e) => setEditCommName(e.target.value)}
+                              className="w-full h-8 rounded-lg text-xs px-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[8.5px] uppercase tracking-wider font-bold text-slate-400">Description</label>
+                            <textarea
+                              value={editCommDesc}
+                              onChange={(e) => setEditCommDesc(e.target.value)}
+                              className="w-full min-h-[50px] text-xs p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none resize-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[8.5px] uppercase tracking-wider font-bold text-slate-400">Privacy Gate</label>
+                            <select
+                              value={editCommPrivacy}
+                              onChange={(e) => setEditCommPrivacy(e.target.value as any)}
+                              className="w-full h-8 rounded-lg text-xs px-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none"
+                            >
+                              <option value="public">Public (Direct Join)</option>
+                              <option value="private">Private (Approval Queue)</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[8.5px] uppercase tracking-wider font-bold text-slate-400">Welcome Banner Text</label>
+                            <input
+                              type="text"
+                              placeholder="Welcome to our family!"
+                              value={editCommWelcome}
+                              onChange={(e) => setEditCommWelcome(e.target.value)}
+                              className="w-full h-8 rounded-lg text-xs px-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[8.5px] uppercase tracking-wider font-bold text-slate-400">Rules list</label>
+                            <textarea
+                              placeholder="1. Keep it friendly..."
+                              value={editCommRules}
+                              onChange={(e) => setEditCommRules(e.target.value)}
+                              className="w-full min-h-[60px] text-xs p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none resize-none"
+                            />
+                          </div>
+
+                          <div className="flex gap-1.5 pt-1.5">
+                            <button
+                              onClick={async () => {
+                                await handleUpdateCommunity(editCommName, editCommDesc, editCommPrivacy, editCommWelcome, editCommRules);
+                                setIsEditingCommunity(false);
+                              }}
+                              className="flex-1 py-1.5 bg-indigo-500 hover:bg-indigo-650 text-white font-bold text-xs rounded-xl"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setIsEditingCommunity(false)}
+                              className="flex-1 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-350 font-bold text-xs rounded-xl"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditCommName(activeCommunity.name || '');
+                            setEditCommDesc(activeCommunity.description || '');
+                            setEditCommPrivacy(activeCommunity.privacyType || 'public');
+                            setEditCommWelcome(activeCommunity.welcomeMessage || '');
+                            setEditCommRules(activeCommunity.guidelines || '');
+                            setIsEditingCommunity(true);
+                          }}
+                          className="w-full py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[10.5px] rounded-lg transition-colors flex items-center justify-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-850"
+                        >
+                          <Edit2 className="h-3 w-3" /> Edit Server Profile
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Members list count block */}
+                <div className="space-y-2 text-left">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Members ({activeCommunity.members?.length || 0})</span>
+                  <div className="space-y-1">
+                    {activeCommunity.members?.map((member: any) => {
+                      const isOwner = member._id === activeCommunity.creatorId;
+                      const isAdmin = activeCommunity.admins?.some((adm: any) => (typeof adm === 'string' ? adm === member._id : adm._id === member._id));
+                      return (
+                        <div key={member._id} className="flex items-center gap-2 p-1 hover:bg-slate-50 dark:hover:bg-slate-905 rounded-lg">
+                          <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                            {member.avatar ? <img src={member.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-bold text-slate-800 dark:text-slate-300 truncate">{member.username}</p>
+                            <p className="text-[7.5px] text-slate-500">{isOwner ? 'Server Creator / Owner' : isAdmin ? 'Administrator' : 'Member'}</p>
                           </div>
                         </div>
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Leave Community block */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800/40">
+                  <button
+                    onClick={handleLeaveCommunity}
+                    className="w-full py-2 bg-red-500/10 hover:bg-red-500 border border-red-500/20 text-red-550 hover:text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <LogOut className="h-4 w-4" /> Leave Server
+                  </button>
                 </div>
               </div>
             </div>

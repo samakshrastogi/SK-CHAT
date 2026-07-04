@@ -15,14 +15,6 @@ const startServer = async () => {
     // Initialize Database connection
     await connectDB();
 
-    // Auto-seed if database is empty
-    const userCount = await User.countDocuments();
-    if (userCount === 0) {
-      logger.info('Database is empty. Automatically seeding default data...');
-      const { seed } = await import('./utils/seed.js');
-      await seed(false);
-    }
-
     const server = http.createServer(app);
 
     // Initialize Socket.io
@@ -41,8 +33,28 @@ const startServer = async () => {
     // Bind Socket actions
     socketHandler(io);
 
-    // Reschedule outstanding self-destruct timers
-    await rescheduleSelfDestructMessages(io);
+    // Run database-dependent startup tasks only when connection is open
+    import('mongoose').then((mongooseModule) => {
+      const mongoose = mongooseModule.default;
+      mongoose.connection.once('open', async () => {
+        try {
+          logger.info('MongoDB connection opened. Running startup database tasks...');
+          // Auto-seed if database is empty
+          const userCount = await User.countDocuments();
+          if (userCount === 0) {
+            logger.info('Database is empty. Automatically seeding default data...');
+            const { seed } = await import('./utils/seed.js');
+            await seed(false);
+          }
+
+          // Reschedule outstanding self-destruct timers
+          await rescheduleSelfDestructMessages(io);
+          logger.info('Startup database tasks completed successfully.');
+        } catch (dbError: any) {
+          logger.error(`Error running startup database tasks: ${dbError.message}`);
+        }
+      });
+    });
 
     // Start Server Listen
     server.listen(port, () => {

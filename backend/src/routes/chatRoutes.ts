@@ -14,7 +14,13 @@ import {
   togglePinMessage,
   generateInviteLink,
   joinChatGroup,
-  updateChatSettings
+  updateChatSettings,
+  updateGroupProfile,
+  addGroupMember,
+  removeGroupMember,
+  leaveGroup,
+  getGroupSharedMedia,
+  getGroupSharedFiles
 } from '../controllers/chatController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -30,6 +36,12 @@ router.get('/starred', getStarredMessages as any);
 router.post('/:chatId/invite-link', generateInviteLink as any);
 router.post('/join/:codeOrToken', joinChatGroup as any);
 router.patch('/:chatId/settings', updateChatSettings as any);
+router.put('/:chatId', upload.single('avatar'), updateGroupProfile as any);
+router.post('/:chatId/members', addGroupMember as any);
+router.delete('/:chatId/members/:userId', removeGroupMember as any);
+router.post('/:chatId/leave', leaveGroup as any);
+router.get('/:chatId/media', getGroupSharedMedia as any);
+router.get('/:chatId/files', getGroupSharedFiles as any);
 
 router.get('/:chatId/messages', getChatMessages as any);
 router.post('/:chatId/messages', upload.single('file'), sendMessage as any);

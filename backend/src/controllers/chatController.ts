@@ -739,3 +739,277 @@ export const updateChatSettings = async (req: AuthenticatedRequest, res: Respons
     next(error);
   }
 };
+
+export const updateGroupProfile = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+    const { name, description } = req.body;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) throw new CustomError('Chat group not found', 404);
+
+    const isOwner = chat.creatorId?.toString() === req.user!.id.toString() || chat.ownerId?.toString() === req.user!.id.toString();
+    const isAdmin = chat.admins.some(adm => adm.toString() === req.user!.id.toString());
+    if (!isOwner && !isAdmin) {
+      throw new CustomError('Administrator access required to modify group settings', 403);
+    }
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+
+    // Check files for Group Avatar
+    const file = req.file;
+    if (file) {
+      const upload = await uploadMedia(file, 'group-avatars');
+      updateData.avatar = upload.url;
+    }
+
+    const updatedChat = await Chat.findByIdAndUpdate(
+      chatId,
+      { $set: updateData },
+      { new: true }
+    )
+      .populate('participants', 'username avatar status lastSeen bio')
+      .populate('admins', 'username avatar')
+      .populate('moderators', 'username avatar');
+
+    // Create a system message in the chat
+    const systemMessage = await Message.create({
+      chatId: chat._id,
+      senderId: new Types.ObjectId('668270117e3b9a2b9c3d4e5f'),
+      content: `Group settings updated by ${req.user!.username}`,
+      messageType: 'text',
+      status: 'sent'
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chat._id}`).emit('chat:updated', {
+        chatId: chat._id,
+        chat: updatedChat,
+        message: systemMessage
+      });
+    }
+
+    res.status(200).json({ success: true, chat: updatedChat });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addGroupMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) throw new CustomError('Chat group not found', 404);
+
+    const isOwner = chat.creatorId?.toString() === req.user!.id.toString() || chat.ownerId?.toString() === req.user!.id.toString();
+    const isAdmin = chat.admins.some(adm => adm.toString() === req.user!.id.toString());
+    if (!isOwner && !isAdmin) {
+      throw new CustomError('Administrator access required to add members', 403);
+    }
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) throw new CustomError('User to add not found', 404);
+
+    if (chat.participants.some(p => p.toString() === userId.toString())) {
+      throw new CustomError('User is already a member', 400);
+    }
+
+    chat.participants.push(new Types.ObjectId(userId));
+    await chat.save();
+
+    // Create a system message in the chat
+    const systemMessage = await Message.create({
+      chatId: chat._id,
+      senderId: new Types.ObjectId('668270117e3b9a2b9c3d4e5f'),
+      content: `${targetUser.username} was added to the group by ${req.user!.username}`,
+      messageType: 'text',
+      status: 'sent'
+    });
+
+    chat.lastMessage = systemMessage._id as any;
+    await chat.save();
+
+    const populated = await Chat.findById(chat._id)
+      .populate('participants', 'username avatar status lastSeen bio')
+      .populate('admins', 'username avatar')
+      .populate('moderators', 'username avatar');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chat._id}`).emit('chat:member-joined', {
+        chatId: chat._id,
+        user: {
+          _id: targetUser._id,
+          username: targetUser.username,
+          avatar: targetUser.avatar,
+          status: targetUser.status
+        },
+        message: systemMessage
+      });
+      // Emit to the added user's room to notify them to pull this chat
+      io.to(`user:${userId}`).emit('chat:added', { chat: populated });
+    }
+
+    res.status(200).json({ success: true, chat: populated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeGroupMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId, userId } = req.params;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) throw new CustomError('Chat group not found', 404);
+
+    // Only owners and admins can remove members
+    const isOwner = chat.creatorId?.toString() === req.user!.id.toString() || chat.ownerId?.toString() === req.user!.id.toString();
+    const isAdmin = chat.admins.some(adm => adm.toString() === req.user!.id.toString());
+    if (!isOwner && !isAdmin) {
+      throw new CustomError('Administrator access required to remove members', 403);
+    }
+
+    // Owner cannot be removed, and admins cannot be removed by admins (only owner)
+    if (chat.creatorId?.toString() === userId.toString() || chat.ownerId?.toString() === userId.toString()) {
+      throw new CustomError('Group creator/owner cannot be removed', 400);
+    }
+    const isTargetAdmin = chat.admins.some(adm => adm.toString() === userId.toString());
+    if (isTargetAdmin && !isOwner) {
+      throw new CustomError('Only the group owner can remove administrators', 403);
+    }
+
+    chat.participants = chat.participants.filter(p => p.toString() !== userId.toString());
+    chat.admins = chat.admins.filter(a => a.toString() !== userId.toString());
+    chat.moderators = chat.moderators.filter(m => m.toString() !== userId.toString());
+    await chat.save();
+
+    const targetUser = await User.findById(userId);
+
+    // Create a system message in the chat
+    const systemMessage = await Message.create({
+      chatId: chat._id,
+      senderId: new Types.ObjectId('668270117e3b9a2b9c3d4e5f'),
+      content: `${targetUser?.username || 'User'} was removed from the group by ${req.user!.username}`,
+      messageType: 'text',
+      status: 'sent'
+    });
+
+    chat.lastMessage = systemMessage._id as any;
+    await chat.save();
+
+    const populated = await Chat.findById(chat._id)
+      .populate('participants', 'username avatar status lastSeen bio')
+      .populate('admins', 'username avatar')
+      .populate('moderators', 'username avatar');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chat._id}`).emit('chat:member-left', {
+        chatId: chat._id,
+        userId,
+        message: systemMessage
+      });
+      io.to(`user:${userId}`).emit('chat:removed', { chatId: chat._id });
+    }
+
+    res.status(200).json({ success: true, chat: populated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const leaveGroup = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.user!.id;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) throw new CustomError('Chat group not found', 404);
+
+    // Creator/owner cannot leave without transferring ownership
+    const isOwner = chat.creatorId?.toString() === userId.toString() || chat.ownerId?.toString() === userId.toString();
+    if (isOwner && chat.participants.length > 1) {
+      throw new CustomError('You must transfer group ownership before leaving', 400);
+    }
+
+    chat.participants = chat.participants.filter(p => p.toString() !== userId.toString());
+    chat.admins = chat.admins.filter(a => a.toString() !== userId.toString());
+    chat.moderators = chat.moderators.filter(m => m.toString() !== userId.toString());
+    await chat.save();
+
+    // Create system message
+    const systemMessage = await Message.create({
+      chatId: chat._id,
+      senderId: new Types.ObjectId('668270117e3b9a2b9c3d4e5f'),
+      content: `${req.user!.username} left the group`,
+      messageType: 'text',
+      status: 'sent'
+    });
+
+    chat.lastMessage = systemMessage._id as any;
+    await chat.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chat._id}`).emit('chat:member-left', {
+        chatId: chat._id,
+        userId,
+        message: systemMessage
+      });
+    }
+
+    res.status(200).json({ success: true, message: 'Successfully left group chat' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getGroupSharedMedia = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+
+    const chat = await Chat.findOne({ _id: chatId, participants: req.user!.id });
+    if (!chat) throw new CustomError('Chat not found or access denied', 403);
+
+    const messages = await Message.find({
+      chatId,
+      messageType: { $in: ['image', 'video', 'audio', 'voice'] },
+      isDeleted: false
+    })
+      .select('mediaUrl messageType fileName mediaSize createdAt senderId')
+      .populate('senderId', 'username avatar')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, media: messages });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getGroupSharedFiles = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { chatId } = req.params;
+
+    const chat = await Chat.findOne({ _id: chatId, participants: req.user!.id });
+    if (!chat) throw new CustomError('Chat not found or access denied', 403);
+
+    const messages = await Message.find({
+      chatId,
+      messageType: 'document',
+      isDeleted: false
+    })
+      .select('mediaUrl messageType fileName mediaSize createdAt senderId')
+      .populate('senderId', 'username avatar')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, files: messages });
+  } catch (error) {
+    next(error);
+  }
+};

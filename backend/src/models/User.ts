@@ -23,9 +23,12 @@ export interface IUser extends Document {
   role: 'user' | 'moderator' | 'admin';
   themeSettings: IThemeSettings;
   blockedUsers: Types.ObjectId[];
+  mutedUsers: Types.ObjectId[];
+  friends: Types.ObjectId[];
   mutedChats: Types.ObjectId[];
   archivedChats: Types.ObjectId[];
   starredMessages: Types.ObjectId[];
+  pushSubscription?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,8 +55,10 @@ const UserSchema = new Schema<IUser>({
   resetPasswordExpires: { type: Date },
   role: { type: String, enum: ['user', 'moderator', 'admin'], default: 'user' },
   themeSettings: { type: ThemeSettingsSchema, default: () => ({}) },
-  blockedUsers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
-  mutedChats: [{ type: Schema.Types.ObjectId, ref: 'Chat' }],
+  blockedUsers:    [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  mutedUsers:      [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  friends:         [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  mutedChats:      [{ type: Schema.Types.ObjectId, ref: 'Chat' }],
   archivedChats: [{ type: Schema.Types.ObjectId, ref: 'Chat' }],
   starredMessages: [{ type: Schema.Types.ObjectId, ref: 'Message' }],
   pushSubscription: { type: Schema.Types.Mixed }, // Web Push PushSubscription object

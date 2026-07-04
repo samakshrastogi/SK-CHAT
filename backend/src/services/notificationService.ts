@@ -77,7 +77,7 @@ const sendWebPush = async (userId: string, title: string, body: string, icon?: s
     const userDoc = await User.findById(userId).select('pushSubscription').lean();
     if (!userDoc || !(userDoc as any).pushSubscription) return;
 
-    // Dynamic import so the server still boots without web-push installed
+    // @ts-ignore
     const webpush = await import('web-push').catch(() => null);
     if (!webpush) return;
 
