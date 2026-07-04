@@ -28,6 +28,7 @@ interface ChatState {
   localDeleteMessage: (messageId: string) => void;
   localUpdatePoll: (messageId: string, pollData: any) => void;
   localUpdatePinnedMessages: (chatId: string, pinnedMessages: any[]) => void;
+  localUpdateReactions: (chatId: string, messageId: string, reactions: any[]) => void;
   setTypingUser: (chatId: string, userId: string, username: string | null) => void;
   incrementUnread: (chatId: string) => void;
   clearUnread: (chatId: string) => void;
@@ -392,6 +393,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? { ...state.activeChat, pinnedMessages }
         : state.activeChat;
       return { chats: updatedChats, activeChat: updatedActiveChat };
+    });
+  },
+
+  localUpdateReactions: (chatId, messageId, reactions) => {
+    set((state) => {
+      const chatMsgs = state.messages[chatId] || [];
+      const updated = chatMsgs.map((m) => {
+        if (m._id === messageId) {
+          return { ...m, reactions };
+        }
+        return m;
+      });
+      return {
+        messages: {
+          ...state.messages,
+          [chatId]: updated
+        }
+      };
     });
   },
 

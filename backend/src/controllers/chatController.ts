@@ -439,6 +439,17 @@ export const addReaction = async (req: AuthenticatedRequest, res: Response, next
     }
 
     await message.save();
+
+    // Broadcast the updated reactions array to all participants in the chat room in real-time
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${message.chatId}`).emit('message:reaction', {
+        chatId: message.chatId,
+        messageId: message._id,
+        reactions: message.reactions,
+      });
+    }
+
     res.status(200).json({ success: true, reactions: message.reactions });
   } catch (error) {
     next(error);

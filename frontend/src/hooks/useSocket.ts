@@ -12,7 +12,7 @@ export const useSocket = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   
-  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages, incrementUnread } = useChatStore();
+  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages, localUpdateReactions, incrementUnread } = useChatStore();
   const { setIncomingCall, resetCallStore } = useCallStore();
 
   const chatsRef = useRef(chats);
@@ -134,6 +134,10 @@ export const useSocket = () => {
 
     socket.on('chat:pinned-updated', ({ chatId, pinnedMessages }) => {
       localUpdatePinnedMessages(chatId, pinnedMessages);
+    });
+
+    socket.on('message:reaction', ({ chatId, messageId, reactions }) => {
+      localUpdateReactions(chatId, messageId, reactions);
     });
 
     // Presence Toggles
