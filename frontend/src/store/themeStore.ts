@@ -36,7 +36,7 @@ function applyToDOM(isDark: boolean) {
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  theme: (localStorage.getItem('connect-theme') as any) || 'dark',
+  theme: (localStorage.getItem('connect-theme') as any) || 'light',
   accentColor: localStorage.getItem('connect-accent') || '#6366f1',
   wallpaper: localStorage.getItem('connect-wallpaper') || '',
 
@@ -68,13 +68,13 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 if (typeof window !== 'undefined') {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   mq.addEventListener('change', () => {
-    const stored = (localStorage.getItem('connect-theme') as any) || 'dark';
+    const stored = (localStorage.getItem('connect-theme') as any) || 'light';
     if (stored === 'system') {
       applyToDOM(mq.matches);
     }
   });
 
   // Apply on initial load (before React mounts)
-  const initialTheme = (localStorage.getItem('connect-theme') as any) || 'dark';
+  const initialTheme = (localStorage.getItem('connect-theme') as any) || 'light';
   applyToDOM(resolveDark(initialTheme));
 }

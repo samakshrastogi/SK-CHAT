@@ -101,6 +101,7 @@ export interface Chat {
   pinnedMessages: string[];
   inviteCode?: string;
   communityId?: string;
+  unreadCount?: number;
   createdAt: string;
   updatedAt: string;
 }

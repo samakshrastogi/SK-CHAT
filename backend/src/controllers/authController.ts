@@ -2,11 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { User } from '../models/User.js';
 import { DeviceSession } from '../models/DeviceSession.js';
 import { CustomError } from '../utils/customError.js';
 import { sendVerificationOTP, sendResetPasswordOTP } from '../services/emailService.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
+
+const googleOAuthClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // JWT Generation Helpers
 const generateAccessToken = (user: any, deviceId: string) => {
@@ -29,10 +32,9 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
   try {
     const { email, username, password } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new CustomError('Username or email is already taken', 400);
+      throw new CustomError('Email is already taken', 400);
     }
 
     // Hash password
@@ -148,7 +150,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
@@ -247,7 +249,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
       res.cookie('refreshToken', newRefreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000
       });
 
@@ -384,35 +386,61 @@ export const logoutAllSessions = async (req: AuthenticatedRequest, res: Response
 
 export const googleSSO = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, username, googleId } = req.body;
+    const { credential } = req.body; // Google ID token sent from frontend
 
-    if (!email || !username || !googleId) {
-      throw new CustomError('Google SSO payload missing key fields', 400);
+    if (!credential) {
+      throw new CustomError('Google credential (ID token) is required', 400);
     }
 
-    let user = await User.findOne({ email: email.toLowerCase() });
+    // Verify the ID token with Google's public keys
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      throw new CustomError('Invalid Google token payload', 400);
+    }
+
+    const { email, name, picture, sub: googleId } = payload;
+    const emailLower = email.toLowerCase();
+
+    // Find existing user by email or googleId
+    let user = await User.findOne({ $or: [{ email: emailLower }, { googleId }] });
 
     if (!user) {
-      let finalUsername = username;
-      const existingUser = await User.findOne({ username: finalUsername });
-      if (existingUser) {
-        finalUsername = `${username}_${Math.floor(1000 + Math.random() * 9000)}`;
+      // New user — derive a unique username from their Google name
+      let baseUsername = (name || emailLower.split('@')[0])
+        .replace(/\s+/g, '')
+        .slice(0, 20);
+      let finalUsername = baseUsername;
+      const taken = await User.findOne({ username: finalUsername });
+      if (taken) {
+        finalUsername = `${baseUsername}${Math.floor(1000 + Math.random() * 9000)}`;
       }
 
+      // Random password — Google users never use it, but schema requires it
       const randomPassword = crypto.randomBytes(16).toString('hex');
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(randomPassword, salt);
 
       user = await User.create({
-        email: email.toLowerCase(),
+        email: emailLower,
         username: finalUsername,
         password: hashedPassword,
-        isVerified: true
+        googleId,
+        avatar: picture || undefined,
+        isVerified: true, // Google already verified the email
       });
+    } else if (!user.googleId) {
+      // Existing email-based account — link Google ID now
+      user.googleId = googleId;
+      if (!user.avatar && picture) user.avatar = picture;
+      await user.save();
     }
 
     const deviceId = crypto.randomUUID();
-    const cleanDeviceType = 'Google SSO Web Client';
     const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
 
     const accessToken = generateAccessToken(user, deviceId);
@@ -423,16 +451,16 @@ export const googleSSO = async (req: Request, res: Response, next: NextFunction)
       userId: user._id,
       refreshToken: hashedToken,
       deviceId,
-      deviceType: cleanDeviceType,
+      deviceType: 'Google SSO Web Client',
       ipAddress,
-      lastActive: new Date()
+      lastActive: new Date(),
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.status(200).json({
@@ -446,8 +474,8 @@ export const googleSSO = async (req: Request, res: Response, next: NextFunction)
         coverImage: user.coverImage,
         bio: user.bio,
         role: user.role,
-        themeSettings: user.themeSettings
-      }
+        themeSettings: user.themeSettings,
+      },
     });
   } catch (error) {
     next(error);

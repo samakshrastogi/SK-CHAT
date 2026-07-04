@@ -15,7 +15,9 @@ import {
   getFriendsList,
   getFriendRequests,
   muteUser,
-  getMutedUsers
+  getMutedUsers,
+  generateConnectionCode,
+  resolveConnectionCode
 } from '../controllers/userController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -49,5 +51,8 @@ router.get('/friends', getFriendsList as any);
 router.get('/friends/requests', getFriendRequests as any);
 router.post('/mute', muteUser as any);
 router.get('/muted', getMutedUsers as any);
+
+router.post('/connections/generate-code', generateConnectionCode as any);
+router.post('/connections/resolve-code', resolveConnectionCode as any);
 
 export default router;

@@ -262,7 +262,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
-      <div className="fixed right-4 top-16 z-50 w-[380px] max-h-[85vh] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl shadow-black/20 dark:shadow-black/60 flex flex-col overflow-hidden animate-in slide-in-from-top-2 duration-200">
+      <div className="absolute right-0 top-full mt-2 z-50 w-[360px] max-h-[80vh] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl shadow-black/20 dark:shadow-black/60 flex flex-col overflow-hidden animate-in slide-in-from-top-2 duration-200">
 
         {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
@@ -415,7 +415,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onClick }) =
     <button
       id="notification-bell-btn"
       onClick={onClick}
-      className="relative p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+      className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
       title="Notifications"
     >
       <Bell className="h-5 w-5" />

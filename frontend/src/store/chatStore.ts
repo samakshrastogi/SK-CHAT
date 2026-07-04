@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Chat, Message, User } from '../types/index.js';
 import { apiClient } from '../api/client.js';
+import { useAuthStore } from './authStore.js';
 
 interface ChatState {
   chats: Chat[];
@@ -10,6 +11,7 @@ interface ChatState {
   isLoadingChats: boolean;
   isLoadingMessages: boolean;
   hasMoreMessages: { [chatId: string]: boolean };
+  unreadCounts: { [chatId: string]: number };
   
   fetchChats: () => Promise<void>;
   fetchMessages: (chatId: string, refresh?: boolean) => Promise<void>;
@@ -27,6 +29,8 @@ interface ChatState {
   localUpdatePoll: (messageId: string, pollData: any) => void;
   localUpdatePinnedMessages: (chatId: string, pinnedMessages: any[]) => void;
   setTypingUser: (chatId: string, userId: string, username: string | null) => void;
+  incrementUnread: (chatId: string) => void;
+  clearUnread: (chatId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -37,12 +41,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoadingChats: false,
   isLoadingMessages: false,
   hasMoreMessages: {},
+  unreadCounts: {},
 
   fetchChats: async () => {
     set({ isLoadingChats: true });
     try {
       const response = await apiClient.get('/chats');
-      set({ chats: response.data.chats, isLoadingChats: false });
+      const chats = response.data.chats || [];
+      const unreadCounts: { [chatId: string]: number } = {};
+      chats.forEach((chat: any) => {
+        unreadCounts[chat._id] = chat.unreadCount || 0;
+      });
+      set({ chats, unreadCounts, isLoadingChats: false });
     } catch (error) {
       set({ isLoadingChats: false });
       throw error;
@@ -87,9 +97,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setActiveChat: (chat) => {
     set({ activeChat: chat });
-    if (chat && (!get().messages[chat._id] || get().messages[chat._id].length === 0)) {
-      get().fetchMessages(chat._id, true);
+    if (chat) {
+      // Clear unread count when chat becomes active
+      set((state) => ({
+        unreadCounts: { ...state.unreadCounts, [chat._id]: 0 }
+      }));
+      if (!get().messages[chat._id] || get().messages[chat._id].length === 0) {
+        get().fetchMessages(chat._id, true);
+      }
     }
+  },
+
+  incrementUnread: (chatId) => {
+    set((state) => ({
+      unreadCounts: {
+        ...state.unreadCounts,
+        [chatId]: (state.unreadCounts[chatId] || 0) + 1
+      }
+    }));
+  },
+
+  clearUnread: (chatId) => {
+    set((state) => ({
+      unreadCounts: { ...state.unreadCounts, [chatId]: 0 }
+    }));
   },
 
   sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn) => {
@@ -159,16 +190,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
   updateMessageStatus: (chatId, messageId, status) => {
     set((state) => {
       const chatMsgs = state.messages[chatId] || [];
-      const updated = chatMsgs.map((m) => {
+      
+      // Update status in messages list
+      const updatedMessages = chatMsgs.map((m) => {
         if (m._id === messageId) {
           return { ...m, status };
         }
         return m;
       });
+
+      // Update status in chats list (lastMessage)
+      const updatedChats = state.chats.map((c) => {
+        if (c._id === chatId && c.lastMessage && c.lastMessage._id === messageId) {
+          return {
+            ...c,
+            lastMessage: { ...c.lastMessage, status }
+          };
+        }
+        return c;
+      });
+
+      // Recalculate or decrement unread count if an incoming message was marked seen
+      let currentUnread = state.unreadCounts[chatId] || 0;
+      if (status === 'seen') {
+        const msg = chatMsgs.find(m => m._id === messageId);
+        if (msg) {
+          const myId = useAuthStore.getState().user?.id || useAuthStore.getState().user?._id;
+          const senderIdStr = typeof msg.senderId === 'string' ? msg.senderId : (msg.senderId as any)?._id;
+          if (senderIdStr !== myId && msg.status !== 'seen') {
+            currentUnread = Math.max(0, currentUnread - 1);
+          }
+        }
+      }
+
       return {
         messages: {
           ...state.messages,
-          [chatId]: updated
+          [chatId]: updatedMessages
+        },
+        chats: updatedChats,
+        unreadCounts: {
+          ...state.unreadCounts,
+          [chatId]: currentUnread
         }
       };
     });

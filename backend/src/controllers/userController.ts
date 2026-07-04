@@ -5,6 +5,8 @@ import { createNotification } from '../services/notificationService.js';
 import { CustomError } from '../utils/customError.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { uploadMedia } from '../services/cloudinaryService.js';
+import { ConnectionCode } from '../models/ConnectionCode.js';
+import { Chat } from '../models/Chat.js';
 
 export const getProfile = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -27,11 +29,6 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response, ne
     if (bio !== undefined) updateData.bio = bio;
     
     if (username) {
-      // Verify username is not taken
-      const existing = await User.findOne({ username, _id: { $ne: req.user!.id } });
-      if (existing) {
-        throw new CustomError('Username is already taken', 400);
-      }
       updateData.username = username;
     }
 
@@ -480,6 +477,81 @@ export const getMutedUsers = async (req: AuthenticatedRequest, res: Response, ne
       success: true,
       mutedUsers: user!.mutedUsers
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generateConnectionCode = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+
+    // Delete existing codes for this user
+    await ConnectionCode.deleteMany({ userId });
+
+    // Generate unique 4-digit code
+    let code = '';
+    let exists = true;
+    while (exists) {
+      code = Math.floor(1000 + Math.random() * 9000).toString();
+      const found = await ConnectionCode.findOne({ code });
+      if (!found) exists = false;
+    }
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+    await ConnectionCode.create({
+      code,
+      userId,
+      expiresAt
+    });
+
+    res.status(200).json({ success: true, code, expiresAt });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resolveConnectionCode = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.body;
+    if (!code || code.length !== 4) {
+      throw new CustomError('Valid 4-digit code is required', 400);
+    }
+
+    const connCode = await ConnectionCode.findOne({ code });
+    if (!connCode) {
+      throw new CustomError('Invalid or expired code', 404);
+    }
+
+    const targetUserId = connCode.userId.toString();
+    const currentUserId = req.user!.id;
+
+    if (targetUserId === currentUserId) {
+      throw new CustomError('You cannot connect with yourself', 400);
+    }
+
+    // Connect: create or get 1-on-1 chat
+    let chat = await Chat.findOne({
+      isGroup: false,
+      participants: { $all: [currentUserId, targetUserId] }
+    }).populate('participants', 'username avatar status lastSeen bio');
+
+    if (!chat) {
+      const newChat = await Chat.create({
+        isGroup: false,
+        participants: [currentUserId, targetUserId]
+      });
+      chat = await Chat.findById(newChat._id)
+        .populate('participants', 'username avatar status lastSeen bio');
+    }
+
+    // Delete single-use code
+    await ConnectionCode.deleteOne({ _id: connCode._id });
+
+    // Return target user and chat
+    const targetUser = await User.findById(targetUserId).select('username avatar status lastSeen bio');
+
+    res.status(200).json({ success: true, chat, targetUser });
   } catch (error) {
     next(error);
   }

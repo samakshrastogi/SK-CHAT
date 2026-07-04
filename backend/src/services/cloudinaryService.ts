@@ -25,12 +25,32 @@ export const uploadMedia = async (
 ): Promise<{ url: string; publicId?: string }> => {
   try {
     if (isCloudinaryConfigured) {
-      // Convert buffer to base64 data URI
-      const base64File = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
-      const uploadResponse = await cloudinary.uploader.upload(base64File, {
+      let uploadSource: string;
+      if (file.path) {
+        uploadSource = file.path;
+      } else if (file.buffer) {
+        uploadSource = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+      } else {
+        throw new Error('No file path or buffer available for upload');
+      }
+
+      const uploadResponse = await cloudinary.uploader.upload(uploadSource, {
         folder,
         resource_type: 'auto',
       });
+
+      // Cleanup local temp file if it was written to disk by Multer
+      if (file.path) {
+        try {
+          const fs = await import('fs');
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        } catch (unlinkErr: any) {
+          logger.warn(`Could not delete temporary file ${file.path}: ${unlinkErr.message}`);
+        }
+      }
+
       return {
         url: uploadResponse.secure_url,
         publicId: uploadResponse.public_id,

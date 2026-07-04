@@ -50,7 +50,7 @@ export default function ChatDashboard() {
   const {
     chats, fetchChats, activeChat, setActiveChat, messages, sendChatMessage,
     editChatMessage, deleteChatMessage, reactToMessage, starMessageToggle, voteInPoll,
-    typingUsers, setTypingUser, togglePinChatMessage
+    typingUsers, setTypingUser, togglePinChatMessage, unreadCounts
   } = useChatStore();
   
   const callStore = useCallStore();
@@ -165,26 +165,60 @@ export default function ChatDashboard() {
   } = useWebRTC(emitEvent);
 
   // Active Main Sidebar Tab
-  const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'communities' | 'settings' | 'profile' | 'admin' | 'connections'>('chats');
-  const [connectionsSubTab, setConnectionsSubTab] = useState<'friends' | 'requests' | 'discover' | 'privacy'>('friends');
-  const [connectionsSearchQuery, setConnectionsSearchQuery] = useState('');
-  const [connectionsSearchResults, setConnectionsSearchResults] = useState<any[]>([]);
-  const [isSearchingConnections, setIsSearchingConnections] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'communities' | 'profile' | 'admin'>('chats');
 
-  const handleConnectionsSearch = async (val: string) => {
-    setConnectionsSearchQuery(val);
-    if (!val.trim()) {
-      setConnectionsSearchResults([]);
+  // Connect with 4-digit code states
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [myConnectionCode, setMyConnectionCode] = useState('');
+  const [myCodeExpiresAt, setMyCodeExpiresAt] = useState<string | null>(null);
+  const [enterConnectionCode, setEnterConnectionCode] = useState('');
+  const [connectError, setConnectError] = useState('');
+  const [connectSuccess, setConnectSuccess] = useState('');
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [codeCountdown, setCodeCountdown] = useState('');
+
+  const generateMyCode = async () => {
+    try {
+      setConnectError('');
+      setConnectSuccess('');
+      const resp = await apiClient.post('/users/connections/generate-code');
+      if (resp.data.success) {
+        setMyConnectionCode(resp.data.code);
+        setMyCodeExpiresAt(resp.data.expiresAt);
+      }
+    } catch (err: any) {
+      setConnectError(err.response?.data?.message || 'Failed to generate code');
+    }
+  };
+
+  const handleResolveCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (enterConnectionCode.length !== 4) {
+      setConnectError('Please enter a 4-digit code');
       return;
     }
-    setIsSearchingConnections(true);
     try {
-      const resp = await apiClient.get(`/users/search?q=${encodeURIComponent(val)}`);
-      setConnectionsSearchResults(resp.data.users);
-    } catch (e) {
-      console.error(e);
+      setConnectError('');
+      setConnectSuccess('');
+      setConnectLoading(true);
+      const resp = await apiClient.post('/users/connections/resolve-code', { code: enterConnectionCode });
+      if (resp.data.success) {
+        setConnectSuccess('Connected successfully!');
+        setEnterConnectionCode('');
+        // Add chat to chatlist and select it
+        await fetchChats();
+        if (resp.data.chat) {
+          setActiveChat(resp.data.chat);
+        }
+        setTimeout(() => {
+          setConnectModalOpen(false);
+          setConnectSuccess('');
+        }, 1500);
+      }
+    } catch (err: any) {
+      setConnectError(err.response?.data?.message || 'Invalid or expired code');
     } finally {
-      setIsSearchingConnections(false);
+      setConnectLoading(false);
     }
   };
 
@@ -219,6 +253,23 @@ export default function ChatDashboard() {
     setCommunityRequests([]);
     setIsEditingCommunity(false);
   }, [activeChat]);
+
+  // Emit message:seen when user opens a chat or new messages arrive in the active chat
+  useEffect(() => {
+    if (!activeChat || !socket) return;
+    const chatMessages = messages[activeChat._id] || [];
+    const myId = user?._id || user?.id;
+    const unreadMsgIds = chatMessages
+      .filter(m => {
+        if (m.status === 'seen') return false;
+        const sId = typeof m.senderId === 'string' ? m.senderId : (m.senderId as any)?._id;
+        return sId !== myId;
+      })
+      .map(m => m._id);
+    if (unreadMsgIds.length > 0) {
+      emitEvent('message:seen', { chatId: activeChat._id, messageIds: unreadMsgIds });
+    }
+  }, [activeChat, socket, messages[activeChat?._id || '']]);
 
   // Searching/Creating models
   const [searchQuery, setSearchQuery] = useState('');
@@ -321,16 +372,24 @@ export default function ChatDashboard() {
     }
   }, [isGroupInfoOpen, activeChat]);
 
-  // Fetch connections lists on Tab change
+  // 4-digit connection code countdown timer hook
   useEffect(() => {
-    if (activeTab === 'connections') {
-      connStore.fetchFriends();
-      connStore.fetchRequests();
-      connStore.fetchDiscovery();
-      connStore.fetchBlocked();
-      connStore.fetchMuted();
-    }
-  }, [activeTab]);
+    if (!myCodeExpiresAt) return;
+    const interval = setInterval(() => {
+      const remaining = new Date(myCodeExpiresAt).getTime() - Date.now();
+      if (remaining <= 0) {
+        setMyConnectionCode('');
+        setMyCodeExpiresAt(null);
+        setCodeCountdown('');
+        clearInterval(interval);
+      } else {
+        const minutes = Math.floor(remaining / 1000 / 60);
+        const seconds = Math.floor((remaining / 1000) % 60);
+        setCodeCountdown(`Expires in ${minutes}:${seconds.toString().padStart(2, '0')}`);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [myCodeExpiresAt]);
 
   // Request Desktop notifications permission on mount
   useEffect(() => {
@@ -1051,14 +1110,18 @@ export default function ChatDashboard() {
       <section className="w-80 md:w-96 glass-panel border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0 relative overflow-hidden">
         
         {/* App Branding Top Header */}
-        <div className="p-4.5 pb-3 border-b border-slate-200 dark:border-slate-800/40 flex items-center justify-between bg-white/30 dark:bg-slate-900/30">
+        <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800/40 flex items-center justify-between bg-white/30 dark:bg-slate-900/30">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <span className="text-sm font-black tracking-tighter text-white">SK</span>
             </div>
             <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-200 dark:to-purple-300">SK Connect</span>
           </div>
-          <NotificationBell onClick={() => setIsNotifPanelOpen((p) => !p)} />
+          {/* Notification bell + dropdown anchored to header */}
+          <div className="relative">
+            <NotificationBell onClick={() => setIsNotifPanelOpen((p) => !p)} />
+            <NotificationPanel isOpen={isNotifPanelOpen} onClose={() => setIsNotifPanelOpen(false)} />
+          </div>
         </div>
         
         {/* Tab 1: Chats */}
@@ -1103,12 +1166,21 @@ export default function ChatDashboard() {
                 <div className="p-2 space-y-1">
                   <div className="flex items-center justify-between px-3 py-2">
                     <span className="text-xs text-slate-500 font-semibold">Active Chats</span>
-                    <button 
-                      onClick={() => setCreateGroupOpen(true)}
-                      className="text-xs font-bold text-indigo-550 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Group
-                    </button>
+                    <div className="flex items-center gap-2.5">
+                      <button 
+                        onClick={() => setConnectModalOpen(true)}
+                        className="text-xs font-bold text-indigo-550 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-0.5"
+                        title="Connect with new friends via 4-digit code"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" /> Connect
+                      </button>
+                      <button 
+                        onClick={() => setCreateGroupOpen(true)}
+                        className="text-xs font-bold text-indigo-550 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-0.5"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Group
+                      </button>
+                    </div>
                   </div>
                   {chats.map((chat) => {
                     const active = activeChat?._id === chat._id;
@@ -1118,6 +1190,7 @@ export default function ChatDashboard() {
                     const subtitle = chat.lastMessage?.isDeleted 
                       ? 'Deleted message' 
                       : (chat.lastMessage?.content || chat.description || 'No messages yet');
+                    const unread = !active ? (unreadCounts[chat._id] || 0) : 0;
 
                     return (
                       <button
@@ -1147,11 +1220,22 @@ export default function ChatDashboard() {
                               {chat.isBroadcast && <Megaphone className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />}
                               <span>{titleName}</span>
                             </h4>
-                            <span className="text-[10px] text-slate-500 font-medium">
-                              {chat.lastMessage ? new Date(chat.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                {chat.lastMessage ? new Date(chat.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-medium">{subtitle}</p>
+                          <div className="flex justify-between items-center mt-0.5">
+                            <p className={`text-xs truncate font-medium flex-1 ${
+                              unread > 0 ? 'text-slate-700 dark:text-slate-300 font-semibold' : 'text-slate-500 dark:text-slate-400'
+                            }`}>{subtitle}</p>
+                            {unread > 0 && (
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] w-[18px] rounded-full bg-emerald-500 text-white text-[10px] font-bold shrink-0 ml-2">
+                                {unread > 99 ? '99+' : unread}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </button>
                     );
@@ -1429,26 +1513,21 @@ export default function ChatDashboard() {
                 )}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Tab 6: Settings */}
-        {activeTab === 'settings' && (
-          <div className="flex flex-col h-full p-4 space-y-6 overflow-y-auto">
-            <h2 className="text-xl font-bold tracking-tight">Settings</h2>
-            
-            {/* Customization items */}
-            <div className="space-y-4">
+            {/* Customization Settings section */}
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/40 space-y-4 text-left">
+              <h3 className="text-[10px] font-bold text-slate-500 dark:text-slate-405 uppercase tracking-widest">Customization & Settings</h3>
+              
               <div>
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Appearance Mode</span>
+                <span className="text-[10px] text-slate-505 dark:text-slate-400 font-bold uppercase tracking-wider">Appearance Mode</span>
                 <div className="flex gap-2 mt-2">
                   {['light', 'dark', 'system'].map((th) => (
                     <button
                       key={th}
                       onClick={() => themeStore.setTheme(th as any)}
-                      className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-all ${
+                      className={`flex-1 py-2 text-[10px] font-bold rounded-xl border transition-all ${
                         themeStore.theme === th
-                          ? 'bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/10'
+                          ? 'bg-indigo-500 text-white on-color border-indigo-500 shadow-md shadow-indigo-500/10'
                           : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-350 border-slate-200 dark:border-slate-800'
                       }`}
                     >
@@ -1459,7 +1538,7 @@ export default function ChatDashboard() {
               </div>
 
               <div>
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Accent Theme Color</span>
+                <span className="text-[10px] text-slate-550 dark:text-slate-400 font-bold uppercase tracking-wider">Accent Theme Color</span>
                 <div className="flex gap-2 mt-2">
                   {['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6'].map((color) => (
                     <button
@@ -1475,7 +1554,7 @@ export default function ChatDashboard() {
               </div>
 
               <div>
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Chat Background Wallpaper</span>
+                <span className="text-[10px] text-slate-550 dark:text-slate-400 font-bold uppercase tracking-wider">Chat Background Wallpaper</span>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   {[
                     { id: 'gradient-mesh', name: 'Gradient Mesh' },
@@ -1491,7 +1570,7 @@ export default function ChatDashboard() {
                       }}
                       className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${
                         wallpaperPreset === wall.id
-                          ? 'bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/10'
+                          ? 'bg-indigo-500 text-white on-color border-indigo-500 shadow-md shadow-indigo-500/10'
                           : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-350 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
@@ -1502,41 +1581,9 @@ export default function ChatDashboard() {
               </div>
 
               <div className="pt-4 border-t border-slate-200 dark:border-slate-800/40">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Device Logins</span>
-                  <button
-                    onClick={() => { fetchSessions(); }}
-                    className="text-[10px] font-bold text-indigo-400"
-                  >
-                    Refresh
-                  </button>
-                </div>
-                
-                <div className="space-y-2">
-                  {sessions.map((sess) => (
-                    <div key={sess.id} className="p-2.5 bg-slate-900 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-semibold text-slate-200">{sess.deviceType}</p>
-                        <p className="text-[10px] text-slate-500">{sess.ipAddress} {sess.isCurrent ? '(current)' : ''}</p>
-                      </div>
-                      {!sess.isCurrent && (
-                        <button
-                          onClick={() => terminateSession(sess.id)}
-                          className="text-[10px] text-red-400 font-bold hover:text-red-300"
-                        >
-                          Log out
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Log Out Button */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800/40">
                 <button
                   onClick={() => logout()}
-                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs border border-red-500/20 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-650 dark:text-red-400 font-bold text-xs border border-red-500/20 transition-colors"
                 >
                   <LogOut className="h-4.5 w-4.5" />
                   <span>Log Out of SK Connect</span>
@@ -1609,434 +1656,14 @@ export default function ChatDashboard() {
           </div>
         )}
 
-        {/* Tab 8: Connections Panel */}
-        {activeTab === 'connections' && (
-          <div className="flex flex-col h-full overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800/40">
-              <h2 className="text-xl font-bold mb-3 tracking-tight">People</h2>
-              
-              {/* Sub tabs switches */}
-              <div className="flex gap-1.5 p-1 bg-slate-100/80 dark:bg-slate-900/60 rounded-xl">
-                {[
-                  { id: 'friends', label: 'Friends' },
-                  { id: 'requests', label: 'Requests' },
-                  { id: 'discover', label: 'Discover' },
-                  { id: 'privacy', label: 'Privacy' }
-                ].map((st) => (
-                  <button
-                    key={st.id}
-                    onClick={() => setConnectionsSubTab(st.id as any)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      connectionsSubTab === st.id
-                        ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50 dark:border-slate-800/50'
-                        : 'text-slate-500 dark:text-slate-450 hover:text-slate-800 dark:hover:text-slate-350'
-                    }`}
-                  >
-                    {st.id === 'requests' && (connStore.incomingRequests.length > 0) ? (
-                      <span className="flex items-center justify-center gap-1">
-                        {st.label}
-                        <span className="bg-indigo-600 text-white text-[9px] h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">
-                          {connStore.incomingRequests.length}
-                        </span>
-                      </span>
-                    ) : st.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* List area */}
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-              {connStore.isLoading && (
-                <div className="flex items-center justify-center h-48">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
-                </div>
-              )}
-
-              {!connStore.isLoading && (
-                <>
-                  {/* FRIENDS SUBTAB */}
-                  {connectionsSubTab === 'friends' && (
-                    <div className="space-y-3">
-                      {connStore.friends.length === 0 ? (
-                        <div className="text-center py-12 text-slate-500 dark:text-slate-455">
-                          <Users className="h-10 w-10 mx-auto mb-3 text-slate-400 dark:text-slate-500 opacity-60 animate-pulse-slow" />
-                          <p className="text-sm font-semibold">No friends yet</p>
-                          <p className="text-xs text-slate-500 mt-1">Explore the Discover tab to find new connections!</p>
-                        </div>
-                      ) : (
-                        connStore.friends.map((friend: any) => (
-                          <div
-                            key={friend._id}
-                            onClick={() => {
-                              const existingChat = chats.find(c => !c.isGroup && !c.isCommunity && c.participants.some(p => p._id === friend._id));
-                              if (existingChat) {
-                                setActiveChat(existingChat);
-                                setActiveTab('chats');
-                              } else {
-                                handleStartDirectChat(friend);
-                              }
-                            }}
-                            className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition-all flex items-center justify-between cursor-pointer group"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="relative">
-                                <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                  {friend.avatar ? <img src={friend.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                </div>
-                                <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-slate-900 ${friend.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{friend.username}</p>
-                                <p className="text-[10px] text-slate-500 dark:text-slate-450">{friend.mutualFriends || 0} mutual friends</p>
-                              </div>
-                            </div>
-
-                            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => connStore.muteUserToggle(friend._id)}
-                                className={`p-1.5 rounded-lg border transition-colors ${
-                                  connStore.mutedUsers.some(m => m._id === friend._id)
-                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-450'
-                                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-400'
-                                }`}
-                                title={connStore.mutedUsers.some(m => m._id === friend._id) ? 'Unmute User' : 'Mute User'}
-                              >
-                                <VolumeX className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => connStore.blockUserToggle(friend._id)}
-                                className="p-1.5 rounded-lg hover:bg-red-500/10 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-red-500 transition-colors"
-                                title="Block User"
-                              >
-                                <Ban className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to remove this friend?')) {
-                                    connStore.removeFriend(friend._id);
-                                  }
-                                }}
-                                className="p-1.5 rounded-lg hover:bg-red-500/10 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-red-500 transition-colors"
-                                title="Remove Friend"
-                              >
-                                <UserX className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {/* REQUESTS SUBTAB */}
-                  {connectionsSubTab === 'requests' && (
-                    <div className="space-y-4">
-                      {/* Incoming Requests */}
-                      <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Incoming Requests ({connStore.incomingRequests.length})</span>
-                        {connStore.incomingRequests.length === 0 ? (
-                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No incoming pending request</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {connStore.incomingRequests.map((req: any) => (
-                              <div key={req._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                    {req.senderId?.avatar ? <img src={req.senderId.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{req.senderId?.username}</p>
-                                    <p className="text-[10px] text-slate-500">{req.senderId?.bio}</p>
-                                  </div>
-                                </div>
-                                <div className="flex gap-1.5">
-                                  <button
-                                    onClick={() => connStore.acceptRequest(req._id)}
-                                    className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors"
-                                  >
-                                    Accept
-                                  </button>
-                                  <button
-                                    onClick={() => connStore.rejectRequest(req._id)}
-                                    className="px-2.5 py-1 bg-slate-200 dark:bg-slate-850 hover:bg-slate-300 dark:hover:bg-slate-800 text-slate-650 dark:text-slate-350 font-bold text-[10px] rounded-lg transition-colors"
-                                  >
-                                    Ignore
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Outgoing Requests */}
-                      <div className="pt-2">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Sent Requests ({connStore.outgoingRequests.length})</span>
-                        {connStore.outgoingRequests.length === 0 ? (
-                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No sent request pending</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {connStore.outgoingRequests.map((req: any) => (
-                              <div key={req._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                    {req.receiverId?.avatar ? <img src={req.receiverId.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{req.receiverId?.username}</p>
-                                    <p className="text-[10px] text-slate-500">{req.receiverId?.bio}</p>
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => connStore.cancelRequest(req._id)}
-                                  className="px-2.5 py-1 bg-red-500/10 border border-red-500/20 text-red-500 font-bold text-[10px] rounded-lg hover:bg-red-500 hover:text-white transition-colors"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* DISCOVER SUBTAB */}
-                  {connectionsSubTab === 'discover' && (
-                    <div className="space-y-4">
-                      {/* Search box */}
-                      <div className="relative mb-2">
-                        <input
-                          type="text"
-                          placeholder="Search users to add..."
-                          value={connectionsSearchQuery}
-                          onChange={(e) => handleConnectionsSearch(e.target.value)}
-                          className="w-full h-10 pl-10 pr-4 rounded-xl text-xs font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
-                        />
-                        <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
-                      </div>
-
-                      {connectionsSearchQuery ? (
-                        <div>
-                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Search Results</span>
-                          {isSearchingConnections ? (
-                            <div className="flex justify-center py-6">
-                              <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
-                            </div>
-                          ) : connectionsSearchResults.length === 0 ? (
-                            <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No users found matching "{connectionsSearchQuery}"</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {connectionsSearchResults.map((usr: any) => {
-                                const isFriend = connStore.friends.some(f => f._id === usr._id);
-                                const isPendingOutgoing = connStore.outgoingRequests.some(o => o.receiverId?._id === usr._id || o.receiverId === usr._id);
-                                const incomingReq = connStore.incomingRequests.find(i => i.senderId?._id === usr._id || i.senderId === usr._id);
-
-                                return (
-                                  <div key={usr._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                        {usr.avatar ? <img src={usr.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                      </div>
-                                      <div>
-                                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{usr.username}</p>
-                                        <p className="text-[10px] text-slate-555 dark:text-slate-450 truncate max-w-[150px]">{usr.bio || 'No bio yet'}</p>
-                                      </div>
-                                    </div>
-                                    
-                                    {isFriend ? (
-                                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                        Friends
-                                      </span>
-                                    ) : isPendingOutgoing ? (
-                                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400">
-                                        Sent
-                                      </span>
-                                    ) : incomingReq ? (
-                                      <button
-                                        onClick={() => connStore.acceptRequest(incomingReq._id)}
-                                        className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors animate-pulse"
-                                      >
-                                        Accept
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => connStore.sendRequest(usr._id)}
-                                        className="px-2.5 py-1 bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-[10px] rounded-lg shadow-sm shadow-indigo-500/10 transition-all flex items-center gap-1"
-                                      >
-                                        <UserPlus className="h-3 w-3" /> Connect
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          {/* Suggested */}
-                          <div>
-                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Suggested Users</span>
-                            {connStore.suggestedUsers.length === 0 ? (
-                              <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No suggestions available</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {connStore.suggestedUsers.map((su: any) => {
-                                  const sent = connStore.outgoingRequests.some(o => o.receiverId?._id === su._id);
-                                  return (
-                                    <div key={su._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
-                                      <div className="flex items-center gap-3">
-                                        <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                          {su.avatar ? <img src={su.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                        </div>
-                                        <div>
-                                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{su.username}</p>
-                                          <p className="text-[10px] text-slate-500">{su.mutualFriends || 0} mutual friends</p>
-                                        </div>
-                                      </div>
-                                      <button
-                                        onClick={() => !sent && connStore.sendRequest(su._id)}
-                                        disabled={sent}
-                                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg shadow-sm transition-all flex items-center gap-1 ${
-                                          sent 
-                                            ? 'bg-slate-105 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                                            : 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/10'
-                                        }`}
-                                      >
-                                        {sent ? 'Sent' : <><UserPlus className="h-3 w-3" /> Connect</>}
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Recently Joined */}
-                          <div className="pt-2">
-                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Recently Joined</span>
-                            {connStore.recentlyJoined.length === 0 ? (
-                              <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No recently joined users</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {connStore.recentlyJoined.map((ru: any) => {
-                                  const sent = connStore.outgoingRequests.some(o => o.receiverId?._id === ru._id);
-                                  return (
-                                    <div key={ru._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
-                                      <div className="flex items-center gap-3">
-                                        <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                          {ru.avatar ? <img src={ru.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                        </div>
-                                        <div>
-                                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{ru.username}</p>
-                                          <p className="text-[10px] text-slate-500 dark:text-slate-450 truncate max-w-[150px]">{ru.bio}</p>
-                                        </div>
-                                      </div>
-                                      <button
-                                        onClick={() => !sent && connStore.sendRequest(ru._id)}
-                                        disabled={sent}
-                                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg shadow-sm transition-all flex items-center gap-1 ${
-                                          sent 
-                                            ? 'bg-slate-105 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                                            : 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/10'
-                                        }`}
-                                      >
-                                        {sent ? 'Sent' : <><UserPlus className="h-3 w-3" /> Connect</>}
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* PRIVACY SUBTAB */}
-                  {connectionsSubTab === 'privacy' && (
-                    <div className="space-y-4">
-                      {/* Blocked Users list */}
-                      <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Blocked Users ({connStore.blockedUsers.length})</span>
-                        {connStore.blockedUsers.length === 0 ? (
-                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No blocked user</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {connStore.blockedUsers.map((bu: any) => (
-                              <div key={bu._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                    {bu.avatar ? <img src={bu.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{bu.username}</p>
-                                    <p className="text-[10px] text-slate-500">{bu.bio}</p>
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => connStore.blockUserToggle(bu._id)}
-                                  className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] rounded-lg hover:bg-emerald-500 hover:text-white transition-colors"
-                                >
-                                  Unblock
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Muted Users list */}
-                      <div className="pt-2">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1">Muted Users ({connStore.mutedUsers.length})</span>
-                        {connStore.mutedUsers.length === 0 ? (
-                          <p className="text-xs text-slate-550 dark:text-slate-400 italic px-1">No muted user</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {connStore.mutedUsers.map((mu: any) => (
-                              <div key={mu._id} className="p-3 bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 rounded-2xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                    {mu.avatar ? <img src={mu.avatar} alt="" className="h-full w-full object-cover" /> : null}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold text-slate-850 dark:text-slate-200">{mu.username}</p>
-                                    <p className="text-[10px] text-slate-500">{mu.bio}</p>
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => connStore.muteUserToggle(mu._id)}
-                                  className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-[10px] rounded-lg hover:bg-amber-500 hover:text-white transition-colors"
-                                >
-                                  Unmute
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
           {/* Integrated Bottom Navigation Bar (Previously left sidebar) */}
           <nav className="h-15 border-t border-slate-200 dark:border-slate-800/40 bg-white/60 dark:bg-slate-950/60 backdrop-blur-md flex items-center justify-around px-2 py-1.5 shrink-0 z-10">
             {[
               { id: 'chats', label: 'Chats', icon: MessageSquare },
-              { id: 'connections', label: 'People', icon: Users },
               { id: 'status', label: 'Stories', icon: Compass },
               { id: 'calls', label: 'Calls', icon: Phone },
               { id: 'communities', label: 'Servers', icon: Globe },
               { id: 'profile', label: 'Bio', icon: UserIcon },
-              { id: 'settings', label: 'Settings', icon: Settings },
             ].map((btn) => {
               const Icon = btn.icon;
               const active = activeTab === btn.id;
@@ -3664,11 +3291,109 @@ export default function ChatDashboard() {
         onReply={handleReplyToStory}
         onLike={handleLikeStory}
       />
-      {/* 9. Notification Panel */}
-      <NotificationPanel
-        isOpen={isNotifPanelOpen}
-        onClose={() => setIsNotifPanelOpen(false)}
-      />
+      {/* 10. Connect via Code Modal Overlay */}
+      <AnimatePresence>
+        {connectModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-6">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-[400px] glass-panel rounded-3xl p-6 shadow-2xl space-y-4 text-left"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800/40">
+                <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                  <UserPlus className="h-5 w-5 text-indigo-500" />
+                  <span>Connect with Code</span>
+                </h3>
+                <button 
+                  onClick={() => { 
+                    setConnectModalOpen(false); 
+                    setMyConnectionCode(''); 
+                    setMyCodeExpiresAt(null);
+                    setEnterConnectionCode('');
+                    setConnectError('');
+                    setConnectSuccess('');
+                  }} 
+                  className="text-slate-500 hover:text-slate-850 dark:hover:text-white transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Enter Connection Code */}
+              <form onSubmit={handleResolveCode} className="space-y-3 pt-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-widest mb-1.5">Enter Friend's 4-Digit Code</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={enterConnectionCode}
+                      onChange={(e) => setEnterConnectionCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="e.g. 5839"
+                      className="flex-1 h-11 rounded-xl text-center text-lg font-black tracking-widest bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 outline-none focus:border-indigo-500 text-slate-800 dark:text-white"
+                    />
+                    <button
+                      type="submit"
+                      disabled={connectLoading}
+                      className="px-5 h-11 rounded-xl bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-500/50 text-white on-color font-bold text-xs shadow-md shadow-indigo-500/10 transition-colors flex items-center gap-1 shrink-0"
+                    >
+                      {connectLoading ? 'Connecting...' : 'Connect'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              <div className="relative py-2.5 flex items-center shrink-0">
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800/40"></div>
+                <span className="flex-shrink mx-4 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">OR</span>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800/40"></div>
+              </div>
+
+              {/* Generate Your Code */}
+              <div className="space-y-3.5 text-center">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-widest mb-2">Share Your Temporary Code</p>
+                  
+                  {myConnectionCode ? (
+                    <div className="p-4.5 rounded-2xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center gap-2">
+                      <span className="text-3xl font-black tracking-widest text-indigo-600 dark:text-indigo-400 font-mono">
+                        {myConnectionCode}
+                      </span>
+                      <span className="text-[9px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-md">
+                        {codeCountdown || 'Expires soon'}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-550 dark:text-slate-450 italic py-2">No active connection code generated yet.</p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={generateMyCode}
+                  className="w-full h-10.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-850 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors"
+                >
+                  {myConnectionCode ? 'Generate New Code' : 'Generate Code'}
+                </button>
+              </div>
+
+              {/* Notifications / Alerts */}
+              {connectError && (
+                <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/20 text-red-500 text-xs font-semibold text-center">
+                  {connectError}
+                </div>
+              )}
+              {connectSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-500 text-xs font-semibold text-center">
+                  {connectSuccess}
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

@@ -10,6 +10,7 @@ export interface IUser extends Document {
   email: string;
   username: string;
   password?: string;
+  googleId?: string;
   avatar?: string;
   coverImage?: string;
   bio?: string;
@@ -34,15 +35,16 @@ export interface IUser extends Document {
 }
 
 const ThemeSettingsSchema = new Schema<IThemeSettings>({
-  theme: { type: String, enum: ['dark', 'light', 'system'], default: 'dark' },
+  theme: { type: String, enum: ['dark', 'light', 'system'], default: 'light' },
   accentColor: { type: String, default: '#6366f1' }, // Indigo default
   wallpaper: { type: String, default: '' },
 }, { _id: false });
 
 const UserSchema = new Schema<IUser>({
   email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
-  username: { type: String, required: true, unique: true, index: true, trim: true },
+  username: { type: String, required: true, index: true, trim: true },
   password: { type: String }, // Optional for OAuth if ever added, but required for local auth
+  googleId: { type: String, sparse: true, index: true }, // Google OAuth sub ID
   avatar: { type: String, default: '' },
   coverImage: { type: String, default: '' },
   bio: { type: String, default: 'Hey there! I am using Connect.' },

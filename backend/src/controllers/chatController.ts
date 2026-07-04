@@ -86,7 +86,21 @@ export const getChats = async (req: AuthenticatedRequest, res: Response, next: N
       })
       .sort({ updatedAt: -1 });
 
-    res.status(200).json({ success: true, chats });
+    const chatsWithUnread = await Promise.all(
+      chats.map(async (chat) => {
+        const unreadCount = await Message.countDocuments({
+          chatId: chat._id,
+          'seenBy.userId': { $ne: req.user!.id },
+          senderId: { $ne: req.user!.id }
+        });
+        return {
+          ...chat.toObject(),
+          unreadCount
+        };
+      })
+    );
+
+    res.status(200).json({ success: true, chats: chatsWithUnread });
   } catch (error) {
     next(error);
   }

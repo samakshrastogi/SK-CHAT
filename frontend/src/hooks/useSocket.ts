@@ -12,14 +12,37 @@ export const useSocket = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   
-  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages } = useChatStore();
+  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages, incrementUnread } = useChatStore();
   const { setIncomingCall, resetCallStore } = useCallStore();
+
+  const chatsRef = useRef(chats);
+  const joinedRoomsRef = useRef<Set<string>>(new Set());
+
+  // Keep chatsRef up-to-date
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
+
+  // Dynamically join new chat rooms without reconnecting the socket
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !socket.connected) return;
+
+    chats.forEach((chat) => {
+      if (!joinedRoomsRef.current.has(chat._id)) {
+        socket.emit('chat:join', chat._id);
+        joinedRoomsRef.current.add(chat._id);
+        console.log(`Joined new chat room dynamically: ${chat._id}`);
+      }
+    });
+  }, [chats]);
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
+        joinedRoomsRef.current.clear();
       }
       return;
     }
@@ -39,14 +62,31 @@ export const useSocket = () => {
       console.log('Socket connected successfully');
       
       // Auto rejoin active rooms from our chats list
-      chats.forEach((chat) => {
+      joinedRoomsRef.current.clear();
+      chatsRef.current.forEach((chat) => {
         socket.emit('chat:join', chat._id);
+        joinedRoomsRef.current.add(chat._id);
       });
     });
 
     // Handle receiving messages
     socket.on('message:receive', (message) => {
       optimisticAddMessage(message.chatId, message);
+
+      // Check if this chat is currently active
+      const { activeChat } = useChatStore.getState();
+      const isActiveChatMessage = activeChat && activeChat._id === message.chatId;
+
+      if (isActiveChatMessage) {
+        // User is currently viewing this chat — mark as seen immediately
+        socket.emit('message:seen', {
+          chatId: message.chatId,
+          messageIds: [message._id],
+        });
+      } else {
+        // Chat is in the background — increment unread badge
+        incrementUnread(message.chatId);
+      }
       
       // Request browser notification if tab not focused
       if (document.hidden && Notification.permission === 'granted') {
@@ -117,7 +157,7 @@ export const useSocket = () => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [isAuthenticated, user, chats]);
+  }, [isAuthenticated, user?.id || user?._id]);
 
   const emitEvent = (event: string, data: any) => {
     if (socketRef.current) {
