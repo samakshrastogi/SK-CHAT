@@ -7,21 +7,20 @@ SK Connect is a state-of-the-art, feature-rich instant messaging and communicati
 ## Table of Contents
 - [Overview](#overview)
 - [Purpose](#purpose)
-- [Working Flowchart](#working-flowchart)
-- [Key Features](#key-features)
-  - [1. Intelligent Messaging & Quick Connect](#1-intelligent-messaging--quick-connect)
-  - [2. Interactive Media & File Sharing](#2-interactive-media--file-sharing)
-  - [3. Expiring Stories (WhatsApp/Instagram Style)](#3-expiring-stories-whatsappinstagram-style)
-  - [4. High-Definition WebRTC Calling](#4-hd-webrtc-audio--video-calling)
+- [User Experience Flowcharts](#user-experience-flowcharts)
+  - [Flowchart 1: User Onboarding & Quick Connect Pairing](#flowchart-1-user-onboarding--quick-connect-pairing)
+  - [Flowchart 2: Real-Time Interactive Messaging & File Sharing](#flowchart-2-real-time-interactive-messaging--file-sharing)
+  - [Flowchart 3: High-Definition WebRTC Calling Loop](#flowchart-3-high-definition-webrtc-calling-loop)
+  - [Flowchart 4: Expiring Stories & Engagement Flow](#flowchart-4-expiring-stories--engagement-flow)
+  - [Flowchart 5: Communities & Sub-channels System](#flowchart-5-communities--sub-channels-system)
+- [Detailed Section Working (User Prospectus)](#detailed-section-working-user-prospectus)
+  - [1. Getting Started & Connecting with Friends](#1-getting-started--connecting-with-friends)
+  - [2. Conversing, Sharing Files, & Interactive Polls](#2-conversing-sharing-files--interactive-polls)
+  - [3. Expiring Stories & Media Widgets](#3-expiring-stories--media-widgets)
+  - [4. Seamless Voice & Video Calling](#4-seamless-voice--video-calling)
   - [5. Role-Based Communities & Channels](#5-role-based-communities--channels)
-  - [6. AI Copilot & Companion Sidebar](#6-ai-copilot--companion-sidebar)
-  - [7. Advanced Personalizations](#7-advanced-personalizations--security)
-- [User Guide & Quick Start](#user-guide--quick-start)
-  - [Connecting with a New Friend](#connecting-with-a-new-friend)
-  - [Starting a WebRTC Call](#starting-a-webrtc-call)
-  - [Managing Communities](#managing-communities)
+  - [6. AI Copilot & Personal Settings](#6-ai-copilot--personal-settings)
 - [Testing & Seeder Credentials](#testing--seeder-credentials)
-- [Local Running Instructions](#local-running-instructions)
 
 ---
 
@@ -37,124 +36,168 @@ The main objective of SK Connect is to provide a single, unified communication h
 
 ---
 
-## Working Flowchart
+## User Experience Flowcharts
 
-Below is the user interaction and data flow diagram of SK Connect, illustrating how users connect, message, call, and share updates across the platform:
+### Flowchart 1: User Onboarding & Quick Connect Pairing
+This flowchart describes the path from landing on SK Connect, registering or authenticating via Google SSO, to pairing instantly with another user using a 4-digit code.
 
 ```mermaid
 graph TD
-  Start([User opens SK Connect]) --> Auth{Authenticated?}
+  Start([User opens SK Connect]) --> Landing{Has Account?}
   
-  Auth -->|No| Login[Sign In / Register / Google SSO]
-  Login --> Auth
+  Landing -->|No| Register[Register Page - Enter credentials & Confirm Password]
+  Landing -->|Yes| Login[Login Page - Enter email & password OR Google SSO]
   
-  Auth -->|Yes| Dashboard[Main Dashboard]
+  Register --> AutoVerify[Auto-Verification / Welcome Setup]
+  AutoVerify --> Login
   
-  %% Navigation Actions
-  Dashboard --> ConnectCode[Connect via 4-Digit Code]
-  Dashboard --> Chats[Open Active Chat Thread]
-  Dashboard --> Stories[Stories Drawer]
-  Dashboard --> Communities[Join / Create Communities]
+  Login --> Dash[Dashboard Sidebar Loaded]
   
-  %% Pairing Flow
-  ConnectCode -->|Enter 4-digit code| PairFriend[Instant Friend Link Created]
-  PairFriend --> Chats
+  Dash --> OpenProfile[Open User Profile]
+  OpenProfile --> GenerateCode[Click 'Generate Connection Code']
+  GenerateCode --> DisplayCode[Show 4-digit code to friend]
   
-  %% Chat Flow
-  Chats --> SendText[Send Text / Self-Destruct Message]
-  Chats --> SendFile[Attach File / Image / Document]
-  Chats --> ReactPoll[Add Reaction / Vote in Poll]
-  Chats --> CallRTC[Initiate Audio / Video WebRTC Call]
+  Dash --> InputCode[Enter Friend's 4-digit Connection Code]
+  InputCode --> TriggerConnect[Click 'Connect']
   
-  %% Story Flow
-  Stories --> ViewStories[View Friends' Stories / Add Likes]
-  Stories --> PostStory[Post Story with Text/Media Widgets]
-  PostStory -->|Expires in 24 Hours| Stories
+  DisplayCode & TriggerConnect --> NewChat[Instant Direct Chat Window Opens]
+```
+
+### Flowchart 2: Real-Time Interactive Messaging & File Sharing
+This flowchart illustrates the messaging interface activities, including file selection previews, interactive polls, message reactions, and disappearing timers.
+
+```mermaid
+graph TD
+  StartChat[Open Active Conversation] --> SelectInput{What to send?}
   
-  %% Communities Flow
-  Communities --> GroupChannels[Access Subchannels: General, Media, Voice, Events]
+  SelectInput -->|Text Message| EnterText[Type message text]
+  SelectInput -->|Self-Destruct Message| SelectTimer[Pick timer: 5s, 1m, 1h, 1d] --> EnterText
+  SelectInput -->|Attach File| ClickPaperclip[Click Paperclip Icon]
+  SelectInput -->|Create Poll| ChoosePoll[Click Create Poll Option]
   
-  %% Sockets Gateway sync
-  SendText & SendFile & ReactPoll & PostStory -->|Broadcast via Sockets| Sync[Zero-Refresh Update for All Online Receivers]
-  CallRTC -->|ICE/SDP Signaling| RingerOverlay[ Ringer Overlay Screen on Recipient Window ]
+  ClickPaperclip --> SelectLocalFile[Select Image/Video/Doc from device]
+  SelectLocalFile --> ShowPreview[Selected File Chip appears showing name & size]
+  ShowPreview -->|Change mind| ClearPreview[Click 'X' to remove file]
+  ShowPreview --> SendFile[Press Send]
+  
+  ChoosePoll --> SetPollQuestions[Input Question & Custom Options]
+  SetPollQuestions --> SendPoll[Press Send]
+  
+  EnterText & SendFile & SendPoll --> DispatchMessage[Message appends to thread optimistically]
+  
+  DispatchMessage --> SocketTransmit[Socket.io Gateway delivers message to recipient]
+  
+  SocketTransmit --> ReceiptUpdate{Recipient state?}
+  ReceiptUpdate -->|Online & Active Chat| BlueTick[Emits 'seen' receipt -> Double Blue Ticks]
+  ReceiptUpdate -->|Online but Tab Closed| GreyTick[Emits 'delivered' receipt -> Double Grey Ticks]
+  ReceiptUpdate -->|Offline| SingleTick[Single Grey Tick]
+```
+
+### Flowchart 3: High-Definition WebRTC Calling Loop
+This flowchart describes how a user starts a voice or video call, exchanges live streams, and interacts with media controls.
+
+```mermaid
+graph TD
+  StartCall[Open Direct Chat Screen] --> ClickCallBtn{Click Phone or Video Icon}
+  
+  ClickCallBtn --> OutgoingScreen[Outgoing Call Overlay opens with ringback sound]
+  
+  OutgoingScreen --> Signalling[WebRTC Handshake exchanges SDP & ICE Candidates]
+  
+  Signalling --> RecipientRinger[Recipient sees incoming call overlay screen & hears ringtone]
+  
+  RecipientRinger --> Choice{Recipient Action}
+  Choice -->|Decline / Ignore| Hangup[Call terminates & call logged as 'missed']
+  Choice -->|Accept| ConnectStreams[Audio/Video streams bind instantly]
+  
+  ConnectStreams --> ActionControls[Toggle Mic, Video feeds, or Screen Share]
+  ActionControls --> EndCall[Click Red End Call button to terminate]
+```
+
+### Flowchart 4: Expiring Stories & Engagement Flow
+This flowchart describes the creation of 24-hour status slides, widgets configurations, and friend engagements.
+
+```mermaid
+graph TD
+  DashBar[Horizontal Stories Drawer] --> ClickAddStory[Click 'Add Story']
+  
+  ClickAddStory --> SelectBG[Choose text slide with colorful gradient background]
+  ClickAddStory --> UploadMedia[Select photos/videos from device]
+  
+  SelectBG & UploadMedia --> StoryWidgets[Add widget content: locations, hashtags, mentions, Q&As]
+  
+  StoryWidgets --> PublishStory[Publish Story]
+  
+  PublishStory --> RealtimeBroadcast[Broadcasting status:new event via socket]
+  RealtimeBroadcast --> SidebarDrawer[Friend's horizontal stories drawer updates instantly]
+  
+  SidebarDrawer --> ViewStory[Friend opens and views story]
+  ViewStory --> SendReply[Friend writes a comment reply]
+  
+  SendReply --> InboxDeliver[Story reply lands directly in your private message thread]
+```
+
+### Flowchart 5: Communities & Sub-channels System
+This flowchart illustrates the Discord-style community structure, from joining via secure links to interacting in categorized channels.
+
+```mermaid
+graph TD
+  ExploreTab[Click Explore Tab] --> FindCommunity{Action?}
+  
+  FindCommunity -->|Create| FillDetails[Upload Avatar, Banner & Input Details]
+  FindCommunity -->|Join| EnterLink[Enter invite code or click secure invite link]
+  
+  FillDetails --> BuildCommunity[Community auto-generates announcements general media qa channels]
+  EnterLink --> AccessChannels[Joined Community and granted sub-channels access]
+  
+  AccessChannels --> ViewAnnouncements[Read official Announcements]
+  AccessChannels --> GeneralChat[Discuss in general text channels]
+  AccessChannels --> MediaChannel[Share documents, files & links in Media Hub]
+  AccessChannels --> VoiceRoom[Join drop-in audio Voice Room]
 ```
 
 ---
 
-## Key Features
+## Detailed Section Working (User Prospectus)
 
-### 1. Intelligent Messaging & Quick Connect
-* **Real-Time Delivery Indicators**: Messages update instantly to reflect their delivery status with checkmarks:
-  * Single Grey Tick (`✓`): Sent successfully to the cloud.
-  * Double Grey Ticks (`✓✓`): Delivered to the recipient's device.
-  * Double Blue Ticks (`✓✓`): Seen and read by the recipient.
-* **4-Digit Quick Connect**: Skip searching complex usernames. Generate a short-lived 4-digit connection code in your profile tab to pair instantly with nearby friends.
-* **Interactive Polls**: Create question cards inside chat windows with customizable options. Votes and percentages update dynamically in real time for everyone.
-* **Disappearing Messages**: Set custom self-destruction timers (5 seconds, 1 minute, 1 hour, or 1 day) for messages. Expired messages fade away from both devices automatically.
-* **Pinned Messages**: Pin important announcements or links in any chat. Pinned content is displayed as a premium frosted banner under the chat header; clicking the banner scrolls the screen directly to the target bubble.
+### 1. Getting Started & Connecting with Friends
+* **Google SSO & Credentials Log In**: When you first visit SK Connect, you can log in securely using your Google Account with a single tap, or register using a standard email. If you register, the password confirmation field helps prevent spelling mistakes.
+* **4-Digit Quick Connect Pairing**: Instead of asking friends for complex, case-sensitive usernames, you can connect instantly. One user click **Generate Connection Code** to receive a 4-digit code. The other user inputs this code into their **Quick Connect** box and hits **Connect**. A private direct chat thread opens instantly on both dashboards.
 
-### 2. Interactive Media & File Sharing
-* **File Upload Chip**: Enjoy drag-and-drop or paperclip file attachment support with a file selection chip. Shows the selected file's name and size in KB along with a clear button to remove the selection before sending.
-* **Sleek Media Cards**: Shared files render as stylized document containers with custom icon labels, file size metrics, and instant download buttons. Image and video attachments load using smooth responsive grid modules.
+### 2. Conversing, Sharing Files, & Interactive Polls
+* **Premium Real-Time Chatting**: All message actions—including sending, editing, and deleting messages—update instantly for both participants. Centered reaction panels let you tap on an emoji to react to messages in real time.
+* **Visual File Attachments**: Clicking the paperclip icon opens your device file selector. When a file is chosen, a preview chip appears showing the filename and size, letting you double-check your selection before sending or click the close icon to remove it. Once sent, it appears as a clean card showing the filename and download button.
+* **Self-Destruct Messages**: If you are sharing sensitive information, select a self-destruct duration next to the text input. Once the countdown expires, the message bubble automatically dissolves from both screens.
+* **Interactive Polls**: Write a question and add options to gather group opinions. Friends click directly on options to vote, and percentage bars animate in real time.
 
-### 3. Expiring Stories (WhatsApp/Instagram Style)
-* **Status Updates Bar**: View active friend stories inside a horizontal avatar row at the top of your dashboard.
-* **Rich Story Creator**: Post expiring story slides with customized backgrounds, locations, mentions, hashtags, and interactive question widgets.
-* **Story Engagement**: Viewers can like stories or type sliding comments, which automatically land directly in your private message inbox as a context reply.
-* **Automatic 24-Hour Expiry**: Stories disappear from all feeds automatically after 24 hours.
+### 3. Expiring Stories & Media Widgets
+* **Status Updates drawer**: View expiring stories posted by your contacts in a horizontal bar at the top of the chat panel. A colorful ring around a contact's avatar indicates a new, unviewed story.
+* **Interactive Widgets**: Create status slides featuring custom gradient backgrounds or local photos. Add mentions, locations, hashtags, or interactive Q&A sliders to gather feedback.
+* **Direct Inbox Replies**: While viewing stories, you can type a comment reply. This sends your reply directly into your private chat thread with that contact, along with a context snippet of the story.
 
-### 4. HD WebRTC Audio & Video Calling
-* ** Ringer Overlay Interface**: Initiating a call prompts an immersive, high-blur caller screen with audio ringbacks, avatar glows, and controls.
-* **HD Streams**: Exchanging media streams over WebRTC with camera-flip controls, screen sharing, and audio mute/unmute buttons.
-* **Missed Call System**: Call attempts are recorded and pushed into the Call History tab in real time if the recipient is busy or declines.
+### 4. Seamless Voice & Video Calling
+* ** Ringer Overlay System**: Tapping the call icons rings the recipient's device. Both devices show a blurred backdrop overlay showing the caller's avatar and a ringing notification, accompanied by a premium ringtone.
+* **HD In-Call Toggles**: During calls, you can toggle your microphone or camera feed on and off, switch to screen sharing, or hang up. If a call is declined or missed, it is immediately logged in the **Calls** history tab.
 
 ### 5. Role-Based Communities & Channels
-* **Sub-channels Layout**: Create massive spaces organized into specific sub-channels, similar to professional collaboration tools.
-* **Channel Configurations**: Sub-channels auto-generate into:
-  * `#general` (Text chat)
-  * `📢 announcements` (Only creators/mods can post)
-  * `❓ q-and-a` (QA hub)
-  * `📷 media` (Shared file feeds)
-  * `📅 events` (Events schedule list)
-  * `🔊 voice-room` (Audio rooms)
+* **Discord-Style Channels**: Communities organize large group interactions into structured channel lists, preventing cluttered feeds.
+* **Category Channels**: Channels are pre-categorized for clean communication:
+  * **Announcements**: Broadcasters share important notifications; standard members are muted.
+  * **General**: Standard open discussion panel.
+  * **Q&A**: A specialized thread where users can ask questions and resolve answers.
+  * **Media Hub**: Dedicated grid displaying all links, files, and photos shared inside the community.
+  * **Voice Room**: Drop-in audio channel. Click it to immediately join a voice room and talk with other active members.
 
-### 6. AI Copilot & Companion Sidebar
-* **Thread Summarizer**: Catch up on long group discussions instantly. The AI companion analyzes recent messages in the open thread and generates bulleted summaries.
-* **Draft Assistants**: Draft, proofread, translate, or change the tone of your chat input (e.g. make it professional, friendly, or funny) using the AI sparkles popup panel.
-* **Smart Replies**: Receive contextual smart suggestion chips below the text field for instant, one-tap responses.
-
-### 7. Advanced Personalizations & Security
-* **Theme Customizations**: Toggle between Light and Dark modes. Choose from curated chat background meshes (Gradient Mesh, Deep Space, Sunset Glow, Emerald Forest).
-* **Device Session Control**: View all active logins with details on browser type and location. Revoke specific device sessions remotely or log out of all other locations instantly.
-* **User Blocking**: Block unwanted contacts directly from their profile card to restrict them from sending you messages or calling you.
-
----
-
-## User Guide & Quick Start
-
-### Connecting with a New Friend
-1. Navigate to the **Profile** tab in the sidebar (click on your avatar).
-2. Locate the **Quick Connect** section:
-   * To share your code: click **Generate Code** and show the 4-digit code to your friend.
-   * To connect with a friend: type their 4-digit code in the connection input field and click **Connect**.
-3. A direct chat window will immediately open, and they will appear in your sidebar chats list!
-
-### Starting a WebRTC Call
-1. Open a direct chat window with a contact.
-2. Click the **Phone** (Audio Call) or **Video Camera** (Video Call) icon in the top header.
-3. An outgoing call overlay will appear, ringing their device. Once they click **Accept**, the video/audio streams will bind instantly.
-4. Click the **End Call** button (Red Phone) at any time to hang up.
-
-### Managing Communities
-1. Click the **Explore / Communities** tab in the sidebar.
-2. Click **Create Community**, upload a community banner and avatar, and input a name.
-3. Once created, click on your community in the sidebar to access its channel tree. Click **Invite Link** to generate public or private JWT-signed invite links to send to your friends.
+### 6. AI Copilot & Personal Settings
+* **AI Copilot Sidebar**: Click the Sparkles icon to open the AI sidebar helper. It reviews the recent message history of the chat and provides quick bulleted summaries or facts checking.
+* **Drafting Helpers**: Smart suggested replies appear as chips below your chat input for quick one-tap sending. You can also click the sparkles next to the input text field to translate your message or change its tone.
+* **Session Manager & Blocking**: In the **Settings** panel, view details of all active logins. Revoke specific device logins remotely if you suspect unauthorized access. You can also toggle blocking for specific contacts to restrict them from messaging or calling you.
 
 ---
 
 ## Testing & Seeder Credentials
 
-To help developers test the platform's multi-device real-time sync, WebRTC calls, and moderator capabilities, the database is preloaded with testing profiles:
+To help test the platform's multi-device real-time sync, WebRTC calls, and moderator capabilities, the database is preloaded with testing profiles:
 
 * **Default Password for All Seeded Users**: `password123`
 * **Seeded Sandbox Accounts**:
@@ -164,36 +207,3 @@ To help developers test the platform's multi-device real-time sync, WebRTC calls
   * **System Administrator** (`admin@connect.chat` / Username: `admin` — has moderator privileges to view the admin analytic panels)
 
 *Tip: Open a normal browser tab and an Incognito window side-by-side to log in as Alice and Bob and test real-time features!*
-
----
-
-## Local Running Instructions
-
-Ensure you have **Node.js (v20+)** installed on your system.
-
-### 1. Setup Backend Server
-```bash
-cd backend
-npm install
-```
-* Create a `.env` file under `backend/` using the format shown in `.env.example`.
-* Seed the database:
-```bash
-npm run seed
-```
-* Start the development server:
-```bash
-npm run dev
-```
-
-### 2. Setup Frontend Client
-In a new terminal window:
-```bash
-cd frontend
-npm install
-```
-* Start the development server:
-```bash
-npm run dev
-```
-* Open your browser and navigate to `http://localhost:5173`.
