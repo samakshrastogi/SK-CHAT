@@ -408,7 +408,7 @@ export default function ChatDashboard() {
     }
   }, [activeChat, messages]);
 
-  // Bind WebRTC socket triggers & real-time notification events
+  // Bind WebRTC socket triggers & real-time notification events, stories, and communities
   useEffect(() => {
     if (socket) {
       socket.on('call:accepted', ({ answer }) => {
@@ -425,6 +425,44 @@ export default function ChatDashboard() {
       socket.on('notification:new', (notif) => {
         addIncomingNotification(notif);
       });
+
+      // Real-time WhatsApp/Instagram-style Stories (Statuses)
+      socket.on('status:new', (newStatus) => {
+        setStatuses((prev) => {
+          if (prev.some(s => s._id === newStatus._id)) return prev;
+          return [newStatus, ...prev];
+        });
+      });
+
+      socket.on('status:liked', ({ statusId, likes }) => {
+        setStatuses((prev) =>
+          prev.map((s) => (s._id === statusId ? { ...s, likes } : s))
+        );
+      });
+
+      socket.on('status:viewed', ({ statusId, views }) => {
+        setStatuses((prev) =>
+          prev.map((s) => (s._id === statusId ? { ...s, views } : s))
+        );
+      });
+
+      socket.on('status:deleted', ({ statusId }) => {
+        setStatuses((prev) => prev.filter((s) => s._id !== statusId));
+      });
+
+      // Real-time Communities
+      socket.on('community:created', (newCommunity) => {
+        setCommunities((prev) => {
+          if (prev.some(c => c._id === newCommunity._id)) return prev;
+          return [newCommunity, ...prev];
+        });
+      });
+
+      socket.on('community:updated', (updatedCommunity) => {
+        setCommunities((prev) =>
+          prev.map((c) => (c._id === updatedCommunity._id ? updatedCommunity : c))
+        );
+      });
     }
     // Request browser notification permission on first mount
     requestBrowserPermission();
@@ -432,6 +470,12 @@ export default function ChatDashboard() {
     return () => {
       if (socket) {
         socket.off('notification:new');
+        socket.off('status:new');
+        socket.off('status:liked');
+        socket.off('status:viewed');
+        socket.off('status:deleted');
+        socket.off('community:created');
+        socket.off('community:updated');
       }
     };
   }, [socket]);

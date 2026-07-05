@@ -140,6 +140,11 @@ export const createCommunity = async (req: AuthenticatedRequest, res: Response, 
         select: 'name description lastMessage'
       });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('community:created', populated);
+    }
+
     res.status(201).json({ success: true, community: populated });
   } catch (error) {
     next(error);
@@ -199,6 +204,11 @@ export const joinCommunity = async (req: AuthenticatedRequest, res: Response, ne
         select: 'name description lastMessage'
       });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('community:updated', populated);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Joined community successfully',
@@ -233,6 +243,16 @@ export const addCommunityChannel = async (req: AuthenticatedRequest, res: Respon
     community.groupIds.push(newChannel._id as any);
     await community.save();
 
+    const populated = await Community.findById(communityId)
+      .populate('admins', 'username avatar')
+      .populate('members', 'username avatar')
+      .populate('groupIds', 'name description lastMessage');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('community:updated', populated);
+    }
+
     res.status(201).json({ success: true, channel: newChannel });
   } catch (error) {
     next(error);
@@ -261,6 +281,17 @@ export const leaveCommunity = async (req: AuthenticatedRequest, res: Response, n
       { communityId: community._id },
       { $pull: { participants: userId, admins: userId, moderators: userId } }
     );
+
+    const io = req.app.get('io');
+    if (io) {
+      const populated = await Community.findById(communityId)
+        .populate('admins', 'username avatar')
+        .populate('members', 'username avatar')
+        .populate('groupIds', 'name description lastMessage');
+      if (populated) {
+        io.emit('community:updated', populated);
+      }
+    }
 
     res.status(200).json({ success: true, message: 'Successfully left community' });
   } catch (error) {
@@ -377,6 +408,16 @@ export const actionJoinRequest = async (req: AuthenticatedRequest, res: Response
       await joinReq.save();
     }
 
+    const populated = await Community.findById(joinReq.communityId)
+      .populate('admins', 'username avatar')
+      .populate('members', 'username avatar')
+      .populate('groupIds', 'name description lastMessage');
+
+    const io = req.app.get('io');
+    if (io && populated) {
+      io.emit('community:updated', populated);
+    }
+
     res.status(200).json({ success: true, message: `Request successfully ${action}ed` });
   } catch (error) {
     next(error);
@@ -429,6 +470,11 @@ export const updateCommunitySettings = async (req: AuthenticatedRequest, res: Re
       .populate('admins', 'username avatar')
       .populate('members', 'username avatar')
       .populate('groupIds', 'name description lastMessage');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('community:updated', updated);
+    }
 
     res.status(200).json({ success: true, community: updated });
   } catch (error) {

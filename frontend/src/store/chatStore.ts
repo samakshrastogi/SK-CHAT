@@ -29,6 +29,7 @@ interface ChatState {
   localUpdatePoll: (messageId: string, pollData: any) => void;
   localUpdatePinnedMessages: (chatId: string, pinnedMessages: any[]) => void;
   localUpdateReactions: (chatId: string, messageId: string, reactions: any[]) => void;
+  localUpdateUserPresence: (userId: string, status: 'online' | 'offline', lastSeen?: string) => void;
   setTypingUser: (chatId: string, userId: string, username: string | null) => void;
   incrementUnread: (chatId: string) => void;
   clearUnread: (chatId: string) => void;
@@ -410,6 +411,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...state.messages,
           [chatId]: updated
         }
+      };
+    });
+  },
+
+  localUpdateUserPresence: (userId, status, lastSeen) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        const updatedParticipants = chat.participants.map((p) => {
+          const pId = typeof p === 'string' ? p : p._id;
+          if (pId === userId) {
+            return {
+              ...p,
+              status,
+              ...(lastSeen ? { lastSeen } : {})
+            };
+          }
+          return p;
+        });
+        return { ...chat, participants: updatedParticipants };
+      });
+
+      let updatedActiveChat = state.activeChat;
+      if (state.activeChat) {
+        const updatedParticipants = state.activeChat.participants.map((p) => {
+          const pId = typeof p === 'string' ? p : p._id;
+          if (pId === userId) {
+            return {
+              ...p,
+              status,
+              ...(lastSeen ? { lastSeen } : {})
+            };
+          }
+          return p;
+        });
+        updatedActiveChat = { ...state.activeChat, participants: updatedParticipants };
+      }
+
+      return {
+        chats: updatedChats,
+        activeChat: updatedActiveChat
       };
     });
   },

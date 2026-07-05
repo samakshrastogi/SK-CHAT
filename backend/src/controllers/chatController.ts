@@ -39,6 +39,11 @@ export const createChat = async (req: AuthenticatedRequest, res: Response, next:
       const populated = await Chat.findById(newChat._id)
         .populate('participants', 'username avatar status lastSeen bio');
 
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${participantId}`).emit('chat:created', populated);
+      }
+
       res.status(201).json({ success: true, chat: populated });
       return;
     }
@@ -66,6 +71,16 @@ export const createChat = async (req: AuthenticatedRequest, res: Response, next:
     const populatedGroup = await Chat.findById(newGroup._id)
       .populate('participants', 'username avatar status lastSeen bio')
       .populate('admins', 'username avatar');
+
+    const io = req.app.get('io');
+    if (io && populatedGroup) {
+      populatedGroup.participants.forEach((p: any) => {
+        const pId = typeof p === 'string' ? p : p._id.toString();
+        if (pId !== req.user!.id.toString()) {
+          io.to(`user:${pId}`).emit('chat:created', populatedGroup);
+        }
+      });
+    }
 
     res.status(201).json({ success: true, chat: populatedGroup });
   } catch (error) {

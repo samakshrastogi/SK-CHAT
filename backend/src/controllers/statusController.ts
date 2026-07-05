@@ -34,6 +34,11 @@ export const createStatus = async (req: AuthenticatedRequest, res: Response, nex
 
     const populated = await Status.findById(status._id).populate('userId', 'username avatar');
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('status:new', populated);
+    }
+
     res.status(201).json({ success: true, status: populated });
   } catch (error) {
     next(error);
@@ -71,6 +76,11 @@ export const viewStatus = async (req: AuthenticatedRequest, res: Response, next:
     if (!viewed) {
       status.views.push({ userId: req.user!.id as any, viewedAt: new Date() });
       await status.save();
+
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('status:viewed', { statusId, views: status.views });
+      }
     }
 
     res.status(200).json({ success: true, views: status.views });
@@ -99,6 +109,12 @@ export const likeStatus = async (req: AuthenticatedRequest, res: Response, next:
     }
 
     await status.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('status:liked', { statusId, likes: status.likes });
+    }
+
     res.status(200).json({ success: true, liked, likes: status.likes });
   } catch (error) {
     next(error);
@@ -115,6 +131,12 @@ export const deleteStatus = async (req: AuthenticatedRequest, res: Response, nex
     }
 
     await Status.findByIdAndDelete(statusId);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('status:deleted', { statusId });
+    }
+
     res.status(200).json({ success: true, message: 'Status deleted successfully' });
   } catch (error) {
     next(error);

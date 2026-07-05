@@ -12,7 +12,7 @@ export const useSocket = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   
-  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages, localUpdateReactions, incrementUnread } = useChatStore();
+  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages, localUpdateReactions, localUpdateUserPresence, incrementUnread } = useChatStore();
   const { setIncomingCall, resetCallStore } = useCallStore();
 
   const chatsRef = useRef(chats);
@@ -150,9 +150,12 @@ export const useSocket = () => {
 
     // Presence Toggles
     socket.on('presence:update', ({ userId, status, lastSeen }) => {
-      // Re-trigger chats fetch or dynamically adjust local participants online status in Zustand
-      // For simplicity, we can reload chats or trigger state refreshes
-      // We will refresh chat participants statuses
+      localUpdateUserPresence(userId, status, lastSeen);
+    });
+
+    // Chat created trigger
+    socket.on('chat:created', (newChat) => {
+      fetchChats();
     });
 
     // WebRTC Signaling
