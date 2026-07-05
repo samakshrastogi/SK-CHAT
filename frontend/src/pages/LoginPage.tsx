@@ -4,6 +4,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '../store/authStore.js';
 import { Mail, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { setAccessTokenInMemory } from '../api/client.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -152,7 +153,9 @@ function LoginForm() {
           {/* Real Google OAuth Button wrapper */}
           <div className="flex justify-center mt-2 w-full">
             <GoogleLogin
-              onSuccess={handleGoogleSuccess}
+              ux_mode="redirect"
+              login_uri={`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/google-sso-redirect`}
+              onSuccess={() => {}}
               onError={() => setErrorMsg('Google Sign-In failed or cancelled.')}
               useOneTap
               theme="outline"
@@ -174,16 +177,33 @@ function LoginForm() {
 
 /* ── Outer wrapper providing the Google OAuth context ── */
 export default function LoginPage() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, checkAuth } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
 
   React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      // Save token in memory
+      setAccessTokenInMemory(token);
+      // Clean query parameters from address bar to keep URL clean
+      window.history.replaceState({}, document.title, window.location.pathname);
+      // Fetch user profile and navigate
+      checkAuth().then((success) => {
+        if (success) {
+          const from = location.state?.from?.pathname || '/chat';
+          navigate(from, { replace: true });
+        }
+      });
+      return;
+    }
+
     if (isAuthenticated) {
       const from = location.state?.from?.pathname || '/chat';
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate, location]);
+  }, [isAuthenticated, navigate, location, checkAuth]);
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>

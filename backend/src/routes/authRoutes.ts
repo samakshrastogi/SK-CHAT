@@ -10,7 +10,8 @@ import {
   getActiveSessions,
   logoutSession,
   logoutAllSessions,
-  googleSSO
+  googleSSO,
+  googleSSORedirect
 } from '../controllers/authController.js';
 import { registerValidator, loginValidator, resetPasswordValidator } from '../validators/authValidator.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
@@ -26,6 +27,7 @@ router.post('/refresh', refreshToken);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPasswordValidator, resetPassword);
 router.post('/google-sso', googleSSO);
+router.post('/google-sso-redirect', googleSSORedirect);
 
 // Multi-Device Sessions (Protected)
 router.get('/sessions', authenticateJWT as any, getActiveSessions as any);

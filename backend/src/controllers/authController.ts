@@ -481,3 +481,84 @@ export const googleSSO = async (req: Request, res: Response, next: NextFunction)
     next(error);
   }
 };
+
+export const googleSSORedirect = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      throw new CustomError('Google credential (ID token) is required', 400);
+    }
+
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      throw new CustomError('Invalid Google token payload', 400);
+    }
+
+    const { email, name, picture, sub: googleId } = payload;
+    const emailLower = email.toLowerCase();
+
+    let user = await User.findOne({ $or: [{ email: emailLower }, { googleId }] });
+
+    if (!user) {
+      let baseUsername = (name || emailLower.split('@')[0])
+        .replace(/\s+/g, '')
+        .slice(0, 20);
+      let finalUsername = baseUsername;
+      const taken = await User.findOne({ username: finalUsername });
+      if (taken) {
+        finalUsername = `${baseUsername}${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(randomPassword, salt);
+
+      user = await User.create({
+        email: emailLower,
+        username: finalUsername,
+        password: hashedPassword,
+        googleId,
+        avatar: picture || undefined,
+        isVerified: true,
+      });
+    } else if (!user.googleId) {
+      user.googleId = googleId;
+      if (!user.avatar && picture) user.avatar = picture;
+      await user.save();
+    }
+
+    const deviceId = crypto.randomUUID();
+    const ipAddress = req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+    const accessToken = generateAccessToken(user, deviceId);
+    const refreshToken = generateRefreshToken(user, deviceId);
+
+    const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    await DeviceSession.create({
+      userId: user._id,
+      refreshToken: hashedToken,
+      deviceId,
+      deviceType: 'Google SSO Web Client Redirect',
+      ipAddress,
+      lastActive: new Date(),
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/login?token=${accessToken}`);
+  } catch (error) {
+    next(error);
+  }
+};
