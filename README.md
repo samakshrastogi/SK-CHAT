@@ -11,7 +11,6 @@ SK Connect is a state-of-the-art, feature-rich instant messaging and communicati
 4. [Expiring Status Stories](#4-expiring-status-stories)
 5. [Discord-Style Communities & Channels](#5-discord-style-communities--channels)
 6. [AI Companion & Settings Control](#6-ai-companion--settings-control)
-7. [Testing & Seeder Credentials](#testing--seeder-credentials)
 
 ---
 
@@ -228,17 +227,4 @@ graph TD
 * Dynamic theme toggle (Dark/Light mode) and chat wallpapers mesh.
 * Device session monitoring and remote logout revocation.
 
----
 
-## Testing & Seeder Credentials
-
-To help test the platform's multi-device real-time sync, WebRTC calls, and moderator capabilities, the database is preloaded with testing profiles:
-
-* **Default Password for All Seeded Users**: `password123`
-* **Seeded Sandbox Accounts**:
-  * **Alice** (`alice@connect.chat` / Username: `alice`)
-  * **Bob** (`bob@connect.chat` / Username: `bob`)
-  * **Charlie** (`charlie@connect.chat` / Username: `charlie`)
-  * **System Administrator** (`admin@connect.chat` / Username: `admin` — has moderator privileges to view the admin analytic panels)
-
-*Tip: Open a normal browser tab and an Incognito window side-by-side to log in as Alice and Bob and test real-time features!*

@@ -39,14 +39,6 @@ const startServer = async () => {
       mongoose.connection.once('open', async () => {
         try {
           logger.info('MongoDB connection opened. Running startup database tasks...');
-          // Auto-seed if database is empty
-          const userCount = await User.countDocuments();
-          if (userCount === 0) {
-            logger.info('Database is empty. Automatically seeding default data...');
-            const { seed } = await import('./utils/seed.js');
-            await seed(false);
-          }
-
           // Reschedule outstanding self-destruct timers
           await rescheduleSelfDestructMessages(io);
           logger.info('Startup database tasks completed successfully.');
