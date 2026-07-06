@@ -10,7 +10,7 @@ import { useWebRTC } from '../hooks/useWebRTC.js';
 import { apiClient } from '../api/client.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MessageSquare, Video, Phone, Settings, User as UserIcon, LogOut, Search, Plus, Send,
+  ChevronLeft, MessageSquare, Video, Phone, Settings, User as UserIcon, LogOut, Search, Plus, Send,
   Paperclip, MoreVertical, X, Check, CheckCheck, Smile, Star, Trash2, Edit2, CornerUpLeft,
   Pin, Shield, Mic, HelpCircle, Share2, BarChart2, ShieldAlert, Trash, PlusCircle, Globe,
   Compass, Eye, Play, Sparkles, Languages, FileText, MapPin, PhoneMissed, Volume2, VideoOff,
@@ -1151,7 +1151,7 @@ export default function ChatDashboard() {
       <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] rounded-full bg-purple-400/15 dark:bg-indigo-600/10 blur-[120px] pointer-events-none z-0" />
 
       {/* Left Column: List Panel + Bottom Navigation Bar */}
-      <section className="w-80 md:w-96 glass-panel border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0 relative overflow-hidden">
+      <section className={`w-full md:w-96 glass-panel border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0 relative overflow-hidden transition-all duration-300 ${activeChat ? 'hidden md:flex' : 'flex'}`}>
         
         {/* App Branding Top Header */}
         <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800/40 flex items-center justify-between bg-white/30 dark:bg-slate-900/30">
@@ -1747,7 +1747,7 @@ export default function ChatDashboard() {
         </section>
 
         {/* 3. Main Chat Panel (Active view on Right) */}
-        <main className={`flex-1 flex flex-col justify-between relative overflow-hidden transition-all duration-500 ${wallpaperClasses[wallpaperPreset] || wallpaperClasses['gradient-mesh']}`}>
+        <main className={`flex-1 flex flex-col justify-between relative overflow-hidden transition-all duration-500 ${activeChat ? 'flex' : 'hidden md:flex'} ${wallpaperClasses[wallpaperPreset] || wallpaperClasses['gradient-mesh']}`}>
         {activeChat ?
           (() => {
             const opponent = activeChat.isGroup ? null : activeChat.participants.find(p => p._id !== (user?._id || user?.id));
@@ -1757,15 +1757,25 @@ export default function ChatDashboard() {
                 <div className="flex-1 flex flex-col h-full justify-between overflow-hidden border-r border-slate-200 dark:border-slate-800/40">
                 
                 {/* Active chat header */}
-                <header className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
-                  <div 
-                    className="flex items-center gap-3 cursor-pointer group"
-                    onClick={() => {
-                      setIsGroupInfoOpen(!isGroupInfoOpen);
-                      setIsAiOpen(false);
-                    }}
-                  >
-                    <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-300 dark:border-slate-700/40 transition-transform group-hover:scale-105">
+                <header className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 md:px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
+                  <div className="flex items-center gap-2.5 max-w-[75%]">
+                    {/* Back Button (Mobile only) */}
+                    <button
+                      onClick={() => setActiveChat(null)}
+                      className="md:hidden p-1.5 -ml-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors shrink-0"
+                      title="Back to Chats"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer group truncate"
+                      onClick={() => {
+                        setIsGroupInfoOpen(!isGroupInfoOpen);
+                        setIsAiOpen(false);
+                      }}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-300 dark:border-slate-700/40 transition-transform group-hover:scale-105 shrink-0">
                       {activeChat.isGroup ? (
                         activeChat.avatar ? <img src={activeChat.avatar} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center font-bold text-slate-500 bg-indigo-500/10 text-indigo-500">G</div>
                       ) : (
@@ -1791,8 +1801,9 @@ export default function ChatDashboard() {
                       </p>
                     </div>
                   </div>
+                </div>
 
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3">
                     {/* Search Messages Toggle */}
                     <button
                       onClick={() => setChatSearchOpen(!chatSearchOpen)}
