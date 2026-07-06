@@ -2505,7 +2505,7 @@ export default function ChatDashboard() {
             })()}
 
             {/* Message Area */}
-            <div className="flex-1 overflow-y-auto px-12 py-6 space-y-7 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 py-4 md:py-6 space-y-5 md:space-y-7 custom-scrollbar">
               {(() => {
                 const rawMsgs = messages[activeChat._id] || [];
                 const filteredMsgs = chatSearchQuery.trim()
@@ -2714,7 +2714,7 @@ export default function ChatDashboard() {
           </div>
 
             {/* Bottom input area */}
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shrink-0">
+            <div className="p-2.5 sm:p-4 border-t border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shrink-0">
               
               {/* Replying feedback */}
               {replyingTo && (
@@ -2995,7 +2995,7 @@ export default function ChatDashboard() {
 
           {/* AI companion sidebar panel */}
           {isAiOpen && (
-            <div className="w-80 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden">
+            <div className="w-full md:w-80 border-l border-slate-200 dark:border-slate-800/40 bg-slate-50/95 dark:bg-slate-955/95 md:bg-white/40 md:dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 absolute md:relative right-0 top-0 z-30 overflow-hidden shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
               {/* AI Header */}
               <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
                 <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400">
@@ -3073,7 +3073,7 @@ export default function ChatDashboard() {
 
           {/* Group Details Info sidebar panel */}
           {isGroupInfoOpen && activeChat.isGroup && !activeChat.isCommunity && (
-            <div className="w-80 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden">
+            <div className="w-full md:w-80 border-l border-slate-200 dark:border-slate-800/40 bg-slate-50/95 dark:bg-slate-955/95 md:bg-white/40 md:dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 absolute md:relative right-0 top-0 z-30 overflow-hidden shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
               {/* Header */}
               <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
                 <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Group Details</span>
@@ -3472,7 +3472,7 @@ export default function ChatDashboard() {
 
           {/* Community Details Info sidebar panel */}
           {isGroupInfoOpen && activeChat.isGroup && activeChat.isCommunity && activeCommunity && (
-            <div className="w-80 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden animate-in slide-in-from-right-2 duration-200">
+            <div className="w-full md:w-80 border-l border-slate-200 dark:border-slate-800/40 bg-slate-50/95 dark:bg-slate-955/95 md:bg-white/40 md:dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 absolute md:relative right-0 top-0 z-30 overflow-hidden shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
               {/* Header */}
               <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
                 <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Server Info</span>
@@ -3760,7 +3760,7 @@ export default function ChatDashboard() {
 
           {/* User Profile Info sidebar panel (Direct Chat only) */}
           {isGroupInfoOpen && !activeChat.isGroup && opponent && (
-            <div className="w-80 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden">
+            <div className="w-full md:w-80 border-l border-slate-200 dark:border-slate-800/40 bg-slate-50/95 dark:bg-slate-955/95 md:bg-white/40 md:dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 absolute md:relative right-0 top-0 z-30 overflow-hidden shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
               {/* Header */}
               <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
                 <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Contact Profile</span>
