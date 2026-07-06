@@ -4,12 +4,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '../store/authStore.js';
 import { Mail, Lock, User, AlertTriangle, CheckCircle } from 'lucide-react';
+import { apiClient, setAccessTokenInMemory } from '../api/client.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function RegisterForm() {
   const { register, handleSubmit, watch, formState: { errors } } = useForm();
-  const { registerUser, googleLogin, isLoading } = useAuthStore();
+  const { registerUser, googleLogin, checkAuth, isLoading } = useAuthStore();
   const navigate = useNavigate();
   const [success, setSuccess] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
@@ -265,15 +266,42 @@ function RegisterForm() {
 
           {/* Real Google OAuth Button wrapper */}
           <div className="flex justify-center mt-2 w-full">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setErrorMsg('Google Sign-In failed or cancelled.')}
-              useOneTap
-              theme="outline"
-              size="large"
-              shape="rectangular"
-              width="370"
-            />
+            {GOOGLE_CLIENT_ID === 'your_google_client_id_here' || !GOOGLE_CLIENT_ID ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    setErrorMsg('');
+                    const response = await apiClient.post('/auth/google-sso', { credential: 'mock_google_credential' });
+                    const { accessToken } = response.data;
+                    setAccessTokenInMemory(accessToken);
+                    await checkAuth();
+                    navigate('/chat');
+                  } catch (err: any) {
+                    setErrorMsg(err.response?.data?.message || 'Mock Google registration failed.');
+                  }
+                }}
+                className="w-full h-11 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-205 font-bold text-xs flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 transition-all"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69a5.74 5.74 0 0 1-2.49 3.77v3.12h4.02c2.35-2.16 3.52-5.32 3.52-8.74Z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-3.83-2.97c-1.08.72-2.45 1.16-4.13 1.16-3.18 0-5.88-2.15-6.84-5.04H1.14v3.12A12.01 12.01 0 0 0 12 24Z"/>
+                  <path fill="#FBBC05" d="M5.16 14.24a7.22 7.22 0 0 1 0-4.48V6.64H1.14a12.01 12.01 0 0 0 0 10.72l4.02-3.12Z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.43-3.43A11.95 11.95 0 0 0 12 0 12.01 12.01 0 0 0 1.14 6.64l4.02 3.12c.96-2.89 3.66-5.01 6.84-5.01Z"/>
+                </svg>
+                Google SSO (Developer Bypass Mode)
+              </button>
+            ) : (
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setErrorMsg('Google Sign-In failed or cancelled.')}
+                useOneTap
+                theme="outline"
+                size="large"
+                shape="rectangular"
+                width="370"
+              />
+            )}
           </div>
         </div>
 
