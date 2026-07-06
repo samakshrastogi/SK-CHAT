@@ -4106,20 +4106,28 @@ export default function ChatDashboard() {
         onReply={handleReplyToStory}
         onLike={handleLikeStory}
       />
+
       {/* 10. Connect via Code Modal Overlay */}
       <AnimatePresence>
         {connectModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-6">
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-6">
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-[400px] glass-panel rounded-3xl p-6 shadow-2xl space-y-4 text-left"
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="w-full max-w-[420px] bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-3xl p-6.5 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] space-y-5.5 text-left relative overflow-hidden"
             >
-              <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800/40">
-                <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
-                  <UserPlus className="h-5 w-5 text-indigo-500" />
-                  <span>Connect with Code</span>
+              {/* Background glowing decorations */}
+              <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-12 -left-12 w-28 h-28 rounded-full bg-pink-500/10 blur-2xl pointer-events-none" />
+
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
+                <h3 className="font-extrabold text-lg text-slate-850 dark:text-white flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
+                    <UserPlus className="h-5 w-5" />
+                  </div>
+                  <span className="tracking-tight">Connect with Code</span>
                 </h3>
                 <button 
                   onClick={() => { 
@@ -4130,29 +4138,29 @@ export default function ChatDashboard() {
                     setConnectError('');
                     setConnectSuccess('');
                   }} 
-                  className="text-slate-500 hover:text-slate-850 dark:hover:text-white transition-colors"
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
               {/* Enter Connection Code */}
-              <form onSubmit={handleResolveCode} className="space-y-3 pt-2">
+              <form onSubmit={handleResolveCode} className="space-y-3.5 pt-1 relative z-10">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-widest mb-1.5">Enter Friend's 4-Digit Code</label>
-                  <div className="flex gap-2">
+                  <label className="block text-[9.5px] font-black text-slate-500 dark:text-slate-450 uppercase tracking-widest mb-2">Enter Friend's 4-Digit Code</label>
+                  <div className="flex gap-2.5">
                     <input
                       type="text"
                       maxLength={4}
                       value={enterConnectionCode}
                       onChange={(e) => setEnterConnectionCode(e.target.value.replace(/\D/g, ''))}
                       placeholder="e.g. 5839"
-                      className="flex-1 h-11 rounded-xl text-center text-lg font-black tracking-widest bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 outline-none focus:border-indigo-500 text-slate-800 dark:text-white"
+                      className="flex-1 h-11.5 rounded-2xl text-center text-xl font-black tracking-[0.2em] bg-slate-50/50 dark:bg-slate-950/40 border border-slate-205 dark:border-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-800 dark:text-white transition-all placeholder:text-slate-400 placeholder:font-normal placeholder:tracking-normal"
                     />
                     <button
                       type="submit"
-                      disabled={connectLoading}
-                      className="px-5 h-11 rounded-xl bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-500/50 text-white on-color font-bold text-xs shadow-md shadow-indigo-500/10 transition-colors flex items-center gap-1 shrink-0"
+                      disabled={connectLoading || enterConnectionCode.length !== 4}
+                      className="px-6 h-11.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:from-indigo-500/40 disabled:to-purple-600/40 disabled:scale-100 disabled:cursor-not-allowed hover:scale-[1.02] text-white font-extrabold text-xs shadow-md shadow-indigo-500/15 active:scale-98 transition-all flex items-center justify-center shrink-0"
                     >
                       {connectLoading ? 'Connecting...' : 'Connect'}
                     </button>
@@ -4160,48 +4168,51 @@ export default function ChatDashboard() {
                 </div>
               </form>
 
-              <div className="relative py-2.5 flex items-center shrink-0">
-                <div className="flex-grow border-t border-slate-200 dark:border-slate-800/40"></div>
-                <span className="flex-shrink mx-4 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">OR</span>
-                <div className="flex-grow border-t border-slate-200 dark:border-slate-800/40"></div>
+              <div className="relative py-2 flex items-center shrink-0 z-10">
+                <div className="flex-grow border-t border-slate-100 dark:border-slate-800/40"></div>
+                <span className="flex-shrink mx-4 text-[8.5px] font-black text-slate-400 dark:text-slate-550 uppercase tracking-widest">OR</span>
+                <div className="flex-grow border-t border-slate-100 dark:border-slate-800/40"></div>
               </div>
 
               {/* Generate Your Code */}
-              <div className="space-y-3.5 text-center">
+              <div className="space-y-4 text-center relative z-10">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-widest mb-2">Share Your Temporary Code</p>
+                  <p className="text-[9.5px] font-black text-slate-500 dark:text-slate-455 uppercase tracking-widest mb-2.5">Share Your Temporary Code</p>
                   
                   {myConnectionCode ? (
-                    <div className="p-4.5 rounded-2xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center gap-2">
-                      <span className="text-3xl font-black tracking-widest text-indigo-600 dark:text-indigo-400 font-mono">
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-500/5 to-purple-500/5 dark:from-indigo-550/10 dark:to-purple-550/10 border border-indigo-500/15 dark:border-indigo-500/25 flex flex-col items-center gap-2.5 shadow-inner">
+                      <span className="text-4xl font-extrabold tracking-[0.2em] bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 font-mono select-all">
                         {myConnectionCode}
                       </span>
-                      <span className="text-[9px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-md">
+                      <span className="text-[9px] font-black tracking-wide text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 dark:bg-indigo-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                         {codeCountdown || 'Expires soon'}
                       </span>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-550 dark:text-slate-450 italic py-2">No active connection code generated yet.</p>
+                    <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800/40 italic text-xs text-slate-500 dark:text-slate-450">
+                      No active connection code generated yet.
+                    </div>
                   )}
                 </div>
 
                 <button
                   type="button"
                   onClick={generateMyCode}
-                  className="w-full h-10.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-850 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors"
+                  className="w-full h-11 rounded-2xl bg-white dark:bg-slate-950 hover:bg-slate-55 dark:hover:bg-slate-900 border border-slate-205 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-all active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
                 >
-                  {myConnectionCode ? 'Generate New Code' : 'Generate Code'}
+                  {myConnectionCode ? 'Generate New Code' : 'Generate Temporary Code'}
                 </button>
               </div>
 
               {/* Notifications / Alerts */}
               {connectError && (
-                <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/20 text-red-500 text-xs font-semibold text-center">
+                <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold text-center animate-in fade-in slide-in-from-top-1">
                   {connectError}
                 </div>
               )}
               {connectSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-500 text-xs font-semibold text-center">
+                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-bold text-center animate-in fade-in slide-in-from-top-1">
                   {connectSuccess}
                 </div>
               )}

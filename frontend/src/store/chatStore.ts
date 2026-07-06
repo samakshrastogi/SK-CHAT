@@ -165,9 +165,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       
       const newMsg = response.data.message;
 
-      // Optimistically append the message to chat
+      // Optimistically append the message to chat if not already added by socket
       set((state) => {
         const chatMsgs = state.messages[chatId] || [];
+        if (chatMsgs.some((m) => m._id === newMsg._id)) {
+          return {};
+        }
         return {
           messages: {
             ...state.messages,
