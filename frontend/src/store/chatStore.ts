@@ -43,6 +43,13 @@ interface ChatState {
   setTypingUser: (chatId: string, userId: string, username: string | null) => void;
   incrementUnread: (chatId: string) => void;
   clearUnread: (chatId: string) => void;
+  upsertChat: (chat: Chat) => void;
+  removeChat: (chatId: string) => void;
+  replaceChat: (chat: Chat) => void;
+  localUpdateMessage: (chatId: string, message: Message) => void;
+  localMarkMessageDeleted: (chatId: string | undefined, messageId: string, isDeletedForEveryone?: boolean) => void;
+  localAddChatMember: (chatId: string, user: User, message?: Message) => void;
+  localRemoveChatMember: (chatId: string, userId: string, message?: Message) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -133,6 +140,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       unreadCounts: { ...state.unreadCounts, [chatId]: 0 }
     }));
+  },
+
+  upsertChat: (chat) => {
+    set((state) => {
+      const existing = state.chats.find((c) => c._id === chat._id);
+      const mergedChat = existing
+        ? { ...existing, ...chat, unreadCount: chat.unreadCount ?? existing.unreadCount }
+        : chat;
+
+      return {
+        chats: [
+          mergedChat,
+          ...state.chats.filter((c) => c._id !== chat._id)
+        ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+        unreadCounts: {
+          ...state.unreadCounts,
+          [chat._id]: chat.unreadCount ?? state.unreadCounts[chat._id] ?? 0
+        },
+        activeChat: state.activeChat?._id === chat._id
+          ? { ...state.activeChat, ...chat }
+          : state.activeChat
+      };
+    });
+  },
+
+  replaceChat: (chat) => {
+    set((state) => ({
+      chats: state.chats.map((c) => (c._id === chat._id ? { ...c, ...chat } : c)),
+      activeChat: state.activeChat?._id === chat._id ? { ...state.activeChat, ...chat } : state.activeChat
+    }));
+  },
+
+  removeChat: (chatId) => {
+    set((state) => {
+      const { [chatId]: _removedMessages, ...messages } = state.messages;
+      const { [chatId]: _removedUnread, ...unreadCounts } = state.unreadCounts;
+      const { [chatId]: _removedTyping, ...typingUsers } = state.typingUsers;
+      return {
+        chats: state.chats.filter((c) => c._id !== chatId),
+        activeChat: state.activeChat?._id === chatId ? null : state.activeChat,
+        messages,
+        unreadCounts,
+        typingUsers
+      };
+    });
   },
 
   sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn, isEncrypted, ciphertext, iv) => {
@@ -392,6 +444,116 @@ export const useChatStore = create<ChatState>((set, get) => ({
         newMessages[chatId] = newMessages[chatId].filter((m) => m._id !== messageId);
       }
       return { messages: newMessages };
+    });
+  },
+
+  localUpdateMessage: (chatId, message) => {
+    set((state) => {
+      const chatMsgs = state.messages[chatId] || [];
+      const updatedMessages = chatMsgs.some((m) => m._id === message._id)
+        ? chatMsgs.map((m) => (m._id === message._id ? message : m))
+        : [...chatMsgs, message];
+
+      return {
+        messages: {
+          ...state.messages,
+          [chatId]: updatedMessages
+        },
+        chats: state.chats.map((c) => {
+          if (c._id === chatId && c.lastMessage?._id === message._id) {
+            return { ...c, lastMessage: message, updatedAt: message.updatedAt || c.updatedAt };
+          }
+          return c;
+        })
+      };
+    });
+  },
+
+  localMarkMessageDeleted: (chatId, messageId, isDeletedForEveryone = true) => {
+    set((state) => {
+      const newMessages = { ...state.messages };
+      const updateMessage = (m: Message) => {
+        if (m._id !== messageId) return m;
+        return isDeletedForEveryone
+          ? {
+              ...m,
+              content: 'This message was deleted',
+              isDeleted: true,
+              mediaUrl: undefined,
+              pollData: undefined,
+              locationData: undefined,
+              contactData: undefined
+            }
+          : null;
+      };
+
+      const targetChatIds = chatId ? [chatId] : Object.keys(newMessages);
+      targetChatIds.forEach((targetChatId) => {
+        newMessages[targetChatId] = (newMessages[targetChatId] || [])
+          .map(updateMessage)
+          .filter(Boolean) as Message[];
+      });
+
+      return {
+        messages: newMessages,
+        chats: state.chats.map((c) => {
+          if ((chatId ? c._id === chatId : true) && c.lastMessage?._id === messageId) {
+            return {
+              ...c,
+              lastMessage: isDeletedForEveryone
+                ? { ...c.lastMessage, content: 'This message was deleted', isDeleted: true }
+                : undefined
+            };
+          }
+          return c;
+        })
+      };
+    });
+  },
+
+  localAddChatMember: (chatId, user, message) => {
+    set((state) => {
+      const appendUser = (participants: User[]) =>
+        participants.some((p) => p._id === user._id)
+          ? participants
+          : [...participants, user];
+
+      return {
+        chats: state.chats.map((c) => c._id === chatId ? { ...c, participants: appendUser(c.participants) } : c),
+        activeChat: state.activeChat?._id === chatId
+          ? { ...state.activeChat, participants: appendUser(state.activeChat.participants) }
+          : state.activeChat,
+        messages: message
+          ? {
+              ...state.messages,
+              [chatId]: [...(state.messages[chatId] || []), message].filter((msg, idx, self) =>
+                self.findIndex((m) => m._id === msg._id) === idx
+              )
+            }
+          : state.messages
+      };
+    });
+  },
+
+  localRemoveChatMember: (chatId, userId, message) => {
+    set((state) => {
+      const removeUser = (participants: User[]) =>
+        participants.filter((p) => p._id !== userId && p.id !== userId);
+
+      return {
+        chats: state.chats.map((c) => c._id === chatId ? { ...c, participants: removeUser(c.participants) } : c),
+        activeChat: state.activeChat?._id === chatId
+          ? { ...state.activeChat, participants: removeUser(state.activeChat.participants) }
+          : state.activeChat,
+        messages: message
+          ? {
+              ...state.messages,
+              [chatId]: [...(state.messages[chatId] || []), message].filter((msg, idx, self) =>
+                self.findIndex((m) => m._id === msg._id) === idx
+              )
+            }
+          : state.messages
+      };
     });
   },
 

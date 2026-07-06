@@ -277,7 +277,17 @@ export const sendFriendRequest = async (req: AuthenticatedRequest, res: Response
       expiresInHours: 168
     });
 
-    res.status(200).json({ success: true, message: 'Friend request sent', request });
+    const populatedRequest = await FriendRequest.findById(request._id)
+      .populate('senderId', 'username avatar bio status lastSeen')
+      .populate('receiverId', 'username avatar bio status lastSeen');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${receiverId}`).emit('friend_request:new', { request: populatedRequest });
+      io.to(`user:${senderId}`).emit('friend_request:outgoing', { request: populatedRequest });
+    }
+
+    res.status(200).json({ success: true, message: 'Friend request sent', request: populatedRequest });
   } catch (error) {
     next(error);
   }
@@ -320,6 +330,22 @@ export const acceptFriendRequest = async (req: AuthenticatedRequest, res: Respon
       expiresInHours: 72
     });
 
+    const [senderUser, acceptedByUser] = await Promise.all([
+      User.findById(request.senderId).select('username avatar bio status lastSeen friends'),
+      User.findById(request.receiverId).select('username avatar bio status lastSeen friends')
+    ]);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${request.senderId}`).to(`user:${request.receiverId}`).emit('friend_request:accepted', {
+        requestId: request._id,
+        senderId: request.senderId,
+        receiverId: request.receiverId,
+        senderUser,
+        receiverUser: acceptedByUser
+      });
+    }
+
     res.status(200).json({ success: true, message: 'Friend request accepted', request });
   } catch (error) {
     next(error);
@@ -340,6 +366,15 @@ export const rejectFriendRequest = async (req: AuthenticatedRequest, res: Respon
     request.status = 'declined';
     await request.save();
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${request.senderId}`).to(`user:${request.receiverId}`).emit('friend_request:declined', {
+        requestId: request._id,
+        senderId: request.senderId,
+        receiverId: request.receiverId
+      });
+    }
+
     res.status(200).json({ success: true, message: 'Friend request declined', request });
   } catch (error) {
     next(error);
@@ -359,6 +394,15 @@ export const cancelFriendRequest = async (req: AuthenticatedRequest, res: Respon
 
     request.status = 'cancelled';
     await request.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${request.senderId}`).to(`user:${request.receiverId}`).emit('friend_request:cancelled', {
+        requestId: request._id,
+        senderId: request.senderId,
+        receiverId: request.receiverId
+      });
+    }
 
     res.status(200).json({ success: true, message: 'Friend request cancelled', request });
   } catch (error) {
@@ -384,6 +428,14 @@ export const removeFriend = async (req: AuthenticatedRequest, res: Response, nex
         { senderId: friendId, receiverId: userId }
       ]
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${userId}`).to(`user:${friendId}`).emit('friend:removed', {
+        userId,
+        friendId
+      });
+    }
 
     res.status(200).json({ success: true, message: 'Friend removed successfully' });
   } catch (error) {
@@ -550,6 +602,12 @@ export const resolveConnectionCode = async (req: AuthenticatedRequest, res: Resp
 
     // Return target user and chat
     const targetUser = await User.findById(targetUserId).select('username avatar status lastSeen bio');
+
+    const io = req.app.get('io');
+    if (io && chat) {
+      io.to(`user:${targetUserId}`).emit('chat:created', chat);
+      io.to(`user:${currentUserId}`).emit('chat:created', chat);
+    }
 
     res.status(200).json({ success: true, chat, targetUser });
   } catch (error) {

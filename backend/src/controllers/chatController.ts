@@ -355,23 +355,21 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
           });
 
         if (io) {
-          // Emit to direct chat room
-          io.to(`chat:${directChat._id}`).emit('message:receive', populatedCopy);
-          // Emit to receiver user room specifically
-          io.to(`user:${memberId}`).emit('message:receive', populatedCopy);
+          io.to(`chat:${directChat._id}`).to(`user:${memberId}`).emit('message:receive', populatedCopy);
         }
       }
     }
 
-    // Regular socket emit to the main chat room and all participant user rooms in real-time
+    // Regular socket emit to the main chat room and participant user rooms in real-time.
+    // Socket.IO unions de-dupe sockets that are already in both rooms.
     if (io) {
-      io.to(`chat:${chatId}`).emit('message:receive', populated);
-
+      let targetRooms = io.to(`chat:${chatId}`);
       chat.participants.forEach((participantId) => {
         if (participantId.toString() !== req.user!.id.toString()) {
-          io.to(`user:${participantId}`).emit('message:receive', populated);
+          targetRooms = targetRooms.to(`user:${participantId}`);
         }
       });
+      targetRooms.emit('message:receive', populated);
     }
 
     res.status(201).json({ success: true, message: populated });
@@ -413,6 +411,11 @@ export const editMessage = async (req: AuthenticatedRequest, res: Response, next
         populate: { path: 'senderId', select: 'username' }
       });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${message.chatId}`).emit('message:edited', populated);
+    }
+
     res.status(200).json({ success: true, message: populated });
   } catch (error) {
     next(error);
@@ -433,6 +436,8 @@ export const deleteMessage = async (req: AuthenticatedRequest, res: Response, ne
       throw new CustomError('Unauthorized deletion', 403);
     }
 
+    const chatId = message.chatId.toString();
+
     if (deleteForEveryone) {
       if (message.senderId.toString() !== req.user!.id) {
         throw new CustomError('Only the sender can delete a message for everyone', 403);
@@ -449,6 +454,15 @@ export const deleteMessage = async (req: AuthenticatedRequest, res: Response, ne
       // For simplicity, we flag it or delete it if it is only a single chat.
       // In this setup, we will soft delete the instance
       await Message.findByIdAndDelete(messageId);
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chatId}`).emit('message:deleted', {
+        chatId,
+        messageId,
+        isDeletedForEveryone: !!deleteForEveryone
+      });
     }
 
     res.status(200).json({ success: true, messageId, isDeletedForEveryone: !!deleteForEveryone });
@@ -804,6 +818,14 @@ export const updateChatSettings = async (req: AuthenticatedRequest, res: Respons
       .populate('admins', 'username avatar bio')
       .populate('participants', 'username avatar bio')
       .populate('moderators', 'username avatar bio');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chat._id}`).emit('chat:updated', {
+        chatId: chat._id,
+        chat: populated
+      });
+    }
       
     res.status(200).json({ success: true, chat: populated });
   } catch (error) {

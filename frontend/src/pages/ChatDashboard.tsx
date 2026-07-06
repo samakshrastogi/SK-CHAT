@@ -282,7 +282,7 @@ export default function ChatDashboard() {
   const {
     chats, fetchChats, activeChat, setActiveChat, messages, sendChatMessage,
     editChatMessage, deleteChatMessage, reactToMessage, starMessageToggle, voteInPoll,
-    typingUsers, setTypingUser, togglePinChatMessage, unreadCounts
+    typingUsers, setTypingUser, togglePinChatMessage, unreadCounts, upsertChat, removeChat, replaceChat
   } = useChatStore();
   
   const callStore = useCallStore();
@@ -454,9 +454,8 @@ export default function ChatDashboard() {
       if (resp.data.success) {
         setConnectSuccess('Connected successfully!');
         setEnterConnectionCode('');
-        // Add chat to chatlist and select it
-        await fetchChats();
         if (resp.data.chat) {
+          upsertChat(resp.data.chat);
           setActiveChat(resp.data.chat);
         }
         setTimeout(() => {
@@ -659,73 +658,77 @@ export default function ChatDashboard() {
 
   // Bind WebRTC socket triggers & real-time notification events, stories, and communities
   useEffect(() => {
-    if (socket) {
-      socket.on('call:accepted', ({ answer }) => {
-        handleCallAccepted(answer);
-      });
-      socket.on('call:candidate', ({ candidate }) => {
-        handleIceCandidate(candidate);
-      });
-      socket.on('call:rejected', ({ reason }) => {
-        alert(`Call rejected: ${reason}`);
-        callStore.resetCallStore();
-      });
-      // Real-time notification push
-      socket.on('notification:new', (notif) => {
-        addIncomingNotification(notif);
-      });
+    if (!socket) return;
 
-      // Real-time WhatsApp/Instagram-style Stories (Statuses)
-      socket.on('status:new', (newStatus) => {
-        setStatuses((prev) => {
-          if (prev.some(s => s._id === newStatus._id)) return prev;
-          return [newStatus, ...prev];
-        });
+    const onCallAccepted = ({ answer }: { answer: RTCSessionDescriptionInit }) => {
+      handleCallAccepted(answer);
+    };
+    const onCallCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+      handleIceCandidate(candidate);
+    };
+    const onCallRejected = ({ reason }: { reason: string }) => {
+      alert(`Call rejected: ${reason}`);
+      callStore.resetCallStore();
+    };
+    const onNotificationNew = (notif: any) => {
+      addIncomingNotification(notif);
+    };
+    const onStatusNew = (newStatus: Status) => {
+      setStatuses((prev) => {
+        if (prev.some(s => s._id === newStatus._id)) return prev;
+        return [newStatus, ...prev];
       });
+    };
+    const onStatusLiked = ({ statusId, likes }: { statusId: string; likes: any[] }) => {
+      setStatuses((prev) =>
+        prev.map((s) => (s._id === statusId ? { ...s, likes } : s))
+      );
+    };
+    const onStatusViewed = ({ statusId, views }: { statusId: string; views: any[] }) => {
+      setStatuses((prev) =>
+        prev.map((s) => (s._id === statusId ? { ...s, views } : s))
+      );
+    };
+    const onStatusDeleted = ({ statusId }: { statusId: string }) => {
+      setStatuses((prev) => prev.filter((s) => s._id !== statusId));
+    };
+    const onCommunityCreated = (newCommunity: Community) => {
+      setCommunities((prev) => {
+        if (prev.some(c => c._id === newCommunity._id)) return prev;
+        return [newCommunity, ...prev];
+      });
+    };
+    const onCommunityUpdated = (updatedCommunity: Community) => {
+      setCommunities((prev) =>
+        prev.map((c) => (c._id === updatedCommunity._id ? updatedCommunity : c))
+      );
+    };
 
-      socket.on('status:liked', ({ statusId, likes }) => {
-        setStatuses((prev) =>
-          prev.map((s) => (s._id === statusId ? { ...s, likes } : s))
-        );
-      });
+    socket.on('call:accepted', onCallAccepted);
+    socket.on('call:candidate', onCallCandidate);
+    socket.on('call:rejected', onCallRejected);
+    socket.on('notification:new', onNotificationNew);
+    socket.on('status:new', onStatusNew);
+    socket.on('status:liked', onStatusLiked);
+    socket.on('status:viewed', onStatusViewed);
+    socket.on('status:deleted', onStatusDeleted);
+    socket.on('community:created', onCommunityCreated);
+    socket.on('community:updated', onCommunityUpdated);
 
-      socket.on('status:viewed', ({ statusId, views }) => {
-        setStatuses((prev) =>
-          prev.map((s) => (s._id === statusId ? { ...s, views } : s))
-        );
-      });
-
-      socket.on('status:deleted', ({ statusId }) => {
-        setStatuses((prev) => prev.filter((s) => s._id !== statusId));
-      });
-
-      // Real-time Communities
-      socket.on('community:created', (newCommunity) => {
-        setCommunities((prev) => {
-          if (prev.some(c => c._id === newCommunity._id)) return prev;
-          return [newCommunity, ...prev];
-        });
-      });
-
-      socket.on('community:updated', (updatedCommunity) => {
-        setCommunities((prev) =>
-          prev.map((c) => (c._id === updatedCommunity._id ? updatedCommunity : c))
-        );
-      });
-    }
     // Request browser notification permission on first mount
     requestBrowserPermission();
 
     return () => {
-      if (socket) {
-        socket.off('notification:new');
-        socket.off('status:new');
-        socket.off('status:liked');
-        socket.off('status:viewed');
-        socket.off('status:deleted');
-        socket.off('community:created');
-        socket.off('community:updated');
-      }
+      socket.off('call:accepted', onCallAccepted);
+      socket.off('call:candidate', onCallCandidate);
+      socket.off('call:rejected', onCallRejected);
+      socket.off('notification:new', onNotificationNew);
+      socket.off('status:new', onStatusNew);
+      socket.off('status:liked', onStatusLiked);
+      socket.off('status:viewed', onStatusViewed);
+      socket.off('status:deleted', onStatusDeleted);
+      socket.off('community:created', onCommunityCreated);
+      socket.off('community:updated', onCommunityUpdated);
     };
   }, [socket]);
 
@@ -1064,8 +1067,8 @@ export default function ChatDashboard() {
         isGroup: false,
         participantId: targetUser._id
       });
+      upsertChat(resp.data.chat);
       setActiveChat(resp.data.chat);
-      fetchChats();
       setSearchQuery('');
       setSearchResults([]);
     } catch (e) {}
@@ -1094,8 +1097,8 @@ export default function ChatDashboard() {
     if (!activeChat) return;
     try {
       const resp = await apiClient.patch(`/chats/${activeChat._id}/settings`, settings);
+      replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
-      fetchChats();
     } catch (e) {
       console.error('Failed to update group settings:', e);
     }
@@ -1106,8 +1109,8 @@ export default function ChatDashboard() {
     if (!confirm('Are you sure you want to leave this group?')) return;
     try {
       await apiClient.post(`/chats/${activeChat._id}/leave`);
+      removeChat(activeChat._id);
       setActiveChat(null);
-      fetchChats();
       setIsGroupInfoOpen(false);
     } catch (e: any) {
       alert(e.response?.data?.message || 'Failed to leave group');
@@ -1119,8 +1122,8 @@ export default function ChatDashboard() {
     if (!confirm('Remove this member from the group?')) return;
     try {
       const resp = await apiClient.delete(`/chats/${activeChat._id}/members/${userId}`);
+      replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
-      fetchChats();
     } catch (e: any) {
       alert(e.response?.data?.message || 'Failed to remove member');
     }
@@ -1130,8 +1133,8 @@ export default function ChatDashboard() {
     if (!activeChat) return;
     try {
       const resp = await apiClient.post(`/chats/${activeChat._id}/members`, { userId });
+      replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
-      fetchChats();
     } catch (e: any) {
       alert(e.response?.data?.message || 'Failed to add member');
     }
@@ -1155,8 +1158,8 @@ export default function ChatDashboard() {
       }
 
       const resp = await apiClient.patch(`/chats/${activeChat._id}/settings`, { admins, moderators });
+      replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
-      fetchChats();
     } catch (e: any) {
       alert(e.response?.data?.message || 'Failed to promote member');
     }
@@ -1174,8 +1177,8 @@ export default function ChatDashboard() {
       const resp = await apiClient.put(`/chats/${activeChat._id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
-      fetchChats();
     } catch (e: any) {
       alert(e.response?.data?.message || 'Failed to update group profile');
     }
@@ -1301,12 +1304,12 @@ export default function ChatDashboard() {
         participants: groupParticipants,
         isBroadcast: isBroadcastGroup
       });
+      upsertChat(resp.data.chat);
       setActiveChat(resp.data.chat);
       setGroupName('');
       setGroupParticipants([]);
       setIsBroadcastGroup(false);
       setCreateGroupOpen(false);
-      fetchChats();
     } catch (e) {}
   };
 
@@ -3839,9 +3842,9 @@ export default function ChatDashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50 p-6"
+            className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
           >
-            <div className="w-full max-w-3xl glass-panel rounded-[32px] overflow-hidden p-6 shadow-2xl relative flex flex-col items-center justify-center gap-6">
+            <div className="w-full max-w-3xl glass-panel rounded-[24px] sm:rounded-[32px] overflow-hidden p-4 sm:p-6 shadow-2xl relative flex flex-col items-center justify-center gap-4 sm:gap-6">
               
               {/* Outgoing Panel */}
               {callStore.callStatus === 'outgoing' && (
@@ -3863,7 +3866,12 @@ export default function ChatDashboard() {
                   <p className="text-slate-400 text-sm">Incoming WebRTC {callStore.callType} call</p>
                   <div className="flex gap-4 justify-center">
                     <button
-                      onClick={() => answerCall(callStore.callerId!, callStore.localStream as any)}
+                      onClick={() => {
+                        if (callStore.callerId && callStore.incomingOffer) {
+                          answerCall(callStore.callerId, callStore.incomingOffer);
+                        }
+                      }}
+                      disabled={!callStore.incomingOffer}
                       className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-full text-sm font-bold shadow-lg shadow-emerald-500/20"
                     >
                       Accept
@@ -3932,7 +3940,7 @@ export default function ChatDashboard() {
                   )}
 
                   {/* Calling bottom toolbar */}
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-950/65 backdrop-blur-md px-6 py-3 rounded-full border border-slate-800">
+                  <div className="absolute bottom-4 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex items-center justify-center gap-2 sm:gap-3 bg-slate-950/65 backdrop-blur-md px-3 sm:px-6 py-3 rounded-2xl sm:rounded-full border border-slate-800 flex-wrap">
                     <button
                       onClick={() => callStore.toggleMute()}
                       className={`p-2.5 rounded-full ${callStore.isMuted ? 'bg-red-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
@@ -4046,8 +4054,8 @@ export default function ChatDashboard() {
             .filter((value, index, self) => self.findIndex(t => t._id === value._id) === index);
 
           return (
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-6">
-              <div className="w-full max-w-[400px] glass-panel rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
+              <div className="w-full max-w-[400px] glass-panel rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
                 <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                   <h3 className="font-bold text-lg text-white">Create Group</h3>
                   <button onClick={() => { setCreateGroupOpen(false); setIsBroadcastGroup(false); setGroupParticipants([]); }} className="text-slate-500 hover:text-white">
@@ -4147,8 +4155,8 @@ export default function ChatDashboard() {
       {/* 6. Create Community Modal Overlay */}
       <AnimatePresence>
         {createCommunityOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-6">
-            <div className="w-full max-w-[400px] glass-panel rounded-3xl p-6 shadow-2xl space-y-4">
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
+            <div className="w-full max-w-[400px] glass-panel rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
               <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                 <h3 className="font-bold text-lg text-white">New Community</h3>
                 <button onClick={() => setCreateCommunityOpen(false)} className="text-slate-500 hover:text-white">
@@ -4241,13 +4249,13 @@ export default function ChatDashboard() {
       {/* 10. Connect via Code Modal Overlay */}
       <AnimatePresence>
         {connectModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-6">
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
               transition={{ type: "spring", duration: 0.4 }}
-              className="w-full max-w-[420px] bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-3xl p-6.5 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] space-y-5.5 text-left relative overflow-hidden"
+              className="w-full max-w-[420px] bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] space-y-5 text-left relative overflow-hidden"
             >
               {/* Background glowing decorations */}
               <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />

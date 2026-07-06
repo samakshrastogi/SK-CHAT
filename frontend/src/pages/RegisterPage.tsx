@@ -7,6 +7,8 @@ import { Mail, Lock, User, AlertTriangle, CheckCircle } from 'lucide-react';
 import { apiClient, setAccessTokenInMemory } from '../api/client.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const HAS_GOOGLE_CLIENT_ID = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'your_google_client_id_here');
+const ALLOW_MOCK_GOOGLE = import.meta.env.DEV && !HAS_GOOGLE_CLIENT_ID;
 
 function RegisterForm() {
   const { register, handleSubmit, watch, formState: { errors } } = useForm();
@@ -266,7 +268,7 @@ function RegisterForm() {
 
           {/* Real Google OAuth Button wrapper */}
           <div className="flex justify-center mt-2 w-full">
-            {GOOGLE_CLIENT_ID === 'your_google_client_id_here' || !GOOGLE_CLIENT_ID ? (
+            {ALLOW_MOCK_GOOGLE ? (
               <button
                 type="button"
                 onClick={async () => {
@@ -289,9 +291,9 @@ function RegisterForm() {
                   <path fill="#FBBC05" d="M5.16 14.24a7.22 7.22 0 0 1 0-4.48V6.64H1.14a12.01 12.01 0 0 0 0 10.72l4.02-3.12Z"/>
                   <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.43-3.43A11.95 11.95 0 0 0 12 0 12.01 12.01 0 0 0 1.14 6.64l4.02 3.12c.96-2.89 3.66-5.01 6.84-5.01Z"/>
                 </svg>
-                Google SSO (Developer Bypass Mode)
+                Continue with Google (Dev)
               </button>
-            ) : (
+            ) : HAS_GOOGLE_CLIENT_ID ? (
               <GoogleLogin
                 onSuccess={handleGoogleSuccess}
                 onError={() => setErrorMsg('Google Sign-In failed or cancelled.')}
@@ -299,8 +301,16 @@ function RegisterForm() {
                 theme="outline"
                 size="large"
                 shape="rectangular"
-                width="370"
+                width="100%"
               />
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full h-11 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs flex items-center justify-center border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+              >
+                Google Sign-In unavailable
+              </button>
             )}
           </div>
         </div>

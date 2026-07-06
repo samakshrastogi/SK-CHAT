@@ -7,6 +7,7 @@ interface CallState {
   receiverId: string | null;
   callType: 'voice' | 'video' | null;
   callStatus: 'idle' | 'incoming' | 'outgoing' | 'connected';
+  incomingOffer: RTCSessionDescriptionInit | null;
   
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
@@ -16,7 +17,7 @@ interface CallState {
   isCameraOff: boolean;
   isScreenSharing: boolean;
 
-  setIncomingCall: (callerId: string, callerName: string, callId: string, type: 'voice' | 'video') => void;
+  setIncomingCall: (callerId: string, callerName: string, callId: string, type: 'voice' | 'video', offer?: RTCSessionDescriptionInit) => void;
   setOutgoingCall: (receiverId: string, callId: string, type: 'voice' | 'video') => void;
   setCallConnected: (remoteStream: MediaStream, peerConn: RTCPeerConnection) => void;
   setLocalStream: (stream: MediaStream) => void;
@@ -33,6 +34,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   receiverId: null,
   callType: null,
   callStatus: 'idle',
+  incomingOffer: null,
   
   localStream: null,
   remoteStream: null,
@@ -42,13 +44,14 @@ export const useCallStore = create<CallState>((set, get) => ({
   isCameraOff: false,
   isScreenSharing: false,
 
-  setIncomingCall: (callerId, callerName, callId, type) => {
+  setIncomingCall: (callerId, callerName, callId, type, offer) => {
     set({
       callerId,
       callerName,
       callId,
       callType: type,
-      callStatus: 'incoming'
+      callStatus: 'incoming',
+      incomingOffer: offer || null
     });
   },
 
@@ -117,6 +120,7 @@ export const useCallStore = create<CallState>((set, get) => ({
       receiverId: null,
       callType: null,
       callStatus: 'idle',
+      incomingOffer: null,
       localStream: null,
       remoteStream: null,
       peerConnection: null,

@@ -4,18 +4,17 @@ import { logger } from '../utils/logger.js';
 export const connectDB = async (): Promise<void> => {
   const connUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/connect';
   mongoose.set('strictQuery', true);
-  
-  const connectWithRetry = async () => {
+
+  while (mongoose.connection.readyState !== 1) {
     try {
       const conn = await mongoose.connect(connUri);
       logger.info(`MongoDB Connected: ${conn.connection.host}`);
+      break;
     } catch (error: any) {
       logger.error(`Error connecting to MongoDB (retrying in 5s): ${error.message}`);
-      setTimeout(connectWithRetry, 5000);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
-  };
-
-  await connectWithRetry();
+  }
   
   // Listen for connection events
   mongoose.connection.on('error', (err) => {

@@ -72,13 +72,13 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-50 p-6">
-          <div className="w-full max-w-[800px] bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
+        <div className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-[800px] max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-48px)] bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
             
             {/* Left Column: Live Preview */}
             <div 
               style={storyType === 'text' ? { backgroundColor: textStatusBg } : undefined}
-              className="w-full md:w-[320px] aspect-[4/5] bg-slate-950 flex flex-col justify-between items-center p-6 relative border-r border-slate-800 shrink-0 overflow-hidden"
+              className="w-full md:w-[320px] max-h-[46dvh] md:max-h-none aspect-[4/5] bg-slate-950 flex flex-col justify-between items-center p-4 sm:p-6 relative border-b md:border-b-0 md:border-r border-slate-800 shrink-0 overflow-hidden"
             >
               {storyType === 'media' && storyFileUrl ? (
                 storyFile?.type.startsWith('video') ? (
@@ -150,7 +150,7 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
             </div>
 
             {/* Right Column: Editing and Interactive Controls */}
-            <div className="flex-1 flex flex-col justify-between p-6 space-y-4">
+            <div className="flex-1 min-h-0 flex flex-col justify-between p-4 sm:p-6 space-y-4 overflow-hidden">
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-sm font-black text-slate-200 uppercase tracking-widest">Story Options</h3>
@@ -170,7 +170,7 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-3 overflow-y-auto max-h-[320px] pr-1.5 custom-scrollbar">
+                <div className="space-y-3 overflow-y-auto max-h-[42dvh] md:max-h-[320px] pr-1.5 custom-scrollbar">
                   {/* Media File selection */}
                   {storyType === 'media' && (
                     <div className="p-3 bg-slate-950/40 border border-slate-800 rounded-2xl flex flex-col items-center gap-2">
@@ -215,7 +215,7 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
                   )}
 
                   {/* Overlay Inputs */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-850">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-850">
                     <div>
                       <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">🎵 Background Music</label>
                       <input 

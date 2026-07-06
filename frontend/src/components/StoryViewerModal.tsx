@@ -29,13 +29,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   return (
     <AnimatePresence>
       {activeStatusViewer && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-50 p-6">
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-50 p-3 sm:p-6 overflow-hidden">
           {/* ProgressBar */}
-          <div className="absolute top-6 left-6 right-6 flex gap-1 z-50">
+          <div className="absolute top-3 sm:top-6 left-3 sm:left-6 right-3 sm:right-6 flex gap-1 z-50">
             {activeStatusViewer.map((_, i) => (
               <div key={i} className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden">
                 <div
-                  className={`bg-indigo-500 h-full ${i === activeStatusIndex ? 'w-full transition-all duration-3000' : (i < activeStatusIndex ? 'w-full' : 'w-0')}`}
+                  className={`bg-indigo-500 h-full ${i === activeStatusIndex ? 'w-full transition-all duration-[3000ms]' : (i < activeStatusIndex ? 'w-full' : 'w-0')}`}
                 />
               </div>
             ))}
@@ -43,7 +43,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
           <button
             onClick={() => setActiveStatusViewer(null)}
-            className="absolute top-10 right-6 text-white/60 hover:text-white font-bold z-50"
+            className="absolute top-7 sm:top-10 right-3 sm:right-6 text-white/60 hover:text-white font-bold z-50"
           >
             <X className="h-6 w-6" />
           </button>
@@ -59,7 +59,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             } catch (e) {}
 
             return (
-              <div className="w-full max-w-[420px] aspect-[4/5] bg-slate-900 rounded-[32px] overflow-hidden flex flex-col justify-between items-center p-6 border border-white/10 relative">
+              <div className="w-full max-w-[420px] max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-48px)] aspect-[4/5] bg-slate-900 rounded-2xl sm:rounded-[32px] overflow-hidden flex flex-col justify-between items-center p-4 sm:p-6 border border-white/10 relative">
                 {currentStatus.type === 'text' ? (
                   <div
                     style={{ backgroundColor: currentStatus.backgroundColor || '#4f46e5' }}
@@ -76,7 +76,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 )}
 
                 {/* Top Bar: Creator Info & Analytics */}
-                <div className="w-full flex justify-between items-center z-20 bg-slate-950/40 backdrop-blur-sm p-3 rounded-2xl border border-white/5 absolute top-10 left-4 right-4 max-w-[calc(100%-32px)]">
+                <div className="w-full flex justify-between items-center z-20 bg-slate-950/40 backdrop-blur-sm p-2.5 sm:p-3 rounded-2xl border border-white/5 absolute top-8 sm:top-10 left-3 sm:left-4 right-3 sm:right-4 max-w-[calc(100%-24px)] sm:max-w-[calc(100%-32px)]">
                   <div className="flex items-center gap-2">
                     <div className="h-7 w-7 rounded-full bg-slate-800 overflow-hidden border border-white/20">
                       {currentStatus.userId.avatar && <img src={currentStatus.userId.avatar} alt="" className="h-full w-full object-cover" />}
@@ -106,7 +106,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </div>
 
                 {/* Float Overlays (Location, Mention, Music, Hashtags) */}
-                <div className="absolute top-26 left-4 right-4 z-20 flex flex-col gap-2 pointer-events-none">
+                <div className="absolute top-24 left-3 sm:left-4 right-3 sm:right-4 z-20 flex flex-col gap-2 pointer-events-none">
                   <div className="flex justify-between w-full">
                     {metadata?.location && (
                       <span className="bg-indigo-600/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg">📍 {metadata.location}</span>
@@ -131,13 +131,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                       <div className="flex gap-2">
                         <button 
                           onClick={(e) => { e.stopPropagation(); alert('Option 1 Voted! 73% yes'); }}
-                          className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-650 rounded-xl font-bold text-[10px]"
+                          className="flex-1 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold text-[10px]"
                         >
                           {metadata.poll.opt1}
                         </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); alert('Option 2 Voted! 27% no'); }}
-                          className="flex-1 py-1.5 bg-pink-500 hover:bg-pink-650 rounded-xl font-bold text-[10px]"
+                          className="flex-1 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-xl font-bold text-[10px]"
                         >
                           {metadata.poll.opt2}
                         </button>

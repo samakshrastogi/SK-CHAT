@@ -7,7 +7,7 @@ import { Compass, CheckCircle, AlertTriangle, Loader } from 'lucide-react';
 export default function JoinGroupPage() {
   const { codeOrToken } = useParams<{ codeOrToken: string }>();
   const navigate = useNavigate();
-  const { fetchChats } = useChatStore();
+  const { upsertChat } = useChatStore();
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -22,13 +22,13 @@ export default function JoinGroupPage() {
       const response = await apiClient.post(`/chats/join/${codeOrToken}`);
       setSuccess(true);
       setMessage(response.data.message || 'Successfully joined group!');
-      
-      // Refresh the chat list in store
-      await fetchChats();
+      if (response.data.chat) {
+        upsertChat(response.data.chat);
+      }
       
       // Redirect to the main dashboard after a short delay
       setTimeout(() => {
-        navigate('/');
+        navigate('/chat');
       }, 1500);
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Failed to join group chat. The link may be invalid or expired.');

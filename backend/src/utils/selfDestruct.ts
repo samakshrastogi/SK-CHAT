@@ -9,7 +9,11 @@ export const scheduleSelfDestruct = (io: Server, messageId: string, chatId: stri
     try {
       const deleted = await Message.findByIdAndDelete(messageId);
       if (deleted) {
-        io.to(`chat:${chatId}`).emit('message:deleted', { messageId });
+        io.to(`chat:${chatId}`).emit('message:deleted', {
+          chatId,
+          messageId,
+          isDeletedForEveryone: false
+        });
         logger.info(`Message ${messageId} in chat ${chatId} self-destructed successfully.`);
       }
     } catch (error) {

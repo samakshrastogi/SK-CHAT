@@ -3,6 +3,8 @@ import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';
 import { useCallStore } from '../store/callStore.js';
+import { useConnectionsStore } from '../store/connectionsStore.js';
+import { useNotificationStore } from '../store/notificationStore.js';
 import { getAccessTokenInMemory } from '../api/client.js';
 
 const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
@@ -12,8 +14,39 @@ export const useSocket = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   
-  const { optimisticAddMessage, updateMessageStatus, setTypingUser, chats, fetchChats, localDeleteMessage, localUpdatePoll, localUpdatePinnedMessages, localUpdateReactions, localUpdateUserPresence, incrementUnread } = useChatStore();
+  const {
+    optimisticAddMessage,
+    updateMessageStatus,
+    setTypingUser,
+    chats,
+    fetchChats,
+    upsertChat,
+    removeChat,
+    replaceChat,
+    localUpdateMessage,
+    localMarkMessageDeleted,
+    localAddChatMember,
+    localRemoveChatMember,
+    localUpdatePoll,
+    localUpdatePinnedMessages,
+    localUpdateReactions,
+    localUpdateUserPresence,
+    incrementUnread
+  } = useChatStore();
   const { setIncomingCall, resetCallStore } = useCallStore();
+  const {
+    addIncomingRequest,
+    addOutgoingRequest,
+    markRequestResolved,
+    addRealtimeFriend,
+    removeRealtimeFriend
+  } = useConnectionsStore();
+  const {
+    applyNotificationRead,
+    applyAllNotificationsRead,
+    removeLocalNotification,
+    clearLocalNotifications
+  } = useNotificationStore();
 
   const chatsRef = useRef(chats);
   const joinedRoomsRef = useRef<Set<string>>(new Set());
@@ -136,8 +169,12 @@ export const useSocket = () => {
       setTypingUser(chatId, userId, null);
     });
 
-    socket.on('message:deleted', ({ messageId }) => {
-      localDeleteMessage(messageId);
+    socket.on('message:edited', (message) => {
+      localUpdateMessage(message.chatId, message);
+    });
+
+    socket.on('message:deleted', ({ chatId, messageId, isDeletedForEveryone }) => {
+      localMarkMessageDeleted(chatId, messageId, isDeletedForEveryone);
     });
 
     socket.on('poll:updated', ({ messageId, pollData }) => {
@@ -148,10 +185,6 @@ export const useSocket = () => {
       localUpdatePinnedMessages(chatId, pinnedMessages);
     });
 
-    socket.on('message:reaction', ({ chatId, messageId, reactions }) => {
-      localUpdateReactions(chatId, messageId, reactions);
-    });
-
     // Presence Toggles
     socket.on('presence:update', ({ userId, status, lastSeen }) => {
       localUpdateUserPresence(userId, status, lastSeen);
@@ -159,12 +192,91 @@ export const useSocket = () => {
 
     // Chat created trigger
     socket.on('chat:created', (newChat) => {
-      fetchChats();
+      upsertChat(newChat);
+      socket.emit('chat:join', newChat._id);
+      joinedRoomsRef.current.add(newChat._id);
+    });
+
+    socket.on('chat:added', ({ chat }) => {
+      upsertChat(chat);
+      socket.emit('chat:join', chat._id);
+      joinedRoomsRef.current.add(chat._id);
+    });
+
+    socket.on('chat:removed', ({ chatId }) => {
+      socket.emit('chat:leave', chatId);
+      joinedRoomsRef.current.delete(chatId);
+      removeChat(chatId);
+    });
+
+    socket.on('chat:updated', ({ chat, message }) => {
+      if (chat) {
+        replaceChat(chat);
+      }
+      if (message) {
+        optimisticAddMessage(message.chatId, message);
+      }
+    });
+
+    socket.on('chat:member-joined', ({ chatId, user, message }) => {
+      if (user) {
+        localAddChatMember(chatId, user, message);
+      }
+    });
+
+    socket.on('chat:member-left', ({ chatId, userId, message }) => {
+      localRemoveChatMember(chatId, userId, message);
+    });
+
+    socket.on('friend_request:new', ({ request }) => {
+      addIncomingRequest(request);
+    });
+
+    socket.on('friend_request:outgoing', ({ request }) => {
+      addOutgoingRequest(request);
+    });
+
+    socket.on('friend_request:accepted', ({ requestId, senderId, receiverId, senderUser, receiverUser }) => {
+      markRequestResolved(requestId);
+      addRealtimeFriend({
+        senderId: senderId?.toString?.() || senderId,
+        receiverId: receiverId?.toString?.() || receiverId,
+        senderUser,
+        receiverUser
+      });
+    });
+
+    socket.on('friend_request:declined', ({ requestId }) => {
+      markRequestResolved(requestId);
+    });
+
+    socket.on('friend_request:cancelled', ({ requestId }) => {
+      markRequestResolved(requestId);
+    });
+
+    socket.on('friend:removed', ({ userId, friendId }) => {
+      removeRealtimeFriend({ userId, friendId });
+    });
+
+    socket.on('notification:read', ({ notificationId }) => {
+      applyNotificationRead(notificationId);
+    });
+
+    socket.on('notification:read-all', () => {
+      applyAllNotificationsRead();
+    });
+
+    socket.on('notification:deleted', ({ notificationId }) => {
+      removeLocalNotification(notificationId);
+    });
+
+    socket.on('notification:cleared', () => {
+      clearLocalNotifications();
     });
 
     // WebRTC Signaling
     socket.on('call:incoming', ({ callerId, callerName, callId, type, offer }) => {
-      setIncomingCall(callerId, callerName, callId, type);
+      setIncomingCall(callerId, callerName, callId, type, offer);
     });
 
     socket.on('call:ended', () => {

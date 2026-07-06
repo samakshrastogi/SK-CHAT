@@ -45,6 +45,9 @@ export const markAsRead = async (req: Request, res: Response, next: NextFunction
       { _id: req.params.id, recipientId: userId },
       { isRead: true }
     );
+    req.app.get('io')?.to(`user:${userId}`).emit('notification:read', {
+      notificationId: req.params.id
+    });
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -56,6 +59,7 @@ export const markAllAsRead = async (req: Request, res: Response, next: NextFunct
   try {
     const userId = (req as any).user.id;
     await Notification.updateMany({ recipientId: userId, isRead: false }, { isRead: true });
+    req.app.get('io')?.to(`user:${userId}`).emit('notification:read-all');
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -67,6 +71,9 @@ export const deleteNotification = async (req: Request, res: Response, next: Next
   try {
     const userId = (req as any).user.id;
     await Notification.findOneAndDelete({ _id: req.params.id, recipientId: userId });
+    req.app.get('io')?.to(`user:${userId}`).emit('notification:deleted', {
+      notificationId: req.params.id
+    });
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -78,6 +85,7 @@ export const clearAllNotifications = async (req: Request, res: Response, next: N
   try {
     const userId = (req as any).user.id;
     await Notification.deleteMany({ recipientId: userId });
+    req.app.get('io')?.to(`user:${userId}`).emit('notification:cleared');
     res.json({ success: true });
   } catch (err) {
     next(err);

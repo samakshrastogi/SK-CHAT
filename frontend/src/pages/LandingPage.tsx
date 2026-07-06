@@ -151,24 +151,24 @@ export default function LandingPage() {
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/5 blur-[120px] pointer-events-none" />
 
       {/* Header */}
-      <header className="max-w-7xl mx-auto w-full px-6 py-6 flex items-center justify-between z-10 gsap-header">
-        <div className="flex items-center gap-2">
-          <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${style.logo} flex items-center justify-center shadow-md transition-all duration-500`}>
+      <header className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-5 sm:py-6 flex items-center justify-between gap-3 z-10 gsap-header">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br ${style.logo} flex items-center justify-center shadow-md transition-all duration-500 shrink-0`}>
             <span className="text-sm font-black tracking-tighter text-white">SK</span>
           </div>
-          <span className="text-2xl font-bold tracking-tight text-slate-800">
+          <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-800 truncate">
             SK Connect
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           {isAuthenticated ? (
-            <Link to="/chat" className={`px-5 py-2.5 text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500 flex items-center gap-1.5`}>
-              <AppWindow className="h-4 w-4" /> Go to App
+            <Link to="/chat" className={`px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500 flex items-center gap-1.5`}>
+              <AppWindow className="h-4 w-4" /> <span className="hidden sm:inline">Go to </span>App
             </Link>
           ) : (
             <>
-              <Link to="/login" className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</Link>
-              <Link to="/register" className={`px-5 py-2.5 text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500`}>Get Started</Link>
+              <Link to="/login" className="px-2 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</Link>
+              <Link to="/register" className={`px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500 whitespace-nowrap`}>Get Started</Link>
             </>
           )}
         </div>

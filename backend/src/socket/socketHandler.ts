@@ -15,6 +15,7 @@ interface SocketUser {
 export const socketHandler = (io: Server) => {
   // Wire the notification service so it can emit real-time events
   initNotificationService(io);
+  const activeSocketsByUser = new Map<string, Set<string>>();
 
   // ── Authentication middleware ────────────────────────────────────────────
   io.use(async (socket: Socket, next) => {
@@ -40,17 +41,25 @@ export const socketHandler = (io: Server) => {
     // Join personal room for targeted events & notifications
     socket.join(`user:${user.id}`);
 
+    const activeSockets = activeSocketsByUser.get(user.id) || new Set<string>();
+    activeSockets.add(socket.id);
+    activeSocketsByUser.set(user.id, activeSockets);
+
     // Update presence → online
     try {
-      await User.findByIdAndUpdate(user.id, { status: 'online', lastSeen: new Date() });
-      const userChats = await Chat.find({ participants: user.id });
-      userChats.forEach((chat) => {
-        socket.to(`chat:${chat._id}`).emit('presence:update', {
-          userId: user.id,
-          status: 'online',
-          lastSeen: new Date(),
+      const connectedUserSockets = await io.in(`user:${user.id}`).fetchSockets();
+      const wasAlreadyOnline = connectedUserSockets.length > 1;
+      if (!wasAlreadyOnline) {
+        await User.findByIdAndUpdate(user.id, { status: 'online', lastSeen: new Date() });
+        const userChats = await Chat.find({ participants: user.id });
+        userChats.forEach((chat) => {
+          socket.to(`chat:${chat._id}`).emit('presence:update', {
+            userId: user.id,
+            status: 'online',
+            lastSeen: new Date(),
+          });
         });
-      });
+      }
     } catch (e: any) {
       logger.error(`Error updating presence on connect: ${e.message}`);
     }
@@ -240,6 +249,7 @@ export const socketHandler = (io: Server) => {
         { _id: notificationId, recipientId: user.id },
         { isRead: true }
       );
+      io.to(`user:${user.id}`).emit('notification:read', { notificationId });
     });
 
     // ── WebRTC Calling Signaling ───────────────────────────────────────────
@@ -307,6 +317,16 @@ export const socketHandler = (io: Server) => {
     socket.on('disconnect', async () => {
       logger.info(`User disconnected: ${user.username} (${socket.id})`);
       try {
+        const activeSockets = activeSocketsByUser.get(user.id);
+        if (activeSockets) {
+          activeSockets.delete(socket.id);
+          if (activeSockets.size > 0) return;
+          activeSocketsByUser.delete(user.id);
+        }
+
+        const connectedUserSockets = await io.in(`user:${user.id}`).fetchSockets();
+        if (connectedUserSockets.length > 0) return;
+
         const lastSeen = new Date();
         await User.findByIdAndUpdate(user.id, { status: 'offline', lastSeen });
         const userChats = await Chat.find({ participants: user.id });

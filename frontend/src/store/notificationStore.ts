@@ -18,6 +18,10 @@ interface NotificationState {
 
   // Real-time socket push
   addIncomingNotification: (notif: AppNotification) => void;
+  applyNotificationRead: (id: string) => void;
+  applyAllNotificationsRead: () => void;
+  removeLocalNotification: (id: string) => void;
+  clearLocalNotifications: () => void;
 
   // Push subscription
   subscribeToPush: () => Promise<void>;
@@ -65,16 +69,26 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   markAsRead: async (id) => {
     await apiClient.patch(`/notifications/${id}/read`);
+    get().applyNotificationRead(id);
+  },
+
+  applyNotificationRead: (id) => {
     set((state) => ({
       notifications: state.notifications.map((n) =>
         n._id === id ? { ...n, isRead: true } : n
       ),
-      unreadCount: Math.max(0, state.unreadCount - 1),
+      unreadCount: state.notifications.some((n) => n._id === id && !n.isRead)
+        ? Math.max(0, state.unreadCount - 1)
+        : state.unreadCount,
     }));
   },
 
   markAllAsRead: async () => {
     await apiClient.patch('/notifications/read-all');
+    get().applyAllNotificationsRead();
+  },
+
+  applyAllNotificationsRead: () => {
     set((state) => ({
       notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
       unreadCount: 0,
@@ -82,8 +96,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   deleteNotification: async (id) => {
-    const notif = get().notifications.find((n) => n._id === id);
     await apiClient.delete(`/notifications/${id}`);
+    get().removeLocalNotification(id);
+  },
+
+  removeLocalNotification: (id) => {
+    const notif = get().notifications.find((n) => n._id === id);
     set((state) => ({
       notifications: state.notifications.filter((n) => n._id !== id),
       unreadCount: notif && !notif.isRead
@@ -94,6 +112,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   clearAll: async () => {
     await apiClient.delete('/notifications');
+    get().clearLocalNotifications();
+  },
+
+  clearLocalNotifications: () => {
     set({ notifications: [], unreadCount: 0 });
   },
 
