@@ -270,6 +270,10 @@ npx tsc --noEmit
   - Checks if a message is already appended (via real-time Socket event) inside the HTTP callback of `sendChatMessage` before doing a duplicate append.
 - **Connect with Code Premium UI**:
   - Modernized with a frosted backdrop, glowing backdrop colors, input container enhancements, and custom text gradient animations.
+- **Google SSO Developer Bypass Mode**:
+  - Detects if `VITE_GOOGLE_CLIENT_ID` is set to the default placeholder. If so, renders a gorgeous mock login button. Tapping it logs in instantly as a mock user, preventing GSI client library errors.
+- **checkAuth Rate Limiting Prevention**:
+  - Sets the checkAuth effect dependency array to empty `[]` in `App.tsx`, preventing recursive execution on state mutations and avoiding `429 (Too Many Requests)` rate-limiting responses.
 
 ---
 
