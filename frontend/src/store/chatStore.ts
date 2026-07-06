@@ -16,7 +16,17 @@ interface ChatState {
   fetchChats: () => Promise<void>;
   fetchMessages: (chatId: string, refresh?: boolean) => Promise<void>;
   setActiveChat: (chat: Chat | null) => void;
-  sendChatMessage: (chatId: string, content: string, file?: File, type?: string, replyToId?: string, expiresIn?: number) => Promise<void>;
+  sendChatMessage: (
+    chatId: string,
+    content: string,
+    file?: File,
+    type?: string,
+    replyToId?: string,
+    expiresIn?: number,
+    isEncrypted?: boolean,
+    ciphertext?: string,
+    iv?: string
+  ) => Promise<void>;
   optimisticAddMessage: (chatId: string, message: Message) => void;
   updateMessageStatus: (chatId: string, messageId: string, status: 'delivered' | 'seen') => void;
   editChatMessage: (messageId: string, content: string) => Promise<void>;
@@ -125,7 +135,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn) => {
+  sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn, isEncrypted, ciphertext, iv) => {
     try {
       const formData = new FormData();
       formData.append('content', content);
@@ -138,6 +148,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       if (expiresIn) {
         formData.append('expiresIn', String(expiresIn));
+      }
+      if (isEncrypted) {
+        formData.append('isEncrypted', 'true');
+      }
+      if (ciphertext) {
+        formData.append('ciphertext', ciphertext);
+      }
+      if (iv) {
+        formData.append('iv', iv);
       }
 
       const response = await apiClient.post(`/chats/${chatId}/messages`, formData, {

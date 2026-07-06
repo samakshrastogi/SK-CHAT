@@ -45,6 +45,144 @@ const getChannelIcon = (type?: string) => {
   }
 };
 
+interface WhiteboardProps {
+  chatId: string;
+  socket: any;
+}
+
+const Whiteboard: React.FC<WhiteboardProps> = ({ chatId, socket }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [color, setColor] = useState('#6366f1');
+  const [thickness, setThickness] = useState(3);
+  const isDrawingRef = useRef(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+
+  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  };
+
+  const drawLine = (x0: number, y0: number, x1: number, y1: number, strokeColor: string, strokeWidth: number, emit = true) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    if (emit && socket) {
+      socket.emit('canvas:draw', {
+        chatId,
+        drawData: { x0, y0, x1, y1, color: strokeColor, thickness: strokeWidth }
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleRemoteDraw = ({ drawData }: { drawData: any }) => {
+      const { x0, y0, x1, y1, color, thickness } = drawData;
+      drawLine(x0, y0, x1, y1, color, thickness, false);
+    };
+
+    const handleRemoteClear = () => {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (canvas && ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
+
+    socket.on('canvas:draw', handleRemoteDraw);
+    socket.on('canvas:clear', handleRemoteClear);
+
+    return () => {
+      socket.off('canvas:draw', handleRemoteDraw);
+      socket.off('canvas:clear', handleRemoteClear);
+    };
+  }, [socket]);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDrawingRef.current = true;
+    lastPosRef.current = getCoordinates(e);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    const currentPos = getCoordinates(e);
+    drawLine(lastPosRef.current.x, lastPosRef.current.y, currentPos.x, currentPos.y, color, thickness);
+    lastPosRef.current = currentPos;
+  };
+
+  const handleMouseUp = () => {
+    isDrawingRef.current = false;
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (canvas && ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (socket) {
+        socket.emit('canvas:clear', { chatId });
+      }
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 p-4">
+      <div className="flex justify-between items-center mb-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Live Whiteboard</h4>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="w-6 h-6 rounded-md cursor-pointer border border-slate-300 bg-transparent shrink-0"
+          />
+          <select
+            value={thickness}
+            onChange={(e) => setThickness(Number(e.target.value))}
+            className="text-[10px] font-bold border border-slate-350 dark:border-slate-800 bg-white dark:bg-slate-950 rounded px-1.5 py-1 text-slate-800 dark:text-white outline-none shrink-0"
+          >
+            <option value={2}>Thin</option>
+            <option value={4}>Medium</option>
+            <option value={8}>Thick</option>
+          </select>
+          <button
+            onClick={clearCanvas}
+            className="text-[10px] font-black px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded shrink-0 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden relative">
+        <canvas
+          ref={canvasRef}
+          width={500}
+          height={600}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          className="w-full h-full cursor-crosshair block touch-none"
+        />
+      </div>
+    </div>
+  );
+};
+
 export default function ChatDashboard() {
   const { user, logout, fetchSessions, sessions, terminateSession, terminateAllSessions } = useAuthStore();
   const {
@@ -68,6 +206,23 @@ export default function ChatDashboard() {
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatLoading, setAiChatLoading] = useState(false);
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
+
+  // Advanced Features States
+  const [isSecretMode, setIsSecretMode] = useState(false);
+  const [e2eeSharedKey, setE2eeSharedKey] = useState<any>(null);
+  const [isE2eeNegotiating, setIsE2eeNegotiating] = useState(false);
+  const [replyingToMessage, setReplyingToMessage] = useState<any>(null);
+  const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const [showEventsTab, setShowEventsTab] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventDesc, setNewEventDesc] = useState('');
+  const [newEventDate, setNewEventDate] = useState('');
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [showRolesTab, setShowRolesTab] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleColor, setNewRoleColor] = useState('#6366f1');
+  const [isCreatingRole, setIsCreatingRole] = useState(false);
+  const [isSpeechListening, setIsSpeechListening] = useState(false);
 
   // Call Recording, Background Blur, Captions, Hand Raising, Waiting Room States
   const [isRecording, setIsRecording] = useState(false);
@@ -237,7 +392,7 @@ export default function ChatDashboard() {
   const [isEditingCommunity, setIsEditingCommunity] = useState(false);
   const [editCommName, setEditCommName] = useState('');
   const [editCommDesc, setEditCommDesc] = useState('');
-  const [editCommPrivacy, setEditCommPrivacy] = useState<'public' | 'private'>('public');
+  const [editCommPrivacy, setEditCommPrivacy] = useState<'public' | 'private' | 'invite-only'>('public');
   const [editCommWelcome, setEditCommWelcome] = useState('');
   const [editCommRules, setEditCommRules] = useState('');
   const [inviteLinks, setInviteLinks] = useState<{ publicLink: string; privateLink: string } | null>(null);
@@ -514,6 +669,269 @@ export default function ChatDashboard() {
       const resp = await apiClient.get('/community');
       setCommunities(resp.data.communities);
     } catch (e) {}
+  };
+
+  // ── E2EE Web Crypto Helpers ──
+  const base64ToBuf = (b64: string) => {
+    const binStr = window.atob(b64);
+    const len = binStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binStr.charCodeAt(i);
+    }
+    return bytes.buffer;
+  };
+
+  const bufToBase64 = (buf: ArrayBuffer) => {
+    let binary = '';
+    const bytes = new Uint8Array(buf);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  };
+
+  const [e2eeKeyPair, setE2eeKeyPair] = useState<any>(null);
+  const [decryptedCache, setDecryptedCache] = useState<{ [msgId: string]: string }>({});
+
+  const startSecretMode = async () => {
+    if (!activeChat || activeChat.isGroup) return;
+    setIsE2eeNegotiating(true);
+    try {
+      const keyPair = await window.crypto.subtle.generateKey(
+        { name: 'ECDH', namedCurve: 'P-256' },
+        true,
+        ['deriveKey']
+      );
+      setE2eeKeyPair(keyPair);
+      const exportedPublic = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
+      
+      const opponent = activeChat.participants.find(p => p._id !== (user?._id || user?.id));
+      if (opponent && socket) {
+        socket.emit('e2ee:key_exchange', { targetUserId: opponent._id, keyData: exportedPublic });
+      }
+      setIsSecretMode(true);
+    } catch (err) {
+      console.error('E2EE Key Gen Failed:', err);
+    } finally {
+      setIsE2eeNegotiating(false);
+    }
+  };
+
+  // Decryption effect
+  useEffect(() => {
+    if (!e2eeSharedKey || !activeChat) return;
+    const rawMsgs = messages[activeChat._id] || [];
+    
+    rawMsgs.forEach(async (msg) => {
+      if (msg.isEncrypted && msg.ciphertext && msg.iv && !decryptedCache[msg._id]) {
+        try {
+          const ivBuf = base64ToBuf(msg.iv);
+          const cipherBuf = base64ToBuf(msg.ciphertext);
+          const decryptedBuf = await window.crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: ivBuf },
+            e2eeSharedKey,
+            cipherBuf
+          );
+          const plainText = new TextDecoder().decode(decryptedBuf);
+          setDecryptedCache(prev => ({ ...prev, [msg._id]: plainText }));
+        } catch (err) {
+          console.error('Failed to decrypt message:', msg._id, err);
+          setDecryptedCache(prev => ({ ...prev, [msg._id]: '🔒 [Decryption failed: keys mismatch]' }));
+        }
+      }
+    });
+  }, [messages, e2eeSharedKey, activeChat]);
+
+  // Key Exchange socket listener
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleE2eeKeyExchange = async ({ senderId, keyData }: { senderId: string; keyData: any }) => {
+      try {
+        let currentKeyPair = e2eeKeyPair;
+        if (!currentKeyPair) {
+          currentKeyPair = await window.crypto.subtle.generateKey(
+            { name: 'ECDH', namedCurve: 'P-256' },
+            true,
+            ['deriveKey']
+          );
+          setE2eeKeyPair(currentKeyPair);
+          const exportedPublic = await window.crypto.subtle.exportKey('jwk', currentKeyPair.publicKey);
+          socket.emit('e2ee:key_exchange', { targetUserId: senderId, keyData: exportedPublic });
+        }
+
+        const importedOpponentPublicKey = await window.crypto.subtle.importKey(
+          'jwk',
+          keyData,
+          { name: 'ECDH', namedCurve: 'P-256' },
+          true,
+          []
+        );
+
+        const derivedAESKey = await window.crypto.subtle.deriveKey(
+          { name: 'ECDH', public: importedOpponentPublicKey },
+          currentKeyPair.privateKey,
+          { name: 'AES-GCM', length: 256 },
+          true,
+          ['encrypt', 'decrypt']
+        );
+
+        setE2eeSharedKey(derivedAESKey);
+        setIsSecretMode(true);
+      } catch (err) {
+        console.error('Error deriving E2EE shared key:', err);
+      }
+    };
+
+    socket.on('e2ee:key_exchange', handleE2eeKeyExchange);
+    return () => {
+      socket.off('e2ee:key_exchange', handleE2eeKeyExchange);
+    };
+  }, [socket, e2eeKeyPair, activeChat]);
+
+  // ── Web Audio Voicemail Waveform Visualizer ──
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  const drawWaveform = () => {
+    if (!canvasRef.current || !analyserRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const analyser = analyserRef.current;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      animationFrameRef.current = requestAnimationFrame(draw);
+      analyser.getByteTimeDomainData(dataArray);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#6366f1';
+      ctx.beginPath();
+
+      const sliceWidth = canvas.width * 1.0 / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = v * canvas.height / 2;
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+      }
+
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+    };
+
+    draw();
+  };
+
+  // ── Speech to Text Dictation ──
+  const startSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech Recognition is not supported in this browser.');
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsSpeechListening(true);
+    };
+
+    recognition.onerror = () => {
+      setIsSpeechListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsSpeechListening(false);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setMessageText(prev => prev ? prev + ' ' + transcript : transcript);
+    };
+
+    recognition.start();
+  };
+
+  // ── Community Roles & Events ──
+  const handleCreateRole = async (communityId: string) => {
+    if (!newRoleName.trim()) return;
+    setIsCreatingRole(true);
+    try {
+      const resp = await apiClient.post(`/community/${communityId}/roles`, {
+        name: newRoleName,
+        color: newRoleColor,
+        permissions: []
+      });
+      setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
+      setNewRoleName('');
+    } catch (err) {
+      alert('Error creating role');
+    } finally {
+      setIsCreatingRole(false);
+    }
+  };
+
+  const handleAssignRole = async (communityId: string, userId: string, roleName: string) => {
+    try {
+      const resp = await apiClient.post(`/community/${communityId}/members/${userId}/role`, {
+        roleName
+      });
+      setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
+    } catch (err) {
+      alert('Error assigning role');
+    }
+  };
+
+  const handleCreateEvent = async (communityId: string) => {
+    if (!newEventTitle.trim() || !newEventDate) return;
+    setIsCreatingEvent(true);
+    try {
+      const resp = await apiClient.post(`/community/${communityId}/events`, {
+        title: newEventTitle,
+        description: newEventDesc,
+        date: newEventDate
+      });
+      setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
+      setNewEventTitle('');
+      setNewEventDesc('');
+      setNewEventDate('');
+    } catch (err) {
+      alert('Error creating event');
+    } finally {
+      setIsCreatingEvent(false);
+    }
+  };
+
+  const handleEventRSVP = async (communityId: string, eventId: string, status: 'going' | 'interested' | 'declining') => {
+    try {
+      const resp = await apiClient.post(`/community/${communityId}/events/${eventId}/rsvp`, {
+        status
+      });
+      setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
+    } catch (err) {
+      alert('Error updating RSVP');
+    }
   };
 
   const fetchSmartReplies = async (cId: string) => {
@@ -850,13 +1268,35 @@ export default function ChatDashboard() {
         }, 100);
       }
 
+      let plainText = messageText;
+      let isEncrypted = false;
+      let ciphertext = undefined;
+      let iv = undefined;
+
+      if (isSecretMode && e2eeSharedKey) {
+        isEncrypted = true;
+        const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+        const encoded = new TextEncoder().encode(plainText);
+        const encryptedBuf = await window.crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv: ivBytes },
+          e2eeSharedKey,
+          encoded
+        );
+        ciphertext = bufToBase64(encryptedBuf);
+        iv = bufToBase64(ivBytes.buffer);
+        plainText = '🔒 [Secret Encrypted Message]';
+      }
+
       await sendChatMessage(
         activeChatId,
-        messageText,
+        plainText,
         selectedFile || undefined,
         selectedFile ? getMessageTypeFromFile(selectedFile) : 'text',
         replyingTo?._id,
-        expiresIn || undefined
+        expiresIn || undefined,
+        isEncrypted,
+        ciphertext,
+        iv
       );
 
       setMessageText('');
@@ -900,12 +1340,25 @@ export default function ChatDashboard() {
         if (activeChat) {
           await sendChatMessage(activeChat._id, '', voiceFile, 'voice');
         }
-        setVoiceChunks([]);
       };
 
       recorder.start();
       setVoiceMediaRecorder(recorder);
       setIsVoiceRecording(true);
+
+      // Web Audio Waveform Analyzer
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      audioContextRef.current = audioCtx;
+      analyserRef.current = analyser;
+
+      setTimeout(() => {
+        drawWaveform();
+      }, 100);
     } catch (err) {
       alert('Could not record voice. Check microphone authorizations.');
     }
@@ -916,6 +1369,13 @@ export default function ChatDashboard() {
       voiceMediaRecorder.stop();
       setIsVoiceRecording(false);
       voiceMediaRecorder.stream.getTracks().forEach((track) => track.stop());
+
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
     }
   };
 
@@ -1751,6 +2211,8 @@ export default function ChatDashboard() {
         {activeChat ?
           (() => {
             const opponent = activeChat.isGroup ? null : activeChat.participants.find(p => p._id !== (user?._id || user?.id));
+            const activeCommunity = activeChat.isCommunity ? communities.find(c => c._id === activeChat.communityId) : null;
+            const isCommAdmin = activeCommunity && (activeCommunity.creatorId === user?._id || activeCommunity.admins.some((a: any) => (typeof a === 'string' ? a === user?._id : a._id === user?._id)));
             return (
               <div className="flex-1 flex overflow-hidden h-full relative">
                 {/* Message List Pane */}
@@ -1804,6 +2266,51 @@ export default function ChatDashboard() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {/* E2EE Secret Chat Toggle (Direct Chats Only) */}
+                    {!activeChat.isGroup && (
+                      <button
+                        onClick={() => {
+                          if (isSecretMode) {
+                            setIsSecretMode(false);
+                            setE2eeSharedKey(null);
+                          } else {
+                            startSecretMode();
+                          }
+                        }}
+                        className={`p-2 rounded-lg transition-all ${isSecretMode ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-500/10'}`}
+                        title={isSecretMode ? 'End-to-End Encryption Enabled' : 'Initiate Secret Chat (E2EE)'}
+                      >
+                        <Shield className="h-4.5 w-4.5" />
+                      </button>
+                    )}
+
+                    {/* Whiteboard and Events Tab Toggles (Community Channels Only) */}
+                    {activeChat.isCommunity && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setShowWhiteboard(!showWhiteboard);
+                            setShowEventsTab(false);
+                          }}
+                          className={`p-2 rounded-lg transition-all ${showWhiteboard ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 hover:bg-indigo-500/10'}`}
+                          title="Live Shared Whiteboard"
+                        >
+                          <Edit2 className="h-4.5 w-4.5" />
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowEventsTab(!showEventsTab);
+                            setShowWhiteboard(false);
+                          }}
+                          className={`p-2 rounded-lg transition-all ${showEventsTab ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-650 hover:bg-indigo-500/10'}`}
+                          title="Events & RSVPs List"
+                        >
+                          <Compass className="h-4.5 w-4.5" />
+                        </button>
+                      </>
+                    )}
+
                     {/* Search Messages Toggle */}
                     <button
                       onClick={() => setChatSearchOpen(!chatSearchOpen)}
@@ -1910,7 +2417,9 @@ export default function ChatDashboard() {
                     <div
                       key={msg._id}
                       id={`msg-${msg._id}`}
-                      className={`flex flex-col gap-2 max-w-[82%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'}`}
+                      className={`flex flex-col gap-2 max-w-[82%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'} cursor-pointer select-none`}
+                      onDoubleClick={() => setReplyingTo(msg)}
+                      title="Double click to reply"
                     >
                       {activeChat.isGroup && (
                         <div className="flex items-center gap-1.5">
@@ -2003,7 +2512,7 @@ export default function ChatDashboard() {
                         </div>
                       )}
 
-                      <p className="text-sm font-medium leading-relaxed break-words">{msg.content}</p>
+                      <p className="text-sm font-medium leading-relaxed break-words">{msg.isEncrypted ? (decryptedCache[msg._id] || '🔒 [Decrypting secret message...]') : msg.content}</p>
 
                       {/* Emojis hover popup (centered above bubble to prevent cut-off) */}
                       <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 hidden group-hover:flex gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-20">
@@ -2055,6 +2564,20 @@ export default function ChatDashboard() {
                   </div>
                 );
               });
+            })()}
+            {(() => {
+              const activeTypers = Object.values(typingUsers[activeChat._id] || {});
+              if (activeTypers.length === 0) return null;
+              return (
+                <div className="flex items-center gap-2.5 p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 max-w-[200px] shadow-sm self-start ml-2 rounded-tl-none mt-2 animate-pulse shrink-0">
+                  <div className="flex gap-1 items-center px-1">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{activeTypers[0]} is typing...</span>
+                </div>
+              );
             })()}
             <div ref={messagesEndRef} />
           </div>
@@ -2138,34 +2661,77 @@ export default function ChatDashboard() {
                   <Paperclip className="h-5 w-5" />
                 </button>
 
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={messageText}
-                    onChange={(e) => {
-                      setMessageText(e.target.value);
-                      if (socket) {
-                        socket.emit('typing:start', activeChat._id);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (socket) {
-                        socket.emit('typing:stop', activeChat._id);
-                      }
-                    }}
-                    placeholder="Type a message..."
-                    className="w-full h-11 px-4 rounded-xl text-sm font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
-                  />
-                  
-                  {/* Voice note triggers */}
-                  <button
-                    type="button"
-                    onClick={isVoiceRecording ? stopRecording : startRecording}
-                    className={`absolute right-3 top-3 transition-colors ${isVoiceRecording ? 'text-red-500' : 'text-slate-500 hover:text-slate-300'}`}
-                  >
-                    <Mic className="h-5 w-5" />
-                  </button>
-                </div>
+                {isVoiceRecording ? (
+                  <div className="flex-1 flex items-center gap-3 bg-white dark:bg-slate-900 rounded-xl px-3 border border-slate-200 dark:border-slate-800 h-11 shrink-0 overflow-hidden">
+                    <span className="text-[10px] font-black text-red-500 animate-pulse shrink-0">REC</span>
+                    <canvas
+                      ref={canvasRef}
+                      width={180}
+                      height={32}
+                      className="flex-1 h-8 rounded bg-slate-50 dark:bg-slate-950"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (voiceMediaRecorder) {
+                          voiceMediaRecorder.ondataavailable = null;
+                          voiceMediaRecorder.onstop = null;
+                        }
+                        stopRecording();
+                      }}
+                      className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopRecording}
+                      className="text-[10px] font-black text-indigo-500 hover:text-indigo-600 transition-colors shrink-0"
+                    >
+                      Send
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={messageText}
+                      onChange={(e) => {
+                        setMessageText(e.target.value);
+                        if (socket) {
+                          socket.emit('typing:start', activeChat._id);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (socket) {
+                          socket.emit('typing:stop', activeChat._id);
+                        }
+                      }}
+                      placeholder="Type a message..."
+                      className="w-full h-11 pl-4 pr-18 rounded-xl text-sm font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
+                    />
+                    
+                    {/* Speech Recognition Sparkles trigger */}
+                    <button
+                      type="button"
+                      onClick={startSpeechRecognition}
+                      className={`absolute right-10 top-3 transition-colors ${isSpeechListening ? 'text-indigo-500 animate-pulse' : 'text-slate-500 hover:text-indigo-600'}`}
+                      title="Dictate message (Speech to text)"
+                    >
+                      <Sparkles className="h-5 w-5" />
+                    </button>
+
+                    {/* Voice note triggers */}
+                    <button
+                      type="button"
+                      onClick={startRecording}
+                      className="absolute right-3 top-3 text-slate-500 hover:text-indigo-500 transition-colors"
+                      title="Record voice note"
+                    >
+                      <Mic className="h-5 w-5" />
+                    </button>
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -2176,6 +2742,125 @@ export default function ChatDashboard() {
               </form>
             </div>
           </div>
+
+          {/* Collaborative Shared Whiteboard Panel */}
+          {showWhiteboard && activeChat && (
+            <div className="w-80 md:w-96 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden animate-in slide-in-from-right duration-300">
+              <Whiteboard chatId={activeChat._id} socket={socket} />
+            </div>
+          )}
+
+          {/* Community Events & RSVPs Panel */}
+          {showEventsTab && activeChat && (
+            (() => {
+              const community = communities.find(c => c._id === activeChat.communityId);
+              const isCommAdmin = community && (community.creatorId === user?._id || community.admins.some((a: any) => (typeof a === 'string' ? a === user?._id : a._id === user?._id)));
+              
+              return (
+                <div className="w-80 md:w-96 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden animate-in slide-in-from-right duration-300">
+                  <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
+                    <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400">
+                      <Compass className="h-5 w-5 animate-spin-slow" />
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Events & RSVPs</span>
+                    </div>
+                    <button onClick={() => setShowEventsTab(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white">
+                      <X className="h-4.5 w-4.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
+                    {isCommAdmin && (
+                      <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 space-y-3 shadow-sm text-left">
+                        <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Schedule New Event</h4>
+                        <input
+                          type="text"
+                          placeholder="Event Title..."
+                          value={newEventTitle}
+                          onChange={(e) => setNewEventTitle(e.target.value)}
+                          className="w-full h-8 px-2.5 rounded-lg text-xs font-semibold glass-input text-slate-800 dark:text-white"
+                        />
+                        <textarea
+                          placeholder="Event Description..."
+                          value={newEventDesc}
+                          onChange={(e) => setNewEventDesc(e.target.value)}
+                          className="w-full min-h-[60px] p-2.5 rounded-lg text-xs font-semibold glass-input text-slate-800 dark:text-white"
+                        />
+                        <input
+                          type="datetime-local"
+                          value={newEventDate}
+                          onChange={(e) => setNewEventDate(e.target.value)}
+                          className="w-full h-8 px-2.5 rounded-lg text-xs font-semibold glass-input text-slate-800 dark:text-white"
+                        />
+                        <button
+                          onClick={() => handleCreateEvent(community._id)}
+                          disabled={isCreatingEvent}
+                          className="w-full h-8 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold transition-colors"
+                        >
+                          {isCreatingEvent ? 'Scheduling...' : 'Schedule Event'}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="space-y-4 text-left">
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Scheduled Events ({community?.events?.length || 0})</h4>
+                      {(!community?.events || community.events.length === 0) ? (
+                        <p className="text-[11px] text-slate-400 text-center py-6">No upcoming events scheduled yet.</p>
+                      ) : (
+                        community.events.map((evt: any) => {
+                          const goingCount = evt.rsvps.filter((r: any) => r.status === 'going').length;
+                          const interestedCount = evt.rsvps.filter((r: any) => r.status === 'interested').length;
+                          const decliningCount = evt.rsvps.filter((r: any) => r.status === 'declining').length;
+
+                          const myRsvp = evt.rsvps.find((r: any) => r.userId === user?._id || r.userId === user?.id)?.status;
+
+                          return (
+                            <div key={evt._id} className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 shadow-sm space-y-3.5 hover:border-indigo-500/30 transition-all duration-300">
+                              <div>
+                                <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200">{evt.title}</h5>
+                                <p className="text-[9px] font-bold text-indigo-500 mt-0.5">{new Date(evt.date).toLocaleString()}</p>
+                                <p className="text-[11px] text-slate-550 dark:text-slate-400 mt-1 leading-relaxed">{evt.description}</p>
+                              </div>
+
+                              <div className="flex gap-2.5 items-center justify-around py-1.5 border-y border-slate-100 dark:border-slate-800/40">
+                                <div className="text-center">
+                                  <div className="text-[11px] font-bold text-emerald-500">{goingCount}</div>
+                                  <div className="text-[8px] text-slate-500 uppercase font-black tracking-wider">Going</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-[11px] font-bold text-amber-500">{interestedCount}</div>
+                                  <div className="text-[8px] text-slate-500 uppercase font-black tracking-wider">Interested</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-[11px] font-bold text-rose-500">{decliningCount}</div>
+                                  <div className="text-[8px] text-slate-500 uppercase font-black tracking-wider">Declined</div>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-1.5 justify-between">
+                                {(['going', 'interested', 'declining'] as const).map((st) => (
+                                  <button
+                                    key={st}
+                                    onClick={() => handleEventRSVP(community._id, evt._id, st)}
+                                    className={`flex-1 h-7 rounded-lg text-[9px] font-black capitalize transition-all border ${
+                                      myRsvp === st
+                                        ? 'bg-indigo-500 text-white border-transparent shadow-sm'
+                                        : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
+                                    }`}
+                                  >
+                                    {st}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
+          )}
 
           {/* AI companion sidebar panel */}
           {isAiOpen && (
@@ -2854,6 +3539,35 @@ export default function ChatDashboard() {
                   );
                 })()}
 
+                {/* Custom Roles Manager (Server Admins Only) */}
+                {isCommAdmin && (
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl text-left space-y-3">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Server Roles</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="New role name (e.g. VIP)..."
+                        value={newRoleName}
+                        onChange={(e) => setNewRoleName(e.target.value)}
+                        className="flex-1 h-8 px-2.5 rounded-lg text-xs font-semibold glass-input text-slate-800 dark:text-white"
+                      />
+                      <input
+                        type="color"
+                        value={newRoleColor}
+                        onChange={(e) => setNewRoleColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border border-slate-300 shrink-0"
+                      />
+                    </div>
+                    <button
+                      onClick={() => handleCreateRole(activeCommunity._id)}
+                      disabled={isCreatingRole}
+                      className="w-full h-8 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold transition-colors"
+                    >
+                      {isCreatingRole ? 'Creating...' : 'Create Role'}
+                    </button>
+                  </div>
+                )}
+
                 {/* Members list count block */}
                 <div className="space-y-2 text-left">
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Members ({activeCommunity.members?.length || 0})</span>
@@ -2861,15 +3575,39 @@ export default function ChatDashboard() {
                     {activeCommunity.members?.map((member: any) => {
                       const isOwner = member._id === activeCommunity.creatorId;
                       const isAdmin = activeCommunity.admins?.some((adm: any) => (typeof adm === 'string' ? adm === member._id : adm._id === member._id));
+                      
+                      const customMemberRole = activeCommunity.memberRoles?.find((mr: any) => mr.userId.toString() === member._id.toString());
+                      const customRoleObj = activeCommunity.roles?.find((r: any) => r.name === customMemberRole?.roleName);
+                      
                       return (
                         <div key={member._id} className="flex items-center gap-2 p-1 hover:bg-slate-50 dark:hover:bg-slate-905 rounded-lg">
-                          <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                          <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0">
                             {member.avatar ? <img src={member.avatar} alt="" className="h-full w-full object-cover" /> : null}
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-[11px] font-bold text-slate-800 dark:text-slate-300 truncate">{member.username}</p>
-                            <p className="text-[7.5px] text-slate-500">{isOwner ? 'Server Creator / Owner' : isAdmin ? 'Administrator' : 'Member'}</p>
+                            {customRoleObj ? (
+                              <span className="inline-block text-[7.5px] font-black px-1.5 py-0.5 rounded leading-none text-white mt-0.5 shrink-0" style={{ backgroundColor: customRoleObj.color }}>
+                                {customRoleObj.name}
+                              </span>
+                            ) : (
+                              <p className="text-[7.5px] text-slate-500">{isOwner ? 'Server Owner' : isAdmin ? 'Administrator' : 'Member'}</p>
+                            )}
                           </div>
+                          
+                          {/* Role Selector Trigger */}
+                          {isCommAdmin && member._id !== user?._id && (
+                            <select
+                              value={customMemberRole?.roleName || ''}
+                              onChange={(e) => handleAssignRole(activeCommunity._id, member._id, e.target.value)}
+                              className="text-[9px] font-bold bg-slate-100 dark:bg-slate-950 text-slate-655 dark:text-slate-400 rounded border border-slate-200 dark:border-slate-800 outline-none p-0.5 cursor-pointer max-w-[80px]"
+                            >
+                              <option value="">No Role</option>
+                              {activeCommunity.roles?.map((r: any) => (
+                                <option key={r.name} value={r.name}>{r.name}</option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                       );
                     })}

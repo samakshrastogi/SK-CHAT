@@ -71,6 +71,9 @@ export interface Message {
   replyTo?: Message;
   isEdited: boolean;
   isDeleted: boolean;
+  isEncrypted?: boolean;
+  ciphertext?: string;
+  iv?: string;
   reactions: Reaction[];
   scheduledAt?: string;
   isForwarded: boolean;
@@ -159,6 +162,9 @@ export interface Community {
   announcementChannelId?: string;
   groupIds: Chat[];
   inviteCode: string;
+  roles?: Array<{ name: string; color: string; permissions?: string[] }>;
+  memberRoles?: Array<{ userId: string; roleName: string }>;
+  events?: Array<{ _id: string; title: string; description: string; date: string; creatorId: string; rsvps: Array<{ userId: string; status: 'going' | 'interested' | 'declining' }> }>;
   createdAt: string;
 }
 export type NotificationType =

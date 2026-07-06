@@ -1,5 +1,29 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+export interface ICommunityRole {
+  name: string;
+  color: string;
+  permissions?: string[];
+}
+
+export interface ICommunityMemberRole {
+  userId: Types.ObjectId;
+  roleName: string;
+}
+
+export interface ICommunityEventRSVP {
+  userId: Types.ObjectId;
+  status: 'going' | 'interested' | 'declining';
+}
+
+export interface ICommunityEvent {
+  title: string;
+  description: string;
+  date: Date;
+  creatorId: Types.ObjectId;
+  rsvps: ICommunityEventRSVP[];
+}
+
 export interface ICommunity extends Document {
   name: string;
   description: string;
@@ -18,6 +42,9 @@ export interface ICommunity extends Document {
   autoModeration: boolean;
   verificationBadge: boolean;
   communityLevel: number;
+  roles: ICommunityRole[];
+  memberRoles: ICommunityMemberRole[];
+  events: ICommunityEvent[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +67,25 @@ const CommunitySchema = new Schema<ICommunity>({
   autoModeration: { type: Boolean, default: true },
   verificationBadge: { type: Boolean, default: false },
   communityLevel: { type: Number, default: 1 },
+  roles: [{
+    name: { type: String, required: true },
+    color: { type: String, default: '#6366f1' },
+    permissions: [{ type: String }]
+  }],
+  memberRoles: [{
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    roleName: { type: String, required: true }
+  }],
+  events: [{
+    title: { type: String, required: true },
+    description: { type: String, default: '' },
+    date: { type: Date, required: true },
+    creatorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    rsvps: [{
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+      status: { type: String, enum: ['going', 'interested', 'declining'], default: 'going' }
+    }]
+  }]
 }, {
   timestamps: true,
 });

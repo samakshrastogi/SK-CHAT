@@ -9,7 +9,11 @@ import {
   getJoinRequests,
   actionJoinRequest,
   updateCommunitySettings,
-  searchPublicCommunities
+  searchPublicCommunities,
+  createCommunityRole,
+  assignMemberRole,
+  createCommunityEvent,
+  rsvpToEvent
 } from '../controllers/communityController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -44,5 +48,13 @@ router.put(
   updateCommunitySettings as any
 );
 router.get('/explore', searchPublicCommunities as any);
+
+// Roles & Badges Management
+router.post('/:communityId/roles', createCommunityRole as any);
+router.post('/:communityId/members/:userId/role', assignMemberRole as any);
+
+// Events & RSVPs
+router.post('/:communityId/events', createCommunityEvent as any);
+router.post('/:communityId/events/:eventId/rsvp', rsvpToEvent as any);
 
 export default router;

@@ -45,6 +45,9 @@ export interface IMessage extends Document {
   replyTo?: Types.ObjectId;
   isEdited: boolean;
   isDeleted: boolean; // True for "Delete for everyone"
+  isEncrypted?: boolean;
+  ciphertext?: string;
+  iv?: string;
   reactions: IReaction[];
   scheduledAt?: Date;
   isForwarded: boolean;
@@ -108,6 +111,9 @@ const MessageSchema = new Schema<IMessage>({
   replyTo: { type: Schema.Types.ObjectId, ref: 'Message' },
   isEdited: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
+  isEncrypted: { type: Boolean, default: false },
+  ciphertext: { type: String },
+  iv: { type: String },
   reactions: [ReactionSchema],
   scheduledAt: { type: Date },
   isForwarded: { type: Boolean, default: false },

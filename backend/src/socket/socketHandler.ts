@@ -267,6 +267,25 @@ export const socketHandler = (io: Server) => {
       socket.to(`user:${targetId}`).emit('call:ended', { senderId: user.id });
     });
 
+    // ── Whiteboard Canvas Sync ─────────────────────────────────────────────
+    socket.on('canvas:draw', ({ chatId, drawData }: { chatId: string; drawData: any }) => {
+      socket.to(`chat:${chatId}`).emit('canvas:draw', { drawData, userId: user.id });
+    });
+
+    socket.on('canvas:clear', ({ chatId }: { chatId: string }) => {
+      socket.to(`chat:${chatId}`).emit('canvas:clear');
+    });
+
+    // ── E2EE Key Exchange ──────────────────────────────────────────────────
+    socket.on('e2ee:key_exchange', ({ targetUserId, keyData }: { targetUserId: string; keyData: any }) => {
+      socket.to(`user:${targetUserId}`).emit('e2ee:key_exchange', { senderId: user.id, keyData });
+    });
+
+    // ── In-Chat Typing state ───────────────────────────────────────────────
+    socket.on('typing:state', ({ chatId, isTyping }: { chatId: string; isTyping: boolean }) => {
+      socket.to(`chat:${chatId}`).emit('typing:state', { chatId, userId: user.id, username: user.username, isTyping });
+    });
+
     // ── Disconnect ─────────────────────────────────────────────────────────
     socket.on('disconnect', async () => {
       logger.info(`User disconnected: ${user.username} (${socket.id})`);

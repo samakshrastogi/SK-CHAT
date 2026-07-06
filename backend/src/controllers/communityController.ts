@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { Types } from 'mongoose';
 import { Community } from '../models/Community.js';
 import { CommunityJoinRequest } from '../models/CommunityJoinRequest.js';
 import { User } from '../models/User.js';
@@ -497,6 +498,107 @@ export const searchPublicCommunities = async (req: AuthenticatedRequest, res: Re
       .limit(30);
 
     res.status(200).json({ success: true, communities });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createCommunityRole = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { communityId } = req.params;
+    const { name, color, permissions } = req.body;
+    const community = await Community.findById(communityId);
+    if (!community) throw new CustomError('Community not found', 404);
+    if (community.creatorId.toString() !== req.user!.id && !community.admins.some(a => a.toString() === req.user!.id)) {
+      throw new CustomError('Admin access required', 403);
+    }
+    
+    community.roles.push({ name, color, permissions });
+    await community.save();
+    
+    const io = req.app.get('io');
+    if (io) io.emit('community:updated', community);
+    
+    res.status(200).json({ success: true, community });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const assignMemberRole = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { communityId, userId } = req.params;
+    const { roleName } = req.body;
+    const community = await Community.findById(communityId);
+    if (!community) throw new CustomError('Community not found', 404);
+    if (community.creatorId.toString() !== req.user!.id && !community.admins.some(a => a.toString() === req.user!.id)) {
+      throw new CustomError('Admin access required', 403);
+    }
+    
+    community.memberRoles = community.memberRoles.filter(mr => mr.userId.toString() !== userId);
+    if (roleName) {
+      community.memberRoles.push({ userId: new Types.ObjectId(userId) as any, roleName });
+    }
+    await community.save();
+    
+    const io = req.app.get('io');
+    if (io) io.emit('community:updated', community);
+    
+    res.status(200).json({ success: true, community });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createCommunityEvent = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { communityId } = req.params;
+    const { title, description, date } = req.body;
+    const community = await Community.findById(communityId);
+    if (!community) throw new CustomError('Community not found', 404);
+    if (community.creatorId.toString() !== req.user!.id && !community.admins.some(a => a.toString() === req.user!.id)) {
+      throw new CustomError('Admin access required', 403);
+    }
+    
+    community.events.push({
+      title,
+      description,
+      date: new Date(date),
+      creatorId: new Types.ObjectId(req.user!.id) as any,
+      rsvps: []
+    });
+    await community.save();
+    
+    const io = req.app.get('io');
+    if (io) io.emit('community:updated', community);
+    
+    res.status(200).json({ success: true, community });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rsvpToEvent = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { communityId, eventId } = req.params;
+    const { status } = req.body;
+    const community = await Community.findById(communityId);
+    if (!community) throw new CustomError('Community not found', 404);
+    
+    const event = community.events.find(e => (e as any)._id.toString() === eventId);
+    if (!event) throw new CustomError('Event not found', 404);
+    
+    event.rsvps = event.rsvps.filter(r => r.userId.toString() !== req.user!.id);
+    event.rsvps.push({
+      userId: new Types.ObjectId(req.user!.id) as any,
+      status
+    });
+    await community.save();
+    
+    const io = req.app.get('io');
+    if (io) io.emit('community:updated', community);
+    
+    res.status(200).json({ success: true, community });
   } catch (error) {
     next(error);
   }

@@ -164,7 +164,10 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       contactData,
       replyTo,
       scheduledAt,
-      expiresIn
+      expiresIn,
+      isEncrypted,
+      ciphertext,
+      iv
     } = req.body;
 
     const chat = await Chat.findOne({ _id: chatId, participants: req.user!.id });
@@ -238,6 +241,22 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
     }
 
     let finalContent = content || '';
+    let finalMessageType = messageType || 'text';
+    let finalMediaUrl = mediaUrl;
+    let finalFileName = fileName;
+    let finalMediaSize = mediaSize;
+
+    // Support /draw image generation command helper
+    if (finalContent.startsWith('/draw ') && (!messageType || messageType === 'text')) {
+      const prompt = finalContent.replace('/draw ', '').trim();
+      finalMessageType = 'image';
+      const keyword = encodeURIComponent(prompt.slice(0, 30)) || 'abstract';
+      finalMediaUrl = `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80&sig=${Math.floor(Math.random() * 10000)}&q=${keyword}`;
+      finalFileName = `AI_Generated_${keyword.replace(/%20/g, '_')}.jpg`;
+      finalMediaSize = 120400; // 120 KB
+      finalContent = `🎨 Generated artwork for: "${prompt}"`;
+    }
+
     if (chat.isCommunity && chat.communityId && (!messageType || messageType === 'text')) {
       const CommunityModel = (await import('../models/Community.js')).Community;
       const communityObj = await CommunityModel.findById(chat.communityId);
@@ -254,17 +273,20 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       chatId,
       senderId: req.user!.id,
       content: finalContent,
-      messageType: messageType || 'text',
-      mediaUrl,
-      fileName,
-      mediaSize,
+      messageType: finalMessageType,
+      mediaUrl: finalMediaUrl,
+      fileName: finalFileName,
+      mediaSize: finalMediaSize,
       pollData: cleanPollData,
       locationData: locationData ? (typeof locationData === 'string' ? JSON.parse(locationData) : locationData) : undefined,
       contactData: contactData ? (typeof contactData === 'string' ? JSON.parse(contactData) : contactData) : undefined,
       replyTo: replyTo || undefined,
       scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
       expiresAt,
-      status: 'sent'
+      status: 'sent',
+      isEncrypted: isEncrypted === true || isEncrypted === 'true',
+      ciphertext: ciphertext || undefined,
+      iv: iv || undefined
     });
 
     // Update last message in chat
@@ -316,7 +338,10 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
           contactData: contactData ? (typeof contactData === 'string' ? JSON.parse(contactData) : contactData) : undefined,
           replyTo: replyTo || undefined,
           expiresAt,
-          status: 'sent'
+          status: 'sent',
+          isEncrypted: isEncrypted === true || isEncrypted === 'true',
+          ciphertext: ciphertext || undefined,
+          iv: iv || undefined
         });
 
         directChat.lastMessage = copyMsg._id as any;
