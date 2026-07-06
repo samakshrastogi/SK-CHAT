@@ -282,6 +282,10 @@ npx tsc --noEmit
   - Voice memo attachments play/pause circular button toggles progress color fills over static vertical bar waveforms.
 - **Sidebar Live Typing Tags**:
   - Displays a pulsing "Typing..." status inside sidebar conversation list items when contacts type.
+- **Mobile-First Overlay Sidebar Info Drawers**:
+  - Replaces squeezing relative layouts with absolute overlay drawers on screen widths below `768px`, keeping the main chat viewport spacious and fully functional.
+- **Screen-Efficient Responsive Padding & Spacing**:
+  - Adjusts spacing scale inside chat windows dynamically. Dropped chat window horizontal padding from 48px to 16px on mobile viewports.
 
 ---
 
