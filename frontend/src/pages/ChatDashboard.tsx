@@ -13,7 +13,7 @@ import {
   ChevronLeft, MessageSquare, Video, Phone, Settings, User as UserIcon, LogOut, Search, Plus, Send,
   Paperclip, MoreVertical, X, Check, CheckCheck, Smile, Star, Trash2, Edit2, CornerUpLeft,
   Pin, Shield, Mic, HelpCircle, Share2, BarChart2, ShieldAlert, Trash, PlusCircle, Globe,
-  Compass, Eye, Play, Sparkles, Languages, FileText, MapPin, PhoneMissed, Volume2, VideoOff,
+  Compass, Eye, Play, Pause, Sparkles, Languages, FileText, MapPin, PhoneMissed, Volume2, VideoOff,
   UserX, CheckCircle, Ban, Download, Copy, Megaphone, Bell, Users, UserPlus, UserCheck, VolumeX
 } from 'lucide-react';
 import { Chat, Message, User, Status, Call, DeviceSession, Community } from '../types/index.js';
@@ -43,6 +43,100 @@ const getChannelIcon = (type?: string) => {
     default:
       return <span className="font-bold text-slate-400 shrink-0 w-3.5 text-center text-[11px]">#</span>;
   }
+};
+
+const VoiceMessagePlayer: React.FC<{ mediaUrl: string; isMe: boolean }> = ({ mediaUrl, isMe }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      if (audio.duration) {
+        setProgress((audio.currentTime / audio.duration) * 100);
+      }
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+    };
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+    };
+  }, []);
+
+  return (
+    <div className={`flex items-center gap-3 p-3 rounded-2xl border ${
+      isMe 
+        ? 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/20 text-slate-800 dark:text-white' 
+        : 'bg-white dark:bg-slate-900 border-slate-205 dark:border-slate-800 text-slate-800 dark:text-white'
+    } min-w-[240px] max-w-[280px] shadow-sm mb-2 text-left`}>
+      <audio ref={audioRef} src={mediaUrl} preload="metadata" />
+      
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="h-8 w-8 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white flex items-center justify-center shadow-md active:scale-95 transition-all shrink-0"
+      >
+        {isPlaying ? (
+          <Pause className="h-3.5 w-3.5 fill-white text-white" />
+        ) : (
+          <Play className="h-3.5 w-3.5 fill-white text-white ml-0.5" />
+        )}
+      </button>
+
+      <div className="flex-1 flex flex-col gap-1">
+        <div className="flex gap-[2px] items-center h-6 select-none cursor-pointer">
+          {[
+            3, 5, 2, 4, 6, 8, 3, 2, 5, 7, 9, 4, 3, 5, 6, 4, 2, 5, 7, 3, 4, 6, 2, 4
+          ].map((h, i) => {
+            const isActive = progress > (i / 24) * 100;
+            return (
+              <div
+                key={i}
+                className="flex-1 rounded-full transition-all"
+                style={{
+                  height: `${h * 10}%`,
+                  backgroundColor: isActive 
+                    ? '#6366f1' 
+                    : isMe ? 'rgba(99, 102, 241, 0.25)' : 'rgba(100, 116, 139, 0.25)'
+                }}
+              />
+            );
+          })}
+        </div>
+        <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 leading-none">
+          <span>Voice Memo</span>
+          <span>{audioRef.current && audioRef.current.duration ? `${Math.floor(audioRef.current.duration)}s` : ''}</span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 interface WhiteboardProps {
@@ -1691,6 +1785,11 @@ export default function ChatDashboard() {
                     const isGroup = chat.isGroup;
                     const targetParticipant = chat.participants.find(p => p._id !== (user?._id || user?.id));
                     const titleName = isGroup ? chat.name : (targetParticipant?.username || 'Chat room');
+                    
+                    const activeTypers = Object.values(typingUsers[chat._id] || {});
+                    const isSomeoneTyping = activeTypers.length > 0;
+                    const typingText = isSomeoneTyping ? `${activeTypers[0]} is typing...` : '';
+                    
                     const subtitle = chat.lastMessage?.isDeleted 
                       ? 'Deleted message' 
                       : (chat.lastMessage?.content || chat.description || 'No messages yet');
@@ -1731,9 +1830,15 @@ export default function ChatDashboard() {
                             </div>
                           </div>
                           <div className="flex justify-between items-center mt-0.5">
-                            <p className={`text-xs truncate font-medium flex-1 ${
-                              unread > 0 ? 'text-slate-700 dark:text-slate-300 font-semibold' : 'text-slate-500 dark:text-slate-400'
-                            }`}>{subtitle}</p>
+                            {isSomeoneTyping ? (
+                              <p className="text-xs truncate font-semibold text-indigo-500 dark:text-indigo-400 flex-1 animate-pulse">
+                                {typingText}
+                              </p>
+                            ) : (
+                              <p className={`text-xs truncate font-medium flex-1 ${
+                                unread > 0 ? 'text-slate-700 dark:text-slate-300 font-semibold' : 'text-slate-500 dark:text-slate-400'
+                              }`}>{subtitle}</p>
+                            )}
                             {unread > 0 && (
                               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] w-[18px] rounded-full bg-emerald-500 text-white text-[10px] font-bold shrink-0 ml-2">
                                 {unread > 99 ? '99+' : unread}
@@ -2492,7 +2597,7 @@ export default function ChatDashboard() {
 
                       {/* Audio / Voice Attachment */}
                       {msg.messageType === 'voice' && msg.mediaUrl && (
-                        <audio controls src={msg.mediaUrl} className="mb-2" />
+                        <VoiceMessagePlayer mediaUrl={msg.mediaUrl} isMe={isMe} />
                       )}
 
                       {/* Poll View */}
@@ -2513,6 +2618,30 @@ export default function ChatDashboard() {
                       )}
 
                       <p className="text-sm font-medium leading-relaxed break-words">{msg.isEncrypted ? (decryptedCache[msg._id] || '🔒 [Decrypting secret message...]') : msg.content}</p>
+
+                      {/* Message Reactions Badges display */}
+                      {msg.reactions && msg.reactions.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 pb-1 relative z-10 select-none">
+                          {(() => {
+                            const grouped: { [emoji: string]: number } = {};
+                            msg.reactions.forEach(r => {
+                              grouped[r.emoji] = (grouped[r.emoji] || 0) + 1;
+                            });
+
+                            return Object.entries(grouped).map(([emoji, count]) => (
+                              <button
+                                key={emoji}
+                                onClick={() => reactToMessage(msg._id, emoji)}
+                                className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100/60 dark:bg-slate-950/50 hover:bg-slate-200/80 dark:hover:bg-slate-900 border border-slate-200/40 dark:border-slate-800/40 text-[9px] font-black text-slate-800 dark:text-slate-200 transition-all hover:scale-105 active:scale-95 shadow-sm"
+                                title="Click to remove or add reaction"
+                              >
+                                <span>{emoji}</span>
+                                {count > 1 && <span className="opacity-90 font-bold">{count}</span>}
+                              </button>
+                            ));
+                          })()}
+                        </div>
+                      )}
 
                       {/* Emojis hover popup (centered above bubble to prevent cut-off) */}
                       <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 hidden group-hover:flex gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-20">
@@ -2554,6 +2683,8 @@ export default function ChatDashboard() {
                           <span>
                             {msg.status === 'seen' ? (
                               <CheckCheck className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
+                            ) : msg.status === 'delivered' ? (
+                              <CheckCheck className="h-3 w-3 text-slate-400 dark:text-slate-550" />
                             ) : (
                               <Check className="h-3 w-3 text-slate-400 dark:text-slate-550" />
                             )}

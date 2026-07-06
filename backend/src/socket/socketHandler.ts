@@ -100,6 +100,23 @@ export const socketHandler = (io: Server) => {
       }
     });
 
+    // ── Delivery receipts ──────────────────────────────────────────────────
+    socket.on('message:delivered', async ({ chatId, messageId }: { chatId: string; messageId: string }) => {
+      try {
+        await Message.updateOne(
+          { _id: messageId, status: 'sent' },
+          { $set: { status: 'delivered' } }
+        );
+        socket.to(`chat:${chatId}`).emit('message:delivered', {
+          chatId,
+          messageId,
+          status: 'delivered'
+        });
+      } catch (err: any) {
+        logger.error(`Error marking message as delivered: ${err.message}`);
+      }
+    });
+
     // ── Message-sent notification (emitted by chat controller after save) ──
     // Clients re-emit 'message:notify' after successfully POSTing a message so the
     // socket layer can fan-out notifications to offline participants.

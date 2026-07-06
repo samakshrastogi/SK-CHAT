@@ -123,6 +123,10 @@ export const useSocket = () => {
       updateMessageStatus(chatId, messageId, 'delivered');
     });
 
+    socket.on('message:reaction', ({ chatId, messageId, reactions }) => {
+      localUpdateReactions(chatId, messageId, reactions);
+    });
+
     // Typing Indicators
     socket.on('typing:start', ({ chatId, userId, username }) => {
       setTypingUser(chatId, userId, username);
