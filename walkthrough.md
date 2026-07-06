@@ -274,6 +274,14 @@ npx tsc --noEmit
   - Detects if `VITE_GOOGLE_CLIENT_ID` is set to the default placeholder. If so, renders a gorgeous mock login button. Tapping it logs in instantly as a mock user, preventing GSI client library errors.
 - **checkAuth Rate Limiting Prevention**:
   - Sets the checkAuth effect dependency array to empty `[]` in `App.tsx`, preventing recursive execution on state mutations and avoiding `429 (Too Many Requests)` rate-limiting responses.
+- **WhatsApp-Style Real-time Delivery Ticks**:
+  - Emits delivery feedback back to the sender via socket instantly on background/foreground receipt, shifting single ticks (sent) to double grey ticks (delivered) and blue ticks (seen).
+- **Interactive Message Reaction Badges**:
+  - Grouped emoji counts display dynamically on the bottom edge of bubbles with click toggle support.
+- **Premium Waveform Voice Note Cards**:
+  - Voice memo attachments play/pause circular button toggles progress color fills over static vertical bar waveforms.
+- **Sidebar Live Typing Tags**:
+  - Displays a pulsing "Typing..." status inside sidebar conversation list items when contacts type.
 
 ---
 
