@@ -42,6 +42,7 @@ export default function LandingPage() {
     return () => ctx.revert();
   }, []);
 
+  // GSAP-like Timed Interactive Chat Simulation Loop
   useEffect(() => {
     let active = true;
     let timeoutId: any;
@@ -94,52 +95,48 @@ export default function LandingPage() {
     };
   }, []);
 
-  // Theme styling calculations based on selected accent switcher
+  // Theme styling calculations based on selected accent switcher (Light Theme specific)
   const getAccentClass = () => {
     switch (accent) {
       case 'emerald':
         return {
-          bg: 'from-emerald-500/10 to-teal-500/10',
-          badge: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+          badge: 'bg-emerald-50 border-emerald-200/60 text-emerald-700',
           logo: 'from-emerald-500 to-teal-600 shadow-emerald-500/20',
-          textGrad: 'from-emerald-200 to-teal-400',
-          button: 'from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/15 hover:shadow-emerald-500/25',
+          button: 'from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/10 hover:shadow-emerald-500/20',
           chatBubble: 'from-emerald-500 to-teal-600',
           glowColor: 'bg-emerald-500/10',
-          activeDot: 'bg-emerald-400',
+          activeDot: 'bg-emerald-500',
+          cardIcon: 'bg-emerald-50 border-emerald-100 text-emerald-600',
         };
       case 'sunset':
         return {
-          bg: 'from-orange-500/10 to-rose-500/10',
-          badge: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
+          badge: 'bg-orange-50 border-orange-200/60 text-orange-700',
           logo: 'from-orange-500 to-rose-600 shadow-orange-500/20',
-          textGrad: 'from-orange-200 to-rose-400',
-          button: 'from-orange-500 to-rose-600 hover:from-orange-600 hover:to-rose-700 shadow-orange-500/15 hover:shadow-orange-500/25',
+          button: 'from-orange-500 to-rose-600 hover:from-orange-600 hover:to-rose-700 shadow-orange-500/10 hover:shadow-orange-500/20',
           chatBubble: 'from-orange-500 to-rose-600',
           glowColor: 'bg-orange-500/10',
-          activeDot: 'bg-orange-400',
+          activeDot: 'bg-orange-500',
+          cardIcon: 'bg-orange-50 border-orange-100 text-orange-600',
         };
       case 'sapphire':
         return {
-          bg: 'from-cyan-500/10 to-blue-500/10',
-          badge: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400',
+          badge: 'bg-cyan-50 border-cyan-200/60 text-cyan-700',
           logo: 'from-cyan-500 to-blue-600 shadow-cyan-500/20',
-          textGrad: 'from-cyan-200 to-blue-400',
-          button: 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 shadow-cyan-500/15 hover:shadow-cyan-500/25',
+          button: 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 shadow-cyan-500/10 hover:shadow-cyan-500/20',
           chatBubble: 'from-cyan-500 to-blue-600',
           glowColor: 'bg-cyan-500/10',
-          activeDot: 'bg-cyan-400',
+          activeDot: 'bg-cyan-500',
+          cardIcon: 'bg-cyan-50 border-cyan-100 text-cyan-600',
         };
       default:
         return {
-          bg: 'from-indigo-500/10 to-purple-500/10',
-          badge: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400',
+          badge: 'bg-indigo-50 border-indigo-200/60 text-indigo-700',
           logo: 'from-indigo-500 to-purple-600 shadow-indigo-500/20',
-          textGrad: 'from-indigo-200 to-purple-400',
-          button: 'from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-indigo-500/15 hover:shadow-indigo-500/25',
+          button: 'from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-indigo-500/10 hover:shadow-indigo-500/20',
           chatBubble: 'from-indigo-500 to-purple-600',
           glowColor: 'bg-indigo-500/10',
-          activeDot: 'bg-indigo-400',
+          activeDot: 'bg-indigo-500',
+          cardIcon: 'bg-indigo-50 border-indigo-100 text-indigo-600',
         };
     }
   };
@@ -147,18 +144,19 @@ export default function LandingPage() {
   const style = getAccentClass();
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-[#0b1329] text-slate-100 flex flex-col justify-between overflow-x-hidden relative select-none">
-      {/* Background Glows */}
-      <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full ${style.glowColor} blur-[130px] pointer-events-none transition-all duration-700`} />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/5 blur-[130px] pointer-events-none" />
+    <div ref={containerRef} className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col justify-between overflow-x-hidden relative select-none">
+      {/* Background Grid Pattern & Mesh Glows */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-50 pointer-events-none" />
+      <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full ${style.glowColor} blur-[120px] pointer-events-none transition-all duration-700`} />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/5 blur-[120px] pointer-events-none" />
 
       {/* Header */}
       <header className="max-w-7xl mx-auto w-full px-6 py-6 flex items-center justify-between z-10 gsap-header">
         <div className="flex items-center gap-2">
-          <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${style.logo} flex items-center justify-center shadow-lg transition-all duration-500`}>
+          <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${style.logo} flex items-center justify-center shadow-md transition-all duration-500`}>
             <span className="text-sm font-black tracking-tighter text-white">SK</span>
           </div>
-          <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-100 to-indigo-300">
+          <span className="text-2xl font-bold tracking-tight text-slate-800">
             SK Connect
           </span>
         </div>
@@ -169,7 +167,7 @@ export default function LandingPage() {
             </Link>
           ) : (
             <>
-              <Link to="/login" className="px-4 py-2 text-sm font-semibold text-slate-300 hover:text-indigo-400 transition-colors">Sign In</Link>
+              <Link to="/login" className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</Link>
               <Link to="/register" className={`px-5 py-2.5 text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500`}>Get Started</Link>
             </>
           )}
@@ -180,14 +178,14 @@ export default function LandingPage() {
       <main className="max-w-7xl mx-auto w-full px-6 py-12 md:py-24 grid md:grid-cols-12 gap-12 items-center z-10">
         <div className="md:col-span-7 flex flex-col gap-6">
           <div className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full ${style.badge} border text-xs font-semibold w-fit gsap-badge transition-all duration-500`}>
-            <Sparkles className="h-3.5 w-3.5" /> Introducing SK Connect 1.0
+            <Sparkles className="h-3.5 w-3.5 text-indigo-500" /> Introducing SK Connect 1.0
           </div>
 
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-300 gsap-title">
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 gsap-title">
             Connect Instantly.<br />Communicate Beautifully.
           </h1>
 
-          <p className="text-base md:text-lg text-slate-400 max-w-lg leading-relaxed gsap-desc">
+          <p className="text-base md:text-lg text-slate-500 max-w-lg leading-relaxed gsap-desc font-medium">
             A premium real-time collaboration ecosystem. Instant file syncs, high-definition WebRTC calling, expiring status sharing, and modular AI integrations.
           </p>
 
@@ -201,36 +199,36 @@ export default function LandingPage() {
                 Start Chatting Now
               </Link>
             )}
-            <a href="#features" className="px-8 py-4 text-base font-semibold bg-slate-800/40 hover:bg-slate-800 border border-slate-700/40 hover:border-slate-600 text-slate-200 rounded-2xl transition-all gsap-cta">
+            <a href="#features" className="px-8 py-4 text-base font-semibold bg-white hover:bg-slate-50 border border-slate-200/80 text-slate-700 rounded-2xl shadow-sm hover:shadow transition-all gsap-cta">
               Explore Features
             </a>
           </div>
 
           {/* Interactive Accent Switcher Widget */}
           <div className="mt-8 flex flex-col gap-3 gsap-preview-picker">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Preview Accent Wallpaper</span>
-            <div className="flex gap-3">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Preview Accent Theme</span>
+            <div className="flex flex-wrap gap-3">
               <button 
                 onClick={() => setAccent('indigo')}
-                className={`h-7 px-3.5 rounded-full text-xs font-semibold transition-all border ${accent === 'indigo' ? 'bg-indigo-600 border-indigo-500 text-white shadow shadow-indigo-600/30 scale-105' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'}`}
+                className={`h-8 px-4 rounded-full text-xs font-semibold transition-all border ${accent === 'indigo' ? 'bg-indigo-600 border-indigo-500 text-white shadow shadow-indigo-600/20 scale-105' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'}`}
               >
                 Purple Indigo
               </button>
               <button 
                 onClick={() => setAccent('emerald')}
-                className={`h-7 px-3.5 rounded-full text-xs font-semibold transition-all border ${accent === 'emerald' ? 'bg-emerald-600 border-emerald-500 text-white shadow shadow-emerald-600/30 scale-105' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'}`}
+                className={`h-8 px-4 rounded-full text-xs font-semibold transition-all border ${accent === 'emerald' ? 'bg-emerald-600 border-emerald-500 text-white shadow shadow-emerald-600/20 scale-105' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'}`}
               >
                 Emerald Mint
               </button>
               <button 
                 onClick={() => setAccent('sunset')}
-                className={`h-7 px-3.5 rounded-full text-xs font-semibold transition-all border ${accent === 'sunset' ? 'bg-orange-600 border-orange-500 text-white shadow shadow-orange-600/30 scale-105' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'}`}
+                className={`h-8 px-4 rounded-full text-xs font-semibold transition-all border ${accent === 'sunset' ? 'bg-orange-600 border-orange-500 text-white shadow shadow-orange-600/20 scale-105' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'}`}
               >
                 Sunset Orange
               </button>
               <button 
                 onClick={() => setAccent('sapphire')}
-                className={`h-7 px-3.5 rounded-full text-xs font-semibold transition-all border ${accent === 'sapphire' ? 'bg-cyan-600 border-cyan-500 text-white shadow shadow-cyan-600/30 scale-105' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'}`}
+                className={`h-8 px-4 rounded-full text-xs font-semibold transition-all border ${accent === 'sapphire' ? 'bg-cyan-600 border-cyan-500 text-white shadow shadow-cyan-600/20 scale-105' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'}`}
               >
                 Sapphire Blue
               </button>
@@ -320,79 +318,79 @@ export default function LandingPage() {
       </main>
 
       {/* Feature Grid */}
-      <section id="features" className="max-w-7xl mx-auto w-full px-6 py-20 border-t border-slate-800/40">
+      <section id="features" className="max-w-7xl mx-auto w-full px-6 py-20 border-t border-slate-200">
         <div className="text-center mb-16">
-          <h2 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-slate-100 to-indigo-300">
+          <h2 className="text-3xl font-extrabold text-slate-800">
             Smart Features, Reimagined
           </h2>
-          <p className="mt-3 text-slate-400 text-sm max-w-xl mx-auto leading-relaxed">
+          <p className="mt-3 text-slate-500 text-sm max-w-xl mx-auto leading-relaxed">
             Discover the systems engineered to deliver low-latency real-time collaboration and secure communication.
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {/* Card 1 */}
-          <div className="p-6 rounded-2xl bg-slate-900/30 border border-slate-800/80 hover:border-slate-700/60 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/5">
-            <div className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+            <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Zap className="h-5.5 w-5.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">Real-time Sockets</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
+            <h3 className="text-base font-bold text-slate-800">Real-time Sockets</h3>
+            <p className="text-slate-500 text-xs leading-relaxed">
               Lightning-fast message routing, real-time presence indicators, dynamic typing notifications, and instant online syncing.
             </p>
           </div>
 
           {/* Card 2 */}
-          <div className="p-6 rounded-2xl bg-slate-900/30 border border-slate-800/80 hover:border-slate-700/60 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/5">
-            <div className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+            <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Video className="h-5.5 w-5.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">WebRTC Audio & Video</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
+            <h3 className="text-base font-bold text-slate-800">WebRTC Audio & Video</h3>
+            <p className="text-slate-500 text-xs leading-relaxed">
               Establish crystal-clear peer-to-peer audio and video call streams directly inside your browser window with call logs history.
             </p>
           </div>
 
           {/* Card 3 */}
-          <div className="p-6 rounded-2xl bg-slate-900/30 border border-slate-800/80 hover:border-slate-700/60 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/5">
-            <div className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+            <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Sparkles className="h-5.5 w-5.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">AI Assistant Integration</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
+            <h3 className="text-base font-bold text-slate-800">AI Assistant Integration</h3>
+            <p className="text-slate-500 text-xs leading-relaxed">
               Summarize chat threads instantly, check spelling, rewrite and translate messages, or view dynamic suggested smart replies.
             </p>
           </div>
 
           {/* Card 4 */}
-          <div className="p-6 rounded-2xl bg-slate-900/30 border border-slate-800/80 hover:border-slate-700/60 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/5">
-            <div className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+            <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <MessageSquare className="h-5.5 w-5.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">Structured Communities</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
+            <h3 className="text-base font-bold text-slate-800">Structured Communities</h3>
+            <p className="text-slate-500 text-xs leading-relaxed">
               Create communities with sub-channel layouts including announcement panels, events schedules, media grids, and drop-in voice rooms.
             </p>
           </div>
 
           {/* Card 5 */}
-          <div className="p-6 rounded-2xl bg-slate-900/30 border border-slate-800/80 hover:border-slate-700/60 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/5">
-            <div className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+            <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Globe className="h-5.5 w-5.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">24-Hour Expiring Stories</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
+            <h3 className="text-base font-bold text-slate-800">24-Hour Expiring Stories</h3>
+            <p className="text-slate-500 text-xs leading-relaxed">
               Share status updates that disappear in 24 hours. Add interactive Q&A sliders, location widgets, hashtags, and likes sync.
             </p>
           </div>
 
           {/* Card 6 */}
-          <div className="p-6 rounded-2xl bg-slate-900/30 border border-slate-800/80 hover:border-slate-700/60 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/5">
-            <div className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+            <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Shield className="h-5.5 w-5.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">OTP & Remote Device Controls</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
+            <h3 className="text-base font-bold text-slate-800">OTP & Remote Device Controls</h3>
+            <p className="text-slate-500 text-xs leading-relaxed">
               Verify credentials via email OTP codes, register session devices, and revoke active remote device sessions instantly.
             </p>
           </div>
@@ -400,7 +398,7 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-slate-850 py-8 text-center text-slate-500 text-xs">
+      <footer className="border-t border-slate-200 py-8 text-center text-slate-400 text-xs bg-slate-100/40">
         <p>&copy; {new Date().getFullYear()} SK Connect. All rights reserved.</p>
       </footer>
     </div>

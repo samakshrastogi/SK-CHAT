@@ -214,49 +214,53 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
         return next(new CustomError('Invalid or expired refresh token', 401));
       }
 
-      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-      const session = await DeviceSession.findOne({ refreshToken: hashedToken, isActive: true });
-      
-      if (!session) {
-        return next(new CustomError('Active session not found', 401));
-      }
+      try {
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+        const session = await DeviceSession.findOne({ refreshToken: hashedToken, isActive: true });
+        
+        if (!session) {
+          return next(new CustomError('Active session not found', 401));
+        }
 
-      // Enforce 48 hours inactivity expiry
-      const fortyEightHours = 48 * 60 * 60 * 1000;
-      if (session.lastActive && (Date.now() - session.lastActive.getTime() > fortyEightHours)) {
-        session.isActive = false;
+        // Enforce 48 hours inactivity expiry
+        const fortyEightHours = 48 * 60 * 60 * 1000;
+        if (session.lastActive && (Date.now() - session.lastActive.getTime() > fortyEightHours)) {
+          session.isActive = false;
+          await session.save();
+          res.clearCookie('refreshToken');
+          return next(new CustomError('Session has expired due to 48 hours of inactivity', 401));
+        }
+
+        const user = await User.findById(decoded.id);
+        if (!user) {
+          return next(new CustomError('User not found', 401));
+        }
+
+        // Generate new credentials
+        const deviceId = decoded.deviceId;
+        const accessToken = generateAccessToken(user, deviceId);
+        const newRefreshToken = generateRefreshToken(user, deviceId);
+
+        // Rotate Refresh Token
+        const newHashedToken = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+        session.refreshToken = newHashedToken;
+        session.lastActive = new Date();
         await session.save();
-        res.clearCookie('refreshToken');
-        return next(new CustomError('Session has expired due to 48 hours of inactivity', 401));
-      }
 
-      const user = await User.findById(decoded.id);
-      if (!user) {
-        return next(new CustomError('User not found', 401));
-      }
-
-      // Generate new credentials
-      const deviceId = decoded.deviceId;
-      const accessToken = generateAccessToken(user, deviceId);
-      const newRefreshToken = generateRefreshToken(user, deviceId);
-
-      // Rotate Refresh Token
-      const newHashedToken = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
-      session.refreshToken = newHashedToken;
-      session.lastActive = new Date();
-      await session.save();
-
-      res.cookie('refreshToken', newRefreshToken, {
+        res.cookie('refreshToken', newRefreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000
       });
 
-      res.status(200).json({
-        success: true,
-        accessToken
-      });
+        res.status(200).json({
+          success: true,
+          accessToken
+        });
+      } catch (innerError) {
+        next(innerError);
+      }
     });
   } catch (error) {
     next(error);

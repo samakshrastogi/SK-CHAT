@@ -32,29 +32,33 @@ export const authenticateJWT = async (
         return next(new CustomError('Invalid or expired access token', 401));
       }
 
-      const user = await User.findById(decoded.id);
-      if (!user) {
-        return next(new CustomError('User no longer exists', 401));
+      try {
+        const user = await User.findById(decoded.id);
+        if (!user) {
+          return next(new CustomError('User no longer exists', 401));
+        }
+
+        if (!user.isVerified) {
+          return next(new CustomError('Please verify your email address to access this feature', 403));
+        }
+
+        // Check if user is blocked (banned) by admin
+        if (user.role === 'user' && user.status === 'offline' && user.bio === '[Banned]') {
+          return next(new CustomError('Your account has been suspended by the moderator team.', 403));
+        }
+
+        req.user = {
+          id: decoded.id,
+          email: decoded.email,
+          username: decoded.username,
+          role: decoded.role || user.role,
+          deviceId: decoded.deviceId
+        };
+
+        next();
+      } catch (innerError) {
+        next(innerError);
       }
-
-      if (!user.isVerified) {
-        return next(new CustomError('Please verify your email address to access this feature', 403));
-      }
-
-      // Check if user is blocked (banned) by admin
-      if (user.role === 'user' && user.status === 'offline' && user.bio === '[Banned]') {
-        return next(new CustomError('Your account has been suspended by the moderator team.', 403));
-      }
-
-      req.user = {
-        id: decoded.id,
-        email: decoded.email,
-        username: decoded.username,
-        role: decoded.role || user.role,
-        deviceId: decoded.deviceId
-      };
-
-      next();
     });
   } catch (error) {
     next(error);
