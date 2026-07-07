@@ -5,6 +5,7 @@ import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '../store/authStore.js';
 import { Mail, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { apiClient, setAccessTokenInMemory } from '../api/client.js';
+import { motion } from 'framer-motion';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const HAS_GOOGLE_CLIENT_ID = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'your_google_client_id_here');
@@ -77,14 +78,19 @@ function LoginForm() {
 
       <div className="w-full max-w-[420px] z-10">
         <div className="text-center mb-5">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-3 animate-pulse">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-3 animate-logo-glow">
             <span className="text-sm font-black tracking-tighter text-white">SK</span>
           </div>
           <h2 className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-300 dark:via-purple-300 dark:to-pink-300">Welcome back</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-medium">Sign in to your SK Connect account to continue</p>
         </div>
 
-        <div className="bg-white/70 dark:bg-slate-900/70 border border-slate-200/50 dark:border-indigo-500/20 backdrop-blur-2xl rounded-[28px] px-6 py-5 shadow-2xl shadow-indigo-500/5 dark:shadow-purple-500/10 transition-all duration-300 relative">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="bg-white/70 dark:bg-slate-900/70 border border-slate-200/50 dark:border-indigo-500/20 backdrop-blur-2xl rounded-[28px] px-6 py-5 shadow-2xl shadow-indigo-500/5 dark:shadow-purple-500/10 transition-all duration-300 relative"
+        >
           {errorMsg && (
             <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex gap-2.5 text-red-600 dark:text-red-400 text-xs font-semibold items-start">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -100,9 +106,9 @@ function LoginForm() {
                   type="text"
                   placeholder="name@example.com or username"
                   {...register('emailOrUsername', { required: 'Username or email is required' })}
-                  className="w-full h-10 pl-10 pr-4 rounded-lg text-xs font-medium bg-white/50 dark:bg-slate-950/40 text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-200 dark:border-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full h-11 pl-10 pr-4 rounded-xl text-sm font-medium bg-white/50 dark:bg-slate-950/40 text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-200 dark:border-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                 />
-                <Mail className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
+                <Mail className="absolute left-3.5 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
               </div>
               {errors.emailOrUsername && (
                 <p className="mt-0.5 text-[10px] text-red-500 font-semibold">{errors.emailOrUsername.message as string}</p>
@@ -119,13 +125,13 @@ function LoginForm() {
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   {...register('password', { required: 'Password is required' })}
-                  className="w-full h-10 pl-10 pr-11 rounded-lg text-xs font-medium bg-white/50 dark:bg-slate-950/40 text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-200 dark:border-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full h-11 pl-10 pr-11 rounded-xl text-sm font-medium bg-white/50 dark:bg-slate-950/40 text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-200 dark:border-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                 />
-                <Lock className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
+                <Lock className="absolute left-3.5 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-2.5 text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 transition-colors"
+                  className="absolute right-3.5 top-3 text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 transition-colors"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -138,7 +144,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs shadow hover:shadow-md transition-all flex items-center justify-center disabled:opacity-50"
+              className="w-full h-11 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-sm shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center disabled:opacity-50"
             >
               {isLoading ? (
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -149,7 +155,7 @@ function LoginForm() {
           {/* Divider */}
           <div className="relative my-4 flex items-center justify-center">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200 dark:border-slate-800" /></div>
-            <span className="relative px-2.5 text-[9px] uppercase font-bold text-slate-400 bg-white dark:bg-slate-900 rounded">Or continue with</span>
+            <span className="relative px-3 text-[10px] uppercase font-bold tracking-widest text-slate-400">or continue with</span>
           </div>
 
           {/* Real Google OAuth Button wrapper */}
@@ -201,7 +207,7 @@ function LoginForm() {
               </button>
             )}
           </div>
-        </div>
+        </motion.div>
 
         <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
           Don't have an account?{' '}

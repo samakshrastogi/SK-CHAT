@@ -337,3 +337,86 @@ html, body {
   background: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ENHANCED ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-18px); }
+}
+.animate-float-slow { animation: float 8s infinite ease-in-out; }
+
+@keyframes logo-glow {
+  0%, 100% { box-shadow: 0 0 12px 2px rgba(99,102,241,0.20), 0 4px 20px rgba(99,102,241,0.15); }
+  50%       { box-shadow: 0 0 28px 8px rgba(139,92,246,0.35), 0 4px 30px rgba(139,92,246,0.25); }
+}
+.animate-logo-glow { animation: logo-glow 3s infinite ease-in-out; }
+
+@keyframes slide-up-fade {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up { animation: slide-up-fade 0.4s ease-out forwards; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GRADIENT AVATAR INITIALS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.avatar-gradient-1 { background: linear-gradient(135deg, #6366f1, #a855f7); }
+.avatar-gradient-2 { background: linear-gradient(135deg, #ec4899, #f43f5e); }
+.avatar-gradient-3 { background: linear-gradient(135deg, #10b981, #0ea5e9); }
+.avatar-gradient-4 { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.avatar-gradient-5 { background: linear-gradient(135deg, #8b5cf6, #06b6d4); }
+.avatar-gradient-6 { background: linear-gradient(135deg, #14b8a6, #22c55e); }
+.avatar-gradient-7 { background: linear-gradient(135deg, #f97316, #eab308); }
+.avatar-gradient-8 { background: linear-gradient(135deg, #6366f1, #ec4899); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATE SEPARATOR IN CHAT
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.date-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  user-select: none;
+}
+.date-separator::before,
+.date-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STORIES CAROUSEL - HIDE SCROLLBAR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.stories-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.stories-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FLOATING INPUT BAR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.input-float-bar {
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 10px 12px;
+}
+[data-theme="dark"] .input-float-bar {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.30);
+}

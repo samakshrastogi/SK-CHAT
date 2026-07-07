@@ -72,7 +72,14 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
+        <div 
+          className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              onClose();
+            }
+          }}
+        >
           <div className="w-full max-w-[800px] max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-48px)] bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-[32px] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
             
             {/* Left Column: Live Preview */}

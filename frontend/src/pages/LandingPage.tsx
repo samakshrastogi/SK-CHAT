@@ -147,8 +147,8 @@ export default function LandingPage() {
     <div ref={containerRef} className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col justify-between overflow-x-hidden relative select-none">
       {/* Background Grid Pattern & Mesh Glows */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-50 pointer-events-none" />
-      <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full ${style.glowColor} blur-[120px] pointer-events-none transition-all duration-700`} />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/5 blur-[120px] pointer-events-none" />
+      <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full ${style.glowColor} blur-[120px] pointer-events-none transition-all duration-700 animate-float-slow`} />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/5 blur-[120px] pointer-events-none animate-float-slow" style={{ animationDelay: '2s' }} />
 
       {/* Header */}
       <header className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-5 sm:py-6 flex items-center justify-between gap-3 z-10 gsap-header">
@@ -181,7 +181,7 @@ export default function LandingPage() {
             <Sparkles className="h-3.5 w-3.5 text-indigo-500" /> Introducing SK Connect 1.0
           </div>
 
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 gsap-title">
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 gsap-title">
             Connect Instantly.<br />Communicate Beautifully.
           </h1>
 
@@ -237,8 +237,9 @@ export default function LandingPage() {
         </div>
 
         {/* Mock phone mockup with dynamic typing simulator */}
-        <div className="md:col-span-5 flex justify-center items-center gsap-phone">
-          <div className="w-full max-w-[390px] aspect-[9/19] rounded-[48px] bg-slate-950 border-[5px] border-slate-800 p-4 shadow-2xl relative flex flex-col justify-between overflow-hidden">
+        <div className="md:col-span-5 flex justify-center items-center gsap-phone relative">
+          <div className={`absolute -inset-4 rounded-[52px] bg-gradient-to-r ${style.chatBubble} opacity-20 blur-2xl pointer-events-none`} />
+          <div className="w-full max-w-[390px] aspect-[9/19] rounded-[48px] bg-slate-950 border-[5px] border-slate-800 p-4 shadow-2xl shadow-indigo-500/20 relative flex flex-col justify-between overflow-hidden">
             {/* Camera notch */}
             <div className="absolute top-2.5 left-1/2 -translate-x-1/2 h-4 w-28 rounded-full bg-slate-950 border border-slate-850 z-20 flex items-center justify-center">
               <div className="h-1.5 w-1.5 rounded-full bg-slate-800" />
@@ -317,6 +318,25 @@ export default function LandingPage() {
         </div>
       </main>
 
+      {/* Stats Trust Bar */}
+      <section className="max-w-7xl mx-auto w-full px-6 py-6 border-t border-slate-200/60 z-10">
+        <div className="flex flex-wrap justify-center gap-8 sm:gap-16 items-center">
+          {[
+            { value: '50K+', label: 'Messages Daily' },
+            { value: '99.9%', label: 'Uptime Guaranteed' },
+            { value: 'E2EE', label: 'End-to-End Encrypted' },
+            { value: 'WebRTC', label: 'HD P2P Calls' },
+          ].map((stat) => (
+            <div key={stat.value} className="text-center">
+              <div className="text-2xl font-black bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(to right, #6366f1, #7c3aed)' }}>
+                {stat.value}
+              </div>
+              <div className="text-[11px] text-slate-500 font-semibold mt-0.5">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Feature Grid */}
       <section id="features" className="max-w-7xl mx-auto w-full px-6 py-20 border-t border-slate-200">
         <div className="text-center mb-16">
@@ -330,7 +350,8 @@ export default function LandingPage() {
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {/* Card 1 */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
             <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Zap className="h-5.5 w-5.5" />
             </div>
@@ -341,7 +362,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 2 */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
             <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Video className="h-5.5 w-5.5" />
             </div>
@@ -352,7 +374,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 3 */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
             <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Sparkles className="h-5.5 w-5.5" />
             </div>
@@ -363,7 +386,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 4 */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
             <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <MessageSquare className="h-5.5 w-5.5" />
             </div>
@@ -374,7 +398,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 5 */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
             <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Globe className="h-5.5 w-5.5" />
             </div>
@@ -385,7 +410,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 6 */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-md shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col gap-4 gsap-feature-card hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
             <div className={`h-11 w-11 rounded-xl ${style.cardIcon} flex items-center justify-center`}>
               <Shield className="h-5.5 w-5.5" />
             </div>
@@ -393,6 +419,26 @@ export default function LandingPage() {
             <p className="text-slate-500 text-xs leading-relaxed">
               Verify credentials via email OTP codes, register session devices, and revoke active remote device sessions instantly.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Pre-Footer CTA Banner */}
+      <section className="max-w-7xl mx-auto w-full px-6 py-12 z-10">
+        <div className={`rounded-3xl bg-gradient-to-r ${style.button} p-10 text-center text-white shadow-2xl relative overflow-hidden`}>
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:2rem_2rem] pointer-events-none" />
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-3 relative z-10">Ready to connect beautifully?</h2>
+          <p className="text-sm text-white/80 mb-6 max-w-md mx-auto relative z-10">Join thousands of teams already using SK Connect for real-time collaboration.</p>
+          <div className="relative z-10">
+            {isAuthenticated ? (
+              <Link to="/chat" className="inline-block px-8 py-3 bg-white font-bold text-sm rounded-2xl text-indigo-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+                Open Dashboard
+              </Link>
+            ) : (
+              <Link to="/register" className="inline-block px-8 py-3 bg-white font-bold text-sm rounded-2xl text-indigo-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+                Get Started Free
+              </Link>
+            )}
           </div>
         </div>
       </section>

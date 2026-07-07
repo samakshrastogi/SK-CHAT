@@ -29,7 +29,14 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   return (
     <AnimatePresence>
       {activeStatusViewer && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-50 p-3 sm:p-6 overflow-hidden">
+        <div 
+          className="fixed inset-0 bg-black flex items-center justify-center z-50 p-3 sm:p-6 overflow-hidden"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActiveStatusViewer(null);
+            }
+          }}
+        >
           {/* ProgressBar */}
           <div className="absolute top-3 sm:top-6 left-3 sm:left-6 right-3 sm:right-6 flex gap-1 z-50">
             {activeStatusViewer.map((_, i) => (

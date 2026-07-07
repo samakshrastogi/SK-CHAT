@@ -14,7 +14,7 @@ import {
   Paperclip, MoreVertical, X, Check, CheckCheck, Smile, Star, Trash2, Edit2, CornerUpLeft,
   Pin, Shield, Mic, HelpCircle, Share2, BarChart2, ShieldAlert, Trash, PlusCircle, Globe,
   Compass, Eye, Play, Pause, Sparkles, Languages, FileText, MapPin, PhoneMissed, Volume2, VideoOff,
-  UserX, CheckCircle, Ban, Download, Copy, Megaphone, Bell, Users, UserPlus, UserCheck, VolumeX
+  UserX, CheckCircle, Ban, Download, Copy, Megaphone, Bell, Users, UserPlus, UserCheck, VolumeX, Code2
 } from 'lucide-react';
 import { Chat, Message, User, Status, Call, DeviceSession, Community } from '../types/index.js';
 import { StoryCreatorModal } from '../components/StoryCreatorModal.tsx';
@@ -526,6 +526,8 @@ export default function ChatDashboard() {
   const [groupName, setGroupName] = useState('');
   const [groupParticipants, setGroupParticipants] = useState<string[]>([]);
   const [isBroadcastGroup, setIsBroadcastGroup] = useState(false);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [showBrandingLabel, setShowBrandingLabel] = useState(false);
   
   // Statuses & calls states
   const [statuses, setStatuses] = useState<Status[]>([]);
@@ -4053,88 +4055,195 @@ export default function ChatDashboard() {
             .filter((p): p is any => !!p)
             .filter((value, index, self) => self.findIndex(t => t._id === value._id) === index);
 
+          const filteredContacts = contactsList.filter(contact =>
+            contact.username.toLowerCase().includes(contactSearchQuery.toLowerCase())
+          );
+
           return (
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
-              <div className="w-full max-w-[400px] glass-panel rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                  <h3 className="font-bold text-lg text-white">Create Group</h3>
-                  <button onClick={() => { setCreateGroupOpen(false); setIsBroadcastGroup(false); setGroupParticipants([]); }} className="text-slate-500 hover:text-white">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setCreateGroupOpen(false);
+                  setIsBroadcastGroup(false);
+                  setGroupParticipants([]);
+                  setContactSearchQuery('');
+                }
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 15 }}
+                transition={{ type: "spring", duration: 0.4 }}
+                className="w-full max-w-[400px] bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] space-y-4 text-left relative overflow-hidden"
+              >
+                {/* Background glowing decorations */}
+                <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
+                <div className="absolute -bottom-12 -left-12 w-28 h-28 rounded-full bg-pink-500/10 blur-2xl pointer-events-none" />
+
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
+                  <h3 className="font-extrabold text-base text-slate-850 dark:text-white flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
+                      <Users className="h-4.5 w-4.5" />
+                    </div>
+                    <span className="tracking-tight">Create Group</span>
+                  </h3>
+                  <button 
+                    onClick={() => { 
+                      setCreateGroupOpen(false); 
+                      setIsBroadcastGroup(false); 
+                      setGroupParticipants([]); 
+                      setContactSearchQuery('');
+                    }} 
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                  >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
 
-                <div className="space-y-3.5">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Group Room Name</label>
-                    <input
-                      type="text"
-                      value={groupName}
-                      onChange={(e) => setGroupName(e.target.value)}
-                      placeholder="e.g. Design Review Crew"
-                      className="w-full h-10 rounded-xl text-xs font-semibold px-3 glass-input text-slate-850 dark:text-white"
-                    />
+                <div className="space-y-4 relative z-10">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Group Room Name</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={groupName}
+                        onChange={(e) => setGroupName(e.target.value)}
+                        placeholder="e.g. Design Review Crew"
+                        className="w-full h-10 rounded-xl text-xs font-semibold pl-3 pr-8 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/10 focus:shadow-[0_0_12px_rgba(99,102,241,0.15)]"
+                      />
+                      {groupName.trim() && (
+                        <button 
+                          onClick={() => setGroupName('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Broadcast Option */}
-                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-white/5 dark:bg-slate-900/30 border border-slate-200/20 dark:border-slate-800/40">
-                    <input
-                      type="checkbox"
-                      id="isBroadcastGroupCheckbox"
-                      checked={isBroadcastGroup}
-                      onChange={(e) => setIsBroadcastGroup(e.target.checked)}
-                      className="h-4.5 w-4.5 mt-0.5 rounded border-slate-350 dark:border-slate-800 text-indigo-500 focus:ring-0 bg-transparent cursor-pointer"
-                    />
-                    <label htmlFor="isBroadcastGroupCheckbox" className="flex flex-col cursor-pointer select-none">
-                      <span className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                        <Megaphone className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
-                        Broadcast Group
-                      </span>
-                      <span className="text-[10px] text-slate-550 dark:text-slate-400 mt-0.5 leading-normal">
-                        Messages sent to this group will deliver as separate 1-on-1 private messages to each member.
-                      </span>
-                    </label>
+                  <div 
+                    onClick={() => setIsBroadcastGroup(!isBroadcastGroup)}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all duration-300 cursor-pointer select-none ${
+                      isBroadcastGroup 
+                        ? 'bg-indigo-500/10 border-indigo-500/30 dark:bg-indigo-500/10 dark:border-indigo-500/35 shadow-[0_0_12px_rgba(99,102,241,0.05)]' 
+                        : 'bg-slate-50/50 dark:bg-slate-950/20 border-slate-200/60 dark:border-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-950/30'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5 pr-2">
+                      <div className={`p-1.5 rounded-lg shrink-0 transition-colors duration-300 ${isBroadcastGroup ? 'bg-indigo-500/20 text-indigo-500' : 'bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400'}`}>
+                        <Megaphone className="h-4 w-4" />
+                      </div>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-slate-850 dark:text-white flex items-center gap-1.5">
+                          Broadcast Group
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-normal">
+                          Deliver as separate 1-on-1 private messages to each member.
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Custom Toggle Switch */}
+                    <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-300 shrink-0 ${isBroadcastGroup ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
+                      <div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform duration-300 ${isBroadcastGroup ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                    </div>
                   </div>
 
                   {/* Member selection */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">Select Members</label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Select Members</label>
+                      {groupParticipants.length > 0 && (
+                        <span className="text-[10px] font-extrabold text-indigo-500 dark:text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded-md">
+                          {groupParticipants.length} selected
+                        </span>
+                      )}
+                    </div>
+                    
+                    {contactsList.length > 0 && (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={contactSearchQuery}
+                          onChange={(e) => setContactSearchQuery(e.target.value)}
+                          placeholder="Search contacts..."
+                          className="w-full h-8 rounded-lg text-xs pl-8 pr-7 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-slate-800 dark:text-white"
+                        />
+                        {contactSearchQuery && (
+                          <button 
+                            onClick={() => setContactSearchQuery('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    
                     <div className="max-h-[160px] overflow-y-auto space-y-1.5 pr-1 custom-scrollbar animate-fadeIn">
                       {contactsList.length > 0 ? (
-                        contactsList.map((contact) => {
-                          const isSelected = groupParticipants.includes(contact._id);
-                          return (
-                            <div 
-                              key={contact._id} 
-                              onClick={() => {
-                                if (isSelected) {
-                                  setGroupParticipants(groupParticipants.filter(id => id !== contact._id));
-                                } else {
-                                  setGroupParticipants([...groupParticipants, contact._id]);
-                                }
-                              }}
-                              className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                                isSelected 
-                                  ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300' 
-                                  : 'bg-transparent border-slate-200/60 dark:border-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-900/40 text-slate-700 dark:text-slate-300'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0">
-                                  {contact.avatar ? <img src={contact.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                        filteredContacts.length > 0 ? (
+                          filteredContacts.map((contact) => {
+                            const isSelected = groupParticipants.includes(contact._id);
+                            return (
+                              <div 
+                                key={contact._id} 
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setGroupParticipants(groupParticipants.filter(id => id !== contact._id));
+                                  } else {
+                                    setGroupParticipants([...groupParticipants, contact._id]);
+                                  }
+                                }}
+                                className={`flex items-center justify-between p-2 rounded-xl border transition-all duration-200 cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 dark:bg-indigo-500/10 dark:border-indigo-500/35' 
+                                    : 'bg-transparent border-slate-200/50 dark:border-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-950/30 text-slate-700 dark:text-slate-350'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0 border border-slate-350/40 dark:border-slate-700/40">
+                                    {contact.avatar ? (
+                                      <img src={contact.avatar} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                      <div className="h-full w-full flex items-center justify-center bg-indigo-500/10 text-indigo-500 font-bold text-xs uppercase">
+                                        {contact.username.charAt(0)}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="text-xs font-bold truncate">{contact.username}</span>
                                 </div>
-                                <span className="text-xs font-bold truncate">{contact.username}</span>
+                                
+                                {/* Custom Checkbox */}
+                                <div className={`h-4 w-4 rounded border transition-all flex items-center justify-center shrink-0 ${
+                                  isSelected 
+                                    ? 'bg-indigo-500 border-indigo-500 text-white shadow-sm shadow-indigo-500/20' 
+                                    : 'border-slate-300 dark:border-slate-800 bg-transparent'
+                                }`}>
+                                  {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                                </div>
                               </div>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                readOnly
-                                className="h-3.5 w-3.5 rounded border-slate-300 dark:border-slate-800 text-indigo-500 focus:ring-0 bg-transparent shrink-0 pointer-events-none"
-                              />
-                            </div>
-                          );
-                        })
+                            );
+                          })
+                        ) : (
+                          <div className="text-center py-6 text-slate-500 space-y-1">
+                            <Search className="h-5 w-5 mx-auto text-slate-400 stroke-[1.5]" />
+                            <p className="text-[10px] font-medium">No members match search query</p>
+                          </div>
+                        )
                       ) : (
-                        <p className="text-[10px] text-slate-500 text-center py-4">No active direct contacts available to select</p>
+                        <div className="text-center py-6 text-slate-500 space-y-1">
+                          <UserX className="h-6 w-6 mx-auto text-slate-400 stroke-[1.5]" />
+                          <p className="text-[10px] font-medium">No active contacts available to select</p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -4142,12 +4251,17 @@ export default function ChatDashboard() {
 
                 <button
                   onClick={handleCreateGroup}
-                  className="w-full py-3 rounded-xl bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/10 hover:bg-indigo-600 transition-colors"
+                  disabled={!groupName.trim()}
+                  className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all duration-300 relative z-10 ${
+                    groupName.trim()
+                      ? 'bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]'
+                      : 'bg-slate-100 dark:bg-slate-850 text-slate-450 dark:text-slate-500 cursor-not-allowed border border-slate-200/40 dark:border-slate-800/40'
+                  }`}
                 >
                   Create Group
                 </button>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           );
         })()}
       </AnimatePresence>
@@ -4155,45 +4269,89 @@ export default function ChatDashboard() {
       {/* 6. Create Community Modal Overlay */}
       <AnimatePresence>
         {createCommunityOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
-            <div className="w-full max-w-[400px] glass-panel rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
-              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                <h3 className="font-bold text-lg text-white">New Community</h3>
-                <button onClick={() => setCreateCommunityOpen(false)} className="text-slate-500 hover:text-white">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setCreateCommunityOpen(false);
+              }
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="w-full max-w-[400px] bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] space-y-4 text-left relative overflow-hidden"
+            >
+              {/* Background glowing decorations */}
+              <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-12 -left-12 w-28 h-28 rounded-full bg-pink-500/10 blur-2xl pointer-events-none" />
+
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
+                <h3 className="font-extrabold text-base text-slate-850 dark:text-white flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
+                    <Globe className="h-4.5 w-4.5" />
+                  </div>
+                  <span className="tracking-tight">New Community</span>
+                </h3>
+                <button 
+                  onClick={() => setCreateCommunityOpen(false)} 
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Community Name</label>
-                  <input
-                    type="text"
-                    value={communityName}
-                    onChange={(e) => setCommunityName(e.target.value)}
-                    placeholder="e.g. UI Designers Hub"
-                    className="w-full h-10 rounded-xl text-xs font-semibold px-3 glass-input text-slate-800 dark:text-white"
-                  />
+              <div className="space-y-4 relative z-10">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Community Name</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={communityName}
+                      onChange={(e) => setCommunityName(e.target.value)}
+                      placeholder="e.g. UI Designers Hub"
+                      className="w-full h-10 rounded-xl text-xs font-semibold pl-3 pr-8 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/10 focus:shadow-[0_0_12px_rgba(99,102,241,0.15)]"
+                    />
+                    {communityName.trim() && (
+                      <button 
+                        onClick={() => setCommunityName('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Description</label>
+                
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Description</label>
                   <textarea
                     value={communityDesc}
                     onChange={(e) => setCommunityDesc(e.target.value)}
                     placeholder="Explain the purpose of this network..."
-                    className="w-full min-h-[60px] rounded-xl text-xs font-semibold p-3 glass-input text-slate-800 dark:text-white"
+                    className="w-full min-h-[70px] rounded-xl text-xs font-semibold p-3 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/10 focus:shadow-[0_0_12px_rgba(99,102,241,0.15)] resize-none"
                   />
                 </div>
               </div>
 
               <button
                 onClick={handleCreateCommunity}
-                className="w-full py-3 rounded-xl bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/10 hover:bg-indigo-600"
+                disabled={!communityName.trim()}
+                className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all duration-300 relative z-10 ${
+                  communityName.trim()
+                    ? 'bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]'
+                    : 'bg-slate-100 dark:bg-slate-850 text-slate-450 dark:text-slate-500 cursor-not-allowed border border-slate-200/40 dark:border-slate-800/40'
+                }`}
               >
                 Assemble Community
               </button>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -4249,7 +4407,19 @@ export default function ChatDashboard() {
       {/* 10. Connect via Code Modal Overlay */}
       <AnimatePresence>
         {connectModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
+          <div 
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setConnectModalOpen(false); 
+                setMyConnectionCode(''); 
+                setMyCodeExpiresAt(null);
+                setEnterConnectionCode('');
+                setConnectError('');
+                setConnectSuccess('');
+              }
+            }}
+          >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -4359,6 +4529,40 @@ export default function ChatDashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Footer Branding Widget */}
+      <div 
+        className="fixed bottom-4 right-4 z-40 flex items-center gap-2 pointer-events-auto select-none"
+        onMouseEnter={() => setShowBrandingLabel(true)}
+        onMouseLeave={() => setShowBrandingLabel(false)}
+      >
+        <AnimatePresence>
+          {showBrandingLabel && (
+            <motion.a 
+              href="https://www.linkedin.com/in/samaksh-rastogi-9638b9254/"
+              target="_blank"
+              rel="noopener noreferrer"
+              initial={{ opacity: 0, x: 15, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 15, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 flex items-center shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.08)] whitespace-nowrap cursor-pointer hover:scale-[1.02] transition-transform"
+            >
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-350">
+                Developed by <span className="text-[#0f766e] dark:text-teal-400 font-extrabold hover:underline">Samaksh Rastogi</span>
+              </span>
+            </motion.a>
+          )}
+        </AnimatePresence>
+        
+        <button 
+          onClick={() => setShowBrandingLabel(!showBrandingLabel)}
+          className="h-10 w-10 rounded-full bg-[#0f172a] dark:bg-slate-950 flex items-center justify-center text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)] shrink-0 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          title="Developer Info"
+        >
+          <Code2 className="h-4.5 w-4.5 text-white on-color" />
+        </button>
+      </div>
 
     </div>
   );
