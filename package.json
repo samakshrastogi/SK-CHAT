@@ -1,0 +1,16 @@
+{
+  "name": "sk-chat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Convenience commands for the SK Chat frontend and backend",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "npm ci --prefix backend && npm ci --prefix frontend",
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "test": "npm test --prefix backend",
+    "start": "npm start --prefix backend"
+  }
+}
