@@ -3,6 +3,8 @@ import { User, DeviceSession } from '../types/index.js';
 import { apiClient, setAccessTokenInMemory } from '../api/client.js';
 import { requestCentralAppToken } from '../api/centralAuth.js';
 
+let authCheckPromise: Promise<boolean> | null = null;
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -90,22 +92,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   checkAuth: async () => {
+    if (authCheckPromise) return authCheckPromise;
+
     set({ isLoading: true });
-    try {
-      const centralToken = await requestCentralAppToken();
-      const response = await apiClient.post('/auth/central', {
-        token: centralToken,
-        deviceType: navigator.userAgent,
-      });
-      const { accessToken, user } = response.data;
-      setAccessTokenInMemory(accessToken);
-      set({ user, isAuthenticated: true, isLoading: false });
-      return true;
-    } catch {
-      setAccessTokenInMemory('');
-      set({ user: null, isAuthenticated: false, isLoading: false });
-      return false;
-    }
+    authCheckPromise = (async () => {
+      try {
+        const centralToken = await requestCentralAppToken();
+        const response = await apiClient.post('/auth/central', {
+          token: centralToken,
+          deviceType: navigator.userAgent,
+        });
+        const { accessToken, user } = response.data;
+        setAccessTokenInMemory(accessToken);
+        set({ user, isAuthenticated: true, isLoading: false });
+        return true;
+      } catch {
+        setAccessTokenInMemory('');
+        set({ user: null, isAuthenticated: false, isLoading: false });
+        return false;
+      } finally {
+        authCheckPromise = null;
+      }
+    })();
+
+    return authCheckPromise;
   },
   updateProfileData: async (formData) => {
     set({ isLoading: true });
