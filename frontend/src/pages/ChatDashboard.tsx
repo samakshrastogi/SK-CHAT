@@ -279,7 +279,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ chatId, socket }) => {
 };
 
 export default function ChatDashboard() {
-  const { user, logout, fetchSessions, sessions, terminateSession, terminateAllSessions } = useAuthStore();
+  const { user, fetchSessions, sessions, terminateSession, terminateAllSessions } = useAuthStore();
   const {
     chats, fetchChats, activeChat, setActiveChat, messages, sendChatMessage,
     editChatMessage, deleteChatMessage, reactToMessage, starMessageToggle, voteInPoll,
@@ -2203,13 +2203,7 @@ export default function ChatDashboard() {
                   <UserIcon className="h-4.5 w-4.5" />
                   <span>Manage your SK Account</span>
                 </a>
-                <button
-                  onClick={() => logout()}
-                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-650 dark:text-red-400 font-bold text-xs border border-red-500/20 transition-colors"
-                >
-                  <LogOut className="h-4.5 w-4.5" />
-                  <span>Log Out of SK Connect</span>
-                </button>
+
               </div>
             </div>
           </div>

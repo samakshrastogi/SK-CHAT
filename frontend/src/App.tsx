@@ -4,15 +4,22 @@ import { useAuthStore } from './store/authStore.js';
 import { useThemeStore } from './store/themeStore.js';
 import ChatDashboard from './pages/ChatDashboard.tsx';
 import LandingPage from './pages/LandingPage.tsx';
-import { redirectToCentralLogin } from './api/centralAuth.js';
+import { getCentralSessionState, redirectToCentralLogin } from './api/centralAuth.js';
 import RegisterPage from './pages/RegisterPage.tsx';
 import VerifyEmailPage from './pages/VerifyEmailPage.tsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx';
 import JoinGroupPage from './pages/JoinGroupPage.tsx';
 
 function CentralLoginRedirect() {
-  useEffect(() => redirectToCentralLogin(), []);
-  return <div className="min-h-screen grid place-items-center bg-slate-950 text-white font-bold">Connecting to SK Central...</div>;
+  const { isAuthenticated, isLoading } = useAuthStore();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) redirectToCentralLogin();
+  }, [isAuthenticated, isLoading]);
+
+  return isAuthenticated
+    ? <Navigate to="/chat" replace />
+    : <div className="min-h-screen grid place-items-center bg-slate-950 text-white font-bold">Connecting to SK Central...</div>;
 }
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -31,7 +38,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const { checkAuth } = useAuthStore();
+  const { checkAuth, clearLocalSession, isAuthenticated } = useAuthStore();
   const { applyTheme, theme } = useThemeStore();
 
   // Re-apply theme whenever the store's theme value changes
@@ -43,6 +50,32 @@ function App() {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let checkInFlight = false;
+
+    const verifyCentralSession = async () => {
+      if (checkInFlight) return;
+      checkInFlight = true;
+      const active = await getCentralSessionState();
+      checkInFlight = false;
+      if (active === false) await clearLocalSession();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void verifyCentralSession();
+    };
+
+    void verifyCentralSession();
+    window.addEventListener('focus', verifyCentralSession);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    const interval = window.setInterval(verifyCentralSession, 30_000);
+    return () => {
+      window.removeEventListener('focus', verifyCentralSession);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, [clearLocalSession, isAuthenticated]);
   return (
     <BrowserRouter>
       <Routes>

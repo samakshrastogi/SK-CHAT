@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { User, DeviceSession } from '../types/index.js';
 import { apiClient, setAccessTokenInMemory } from '../api/client.js';
-import { logoutFromCentral, requestCentralAppToken } from '../api/centralAuth.js';
+import { requestCentralAppToken } from '../api/centralAuth.js';
 
 interface AuthState {
   user: User | null;
@@ -10,7 +10,7 @@ interface AuthState {
   sessions: DeviceSession[];
   
   login: (emailOrUsername: string, password: string, deviceType?: string) => Promise<void>;
-  logout: () => Promise<void>;
+  clearLocalSession: () => Promise<void>;
   registerUser: (email: string, username: string, password: string) => Promise<void>;
   verifyEmailCode: (otp: string, email: string) => Promise<void>;
   googleLogin: (credential: string) => Promise<void>;
@@ -45,18 +45,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  logout: async () => {
+  clearLocalSession: async () => {
     try {
       await apiClient.post('/auth/logout');
-      await logoutFromCentral();
-    } catch (e) {
-      // Ignore cleanup error
-    } finally {
-      setAccessTokenInMemory('');
-      set({ user: null, isAuthenticated: false, sessions: [] });
+    } catch {
+      // The local cookie may already be absent or expired.
     }
+    setAccessTokenInMemory('');
+    set({ user: null, isAuthenticated: false, isLoading: false, sessions: [] });
   },
-
   registerUser: async (email, username, password) => {
     set({ isLoading: true });
     try {
@@ -95,30 +92,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checkAuth: async () => {
     set({ isLoading: true });
     try {
-      // Attempt token rotation. If refresh cookie is valid, this returns a new accessToken
-      const response = await apiClient.post('/auth/refresh');
-      const { accessToken } = response.data;
+      const centralToken = await requestCentralAppToken();
+      const response = await apiClient.post('/auth/central', {
+        token: centralToken,
+        deviceType: navigator.userAgent,
+      });
+      const { accessToken, user } = response.data;
       setAccessTokenInMemory(accessToken);
-      
-      const profileResp = await apiClient.get('/users/profile');
-      set({ user: profileResp.data.user, isAuthenticated: true, isLoading: false });
+      set({ user, isAuthenticated: true, isLoading: false });
       return true;
-    } catch (err) {
-      try {
-        const centralToken = await requestCentralAppToken();
-        const response = await apiClient.post('/auth/central', { token: centralToken, deviceType: navigator.userAgent });
-        const { accessToken, user } = response.data;
-        setAccessTokenInMemory(accessToken);
-        set({ user, isAuthenticated: true, isLoading: false });
-        return true;
-      } catch {
-        setAccessTokenInMemory('');
-        set({ user: null, isAuthenticated: false, isLoading: false });
-        return false;
-      }
+    } catch {
+      setAccessTokenInMemory('');
+      set({ user: null, isAuthenticated: false, isLoading: false });
+      return false;
     }
   },
-
   updateProfileData: async (formData) => {
     set({ isLoading: true });
     try {
