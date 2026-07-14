@@ -15,6 +15,7 @@ import {
 } from '../controllers/authController.js';
 import { registerValidator, loginValidator, resetPasswordValidator } from '../validators/authValidator.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
+import { centralLogin } from '../controllers/centralAuthController.js';
 
 const router = Router();
 
@@ -22,6 +23,7 @@ router.post('/register', registerValidator, register);
 router.get('/verify', verifyEmail);
 router.post('/verify-otp', verifyEmail);
 router.post('/login', loginValidator, login);
+router.post('/central', centralLogin);
 router.post('/logout', logout);
 router.post('/refresh', refreshToken);
 router.post('/forgot-password', forgotPassword);

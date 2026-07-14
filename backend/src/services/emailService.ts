@@ -12,7 +12,8 @@ const smtpHost = process.env.SMTP_HOST;
 const smtpPort = parseInt(process.env.SMTP_PORT || '2525');
 const smtpUser = process.env.SMTP_USER;
 const smtpPass = process.env.SMTP_PASS;
-const smtpFrom = process.env.SMTP_FROM || 'no-reply@connect.chat';
+const smtpFrom = process.env.MAIL_FROM || process.env.SMTP_FROM || 'no-reply@connect.chat';
+const resendApiKey = process.env.RESEND_API_KEY;
 
 const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
 
@@ -35,6 +36,20 @@ if (smtpHost && smtpUser) {
 
 export const sendEmail = async (to: string, subject: string, html: string): Promise<boolean> => {
   try {
+    if (resendApiKey) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from: smtpFrom, to: [to], subject, html }),
+      });
+      if (!response.ok) throw new Error(`Resend rejected email with status ${response.status}`);
+      logger.info(`Email sent to ${to} through Resend: ${subject}`);
+      return true;
+    }
+
     if (transporter) {
       await transporter.sendMail({
         from: smtpFrom,

@@ -4,12 +4,16 @@ import { useAuthStore } from './store/authStore.js';
 import { useThemeStore } from './store/themeStore.js';
 import ChatDashboard from './pages/ChatDashboard.tsx';
 import LandingPage from './pages/LandingPage.tsx';
-import LoginPage from './pages/LoginPage.tsx';
+import { redirectToCentralLogin } from './api/centralAuth.js';
 import RegisterPage from './pages/RegisterPage.tsx';
 import VerifyEmailPage from './pages/VerifyEmailPage.tsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx';
 import JoinGroupPage from './pages/JoinGroupPage.tsx';
 
+function CentralLoginRedirect() {
+  useEffect(() => redirectToCentralLogin(), []);
+  return <div className="min-h-screen grid place-items-center bg-slate-950 text-white font-bold">Connecting to SK Central...</div>;
+}
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
   const location = useLocation();
@@ -43,10 +47,10 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/"               element={<LandingPage />} />
-        <Route path="/login"          element={<LoginPage />} />
-        <Route path="/register"       element={<RegisterPage />} />
-        <Route path="/verify-email"   element={<VerifyEmailPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/login"          element={<CentralLoginRedirect />} />
+        <Route path="/register"       element={<CentralLoginRedirect />} />
+        <Route path="/verify-email"   element={<CentralLoginRedirect />} />
+        <Route path="/reset-password" element={<CentralLoginRedirect />} />
         <Route path="/join/:codeOrToken" element={<ProtectedRoute><JoinGroupPage /></ProtectedRoute>} />
 
         {/* Main Dashboard */}

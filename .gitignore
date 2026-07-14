@@ -43,3 +43,6 @@ Thumbs.db
 
 # Uploaded items fallback
 backend/uploads/
+
+.env.production
+!.env.production.example

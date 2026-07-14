@@ -8,6 +8,7 @@ import { useConnectionsStore } from '../store/connectionsStore.js';
 import { useSocket } from '../hooks/useSocket.js';
 import { useWebRTC } from '../hooks/useWebRTC.js';
 import { apiClient } from '../api/client.js';
+import { CENTRAL_PROFILE_URL } from '../api/centralAuth.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, MessageSquare, Video, Phone, Settings, User as UserIcon, LogOut, Search, Plus, Send,
@@ -2194,7 +2195,14 @@ export default function ChatDashboard() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800/40">
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800/40 space-y-2">
+                <a
+                  href={CENTRAL_PROFILE_URL}
+                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-300 font-bold text-xs border border-indigo-500/20 transition-colors"
+                >
+                  <UserIcon className="h-4.5 w-4.5" />
+                  <span>Manage your SK Account</span>
+                </a>
                 <button
                   onClick={() => logout()}
                   className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-650 dark:text-red-400 font-bold text-xs border border-red-500/20 transition-colors"

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { User, DeviceSession } from '../types/index.js';
 import { apiClient, setAccessTokenInMemory } from '../api/client.js';
+import { logoutFromCentral, requestCentralAppToken } from '../api/centralAuth.js';
 
 interface AuthState {
   user: User | null;
@@ -47,6 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     try {
       await apiClient.post('/auth/logout');
+      await logoutFromCentral();
     } catch (e) {
       // Ignore cleanup error
     } finally {
@@ -102,8 +104,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user: profileResp.data.user, isAuthenticated: true, isLoading: false });
       return true;
     } catch (err) {
-      set({ user: null, isAuthenticated: false, isLoading: false });
-      return false;
+      try {
+        const centralToken = await requestCentralAppToken();
+        const response = await apiClient.post('/auth/central', { token: centralToken, deviceType: navigator.userAgent });
+        const { accessToken, user } = response.data;
+        setAccessTokenInMemory(accessToken);
+        set({ user, isAuthenticated: true, isLoading: false });
+        return true;
+      } catch {
+        setAccessTokenInMemory('');
+        set({ user: null, isAuthenticated: false, isLoading: false });
+        return false;
+      }
     }
   },
 

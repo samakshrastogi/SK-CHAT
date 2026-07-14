@@ -55,6 +55,7 @@ apiClient.interceptors.response.use(
                         originalRequest.url?.includes('/auth/register') ||
                         originalRequest.url?.includes('/auth/verify-otp') ||
                         originalRequest.url?.includes('/auth/refresh') ||
+                        originalRequest.url?.includes('/auth/central') ||
                         originalRequest.url?.includes('/auth/reset-password') ||
                         originalRequest.url?.includes('/auth/forgot-password');
 
