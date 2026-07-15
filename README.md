@@ -228,3 +228,25 @@ graph TD
 * Device session monitoring and remote logout revocation.
 
 
+
+## Product overview
+
+| Area | Details |
+| --- | --- |
+| Purpose | Real-time direct, group, community, call, and story collaboration. |
+| Primary users | SK ecosystem members and community moderators. |
+| Central integration | SK Auth login, global logout, central profile/avatar, and protected engagement analytics. |
+| Admin signals | Users, verification, presence, messages, conversations, communities, and active sessions. |
+
+## SK Central handoff
+
+```mermaid
+flowchart LR
+  User --> Central[SK Central / SK Auth]
+  Central -->|short-lived app token| Chat[SK Chat]
+  Chat -->|validate token| CentralAPI[Central API]
+  Chat --> Realtime[Socket.IO messaging and calls]
+  Metrics[Aggregate engagement] -->|service token| CentralAnalytics[SK Central analytics]
+```
+
+The Chat backend must use the same `SK_CENTRAL_SERVICE_TOKEN` value configured as `SK_QUIZ_SERVICE_TOKEN` in SK Central.
