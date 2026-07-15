@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { User, DeviceSession } from '../types/index.js';
 import { apiClient, setAccessTokenInMemory } from '../api/client.js';
-import { requestCentralAppToken } from '../api/centralAuth.js';
+import { getCentralProfile, requestCentralAppToken } from '../api/centralAuth.js';
 
 let authCheckPromise: Promise<boolean> | null = null;
 
@@ -103,8 +103,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           deviceType: navigator.userAgent,
         });
         const { accessToken, user } = response.data;
+        const centralProfile = getCentralProfile();
+        const connectedUser = {
+          ...user,
+          avatar: centralProfile?.avatarUrl || user.avatar,
+          centralName: centralProfile?.name,
+          avatarInitials: centralProfile?.avatarInitials
+        };
         setAccessTokenInMemory(accessToken);
-        set({ user, isAuthenticated: true, isLoading: false });
+        set({ user: connectedUser, isAuthenticated: true, isLoading: false });
         return true;
       } catch {
         setAccessTokenInMemory('');

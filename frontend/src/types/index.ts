@@ -10,6 +10,8 @@ export interface User {
   email: string;
   username: string;
   avatar?: string;
+  centralName?: string;
+  avatarInitials?: string;
   coverImage?: string;
   bio?: string;
   status: 'online' | 'offline' | 'busy' | 'away';

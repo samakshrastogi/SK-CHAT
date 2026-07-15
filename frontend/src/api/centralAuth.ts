@@ -2,6 +2,10 @@ const centralApiUrl = (import.meta.env.VITE_SK_CENTRAL_AUTH_URL || 'https://www.
 export const CENTRAL_LOGIN_URL = import.meta.env.VITE_SK_CENTRAL_LOGIN_URL || 'https://www.sk-hub.in/login';
 export const CENTRAL_PROFILE_URL = import.meta.env.VITE_SK_CENTRAL_PROFILE_URL || 'https://www.sk-hub.in/profile';
 
+export type CentralProfile = { name: string; email: string; avatarUrl?: string; avatarInitials?: string };
+let centralProfile: CentralProfile | null = null;
+export const getCentralProfile = () => centralProfile;
+
 export const redirectToCentralLogin = () => {
   window.location.assign(`${CENTRAL_LOGIN_URL}?returnTo=${encodeURIComponent(window.location.href)}`);
 };
@@ -12,8 +16,9 @@ export const requestCentralAppToken = async () => {
     headers: { Accept: 'application/json' },
   });
   if (!response.ok) throw Object.assign(new Error('SK Central login required'), { status: response.status });
-  const body = await response.json() as { data?: { token?: string } };
+  const body = await response.json() as { data?: { token?: string; user?: CentralProfile } };
   if (!body.data?.token) throw new Error('SK Central did not return an application token');
+  centralProfile = body.data.user ?? null;
   return body.data.token;
 };
 

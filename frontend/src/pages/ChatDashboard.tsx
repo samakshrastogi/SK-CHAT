@@ -278,6 +278,12 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ chatId, socket }) => {
   );
 };
 
+const getCentralInitials = (value: string) => {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? 'S';
+  const last = parts.length > 1 ? parts.at(-1)?.[0] : parts[0]?.[1];
+  return `${first}${last ?? ''}`.toUpperCase();
+};
 export default function ChatDashboard() {
   const { user, fetchSessions, sessions, terminateSession, terminateAllSessions } = useAuthStore();
   const {
@@ -2029,7 +2035,7 @@ export default function ChatDashboard() {
                   <img src={user.avatar} alt="" className="h-full w-full object-cover transition-transform group-hover/avatar:scale-105" />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center font-bold text-slate-500 text-2xl">
-                    {user?.username?.charAt(0).toUpperCase()}
+                    {getCentralInitials(user?.centralName || user?.username || 'SK')}
                   </div>
                 )}
                 {/* Upload camera hover overlay */}
