@@ -535,6 +535,16 @@ export default function ChatDashboard() {
   const [isBroadcastGroup, setIsBroadcastGroup] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [showBrandingLabel, setShowBrandingLabel] = useState(false);
+  const [brandingHovered, setBrandingHovered] = useState(false);
+  const brandingRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (showBrandingLabel && !brandingRef.current?.contains(event.target as Node)) setShowBrandingLabel(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [showBrandingLabel]);
   
   // Statuses & calls states
   const [statuses, setStatuses] = useState<Status[]>([]);
@@ -4540,12 +4550,13 @@ export default function ChatDashboard() {
 
       {/* Footer Branding Widget */}
       <div 
+        ref={brandingRef}
         className="fixed bottom-4 right-4 z-40 flex items-center gap-2 pointer-events-auto select-none"
-        onMouseEnter={() => setShowBrandingLabel(true)}
-        onMouseLeave={() => setShowBrandingLabel(false)}
+        onMouseEnter={() => setBrandingHovered(true)}
+        onMouseLeave={() => setBrandingHovered(false)}
       >
         <AnimatePresence>
-          {showBrandingLabel && (
+          {(showBrandingLabel || brandingHovered) && (
             <motion.a 
               href="https://www.linkedin.com/in/samaksh-rastogi-9638b9254/"
               target="_blank"
@@ -4557,14 +4568,14 @@ export default function ChatDashboard() {
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 flex items-center shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.08)] whitespace-nowrap cursor-pointer hover:scale-[1.02] transition-transform"
             >
               <span className="text-xs font-semibold text-slate-600 dark:text-slate-350">
-                Developed by <span className="text-[#0f766e] dark:text-teal-400 font-extrabold hover:underline">Samaksh Rastogi</span>
+                Developed by <span className="text-[#0f766e] dark:text-teal-400 font-extrabold underline decoration-2 underline-offset-4">Samaksh Rastogi</span>
               </span>
             </motion.a>
           )}
         </AnimatePresence>
         
         <button 
-          onClick={() => setShowBrandingLabel(!showBrandingLabel)}
+          onClick={() => setShowBrandingLabel((current) => !current)}
           className="h-10 w-10 rounded-full bg-[#0f172a] dark:bg-slate-950 flex items-center justify-center text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)] shrink-0 transition-all hover:scale-105 active:scale-95 cursor-pointer"
           title="Developer Info"
         >
