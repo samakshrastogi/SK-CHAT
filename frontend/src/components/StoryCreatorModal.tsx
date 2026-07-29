@@ -126,24 +126,6 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
                     <span className="bg-pink-600/80 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">@{storyMention}</span>
                   )}
                 </div>
-
-                {storyPollQuestion.trim() && (
-                  <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-2.5 rounded-xl text-center text-white text-[10px]">
-                    <p className="font-bold">{storyPollQuestion}</p>
-                    <div className="flex gap-1.5 mt-1.5">
-                      <button className="flex-1 py-1 bg-indigo-500/80 rounded font-bold">{storyPollOpt1 || 'Yes'}</button>
-                      <button className="flex-1 py-1 bg-pink-500/80 rounded font-bold">{storyPollOpt2 || 'No'}</button>
-                    </div>
-                  </div>
-                )}
-
-                {storyQuestion.trim() && (
-                  <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-2.5 rounded-xl text-center text-white text-[10px] space-y-1">
-                    <p className="font-bold uppercase tracking-wider text-indigo-300 text-[8px]">Ask me anything</p>
-                    <p className="font-semibold">{storyQuestion}</p>
-                  </div>
-                )}
-
                 {storyHashtags.trim() && (
                   <div className="flex gap-1 flex-wrap">
                     {storyHashtags.split(',').map((h, i) => (
@@ -266,7 +248,7 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
                   </div>
 
                   {/* Interactive widgets additions */}
-                  <div className="pt-2 border-t border-slate-850 space-y-2.5">
+                  <div className="hidden">
                     <div>
                       <label className="block text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1">📊 Create Poll Overlay</label>
                       <input 

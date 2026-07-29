@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { createNotification } from '../services/notificationService.js';
 import { Types } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { getJwtAccessSecret } from '../config/env.js';
@@ -372,6 +373,21 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       });
       targetRooms.emit('message:receive', populated);
     }
+
+    const senderName = (populated?.senderId as any)?.username || req.user!.username;
+    const preview = finalMessageType === 'text' ? finalContent : `Sent a ${finalMessageType}`;
+    await Promise.all(chat.participants
+      .filter((participantId) => participantId.toString() !== req.user!.id.toString())
+      .map((participantId) => createNotification({
+        recipientId: participantId.toString(),
+        actorId: req.user!.id,
+        type: 'new_message',
+        title: senderName,
+        body: preview.slice(0, 120),
+        referenceId: chatId,
+        referenceType: 'chat',
+        expiresInHours: 72,
+      })));
 
     res.status(201).json({ success: true, message: populated });
 

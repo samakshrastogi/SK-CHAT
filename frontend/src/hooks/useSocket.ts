@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';
@@ -11,6 +11,7 @@ const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5
 
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null);
+  const [socketInstance, setSocketInstance] = useState<Socket | null>(null);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   
@@ -42,6 +43,7 @@ export const useSocket = () => {
     removeRealtimeFriend
   } = useConnectionsStore();
   const {
+    addIncomingNotification,
     applyNotificationRead,
     applyAllNotificationsRead,
     removeLocalNotification,
@@ -75,6 +77,7 @@ export const useSocket = () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
+        setSocketInstance(null);
         joinedRoomsRef.current.clear();
       }
       return;
@@ -90,6 +93,7 @@ export const useSocket = () => {
     });
 
     socketRef.current = socket;
+    setSocketInstance(socket);
 
     socket.on('connect', () => {
       console.log('Socket connected successfully');
@@ -258,6 +262,8 @@ export const useSocket = () => {
       removeRealtimeFriend({ userId, friendId });
     });
 
+    socket.on('notification:new', addIncomingNotification);
+
     socket.on('notification:read', ({ notificationId }) => {
       applyNotificationRead(notificationId);
     });
@@ -287,6 +293,7 @@ export const useSocket = () => {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      setSocketInstance(null);
     };
   }, [isAuthenticated, user?.id || user?._id]);
 
@@ -296,5 +303,5 @@ export const useSocket = () => {
     }
   };
 
-  return { socket: socketRef.current, emitEvent };
+  return { socket: socketInstance, emitEvent };
 };
