@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const findOneAndUpdate = vi.fn();
+const { findOneAndUpdate } = vi.hoisted(() => ({ findOneAndUpdate: vi.fn() }));
 
 vi.mock('../models/Job.js', () => ({
   Job: {
