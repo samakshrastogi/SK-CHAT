@@ -17,6 +17,7 @@ import {
 } from '../controllers/communityController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
+import { validateUploadedMedia } from '../middleware/mediaSecurityMiddleware.js';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.post(
     { name: 'avatar', maxCount: 1 },
     { name: 'banner', maxCount: 1 }
   ]),
+  validateUploadedMedia as any,
   createCommunity as any
 );
 
@@ -45,6 +47,7 @@ router.put(
     { name: 'avatar', maxCount: 1 },
     { name: 'banner', maxCount: 1 }
   ]),
+  validateUploadedMedia as any,
   updateCommunitySettings as any
 );
 router.get('/explore', searchPublicCommunities as any);

@@ -1,6 +1,8 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { CustomError } from '../utils/customError.js';
+import { allowedUploadMimes } from '../services/mediaSecurityService.js';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,15 +30,12 @@ const storage = multer.diskStorage({
 export const upload = multer({
   storage,
   limits: {
-    fileSize: 25 * 1024 * 1024 // 50MB Max limit
+    fileSize: 25 * 1024 * 1024 // 25 MB maximum per file
   },
   fileFilter: (req, file, cb) => {
-    const allowed = new Set([
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/webm', 'audio/mpeg', 'audio/ogg', 'audio/wav',
-      'application/pdf', 'text/plain',
-      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ]);
-    cb(null, allowed.has(file.mimetype));
+    if (!allowedUploadMimes.has(file.mimetype)) {
+      return cb(new CustomError('Unsupported file type', 415));
+    }
+    cb(null, true);
   }
 });

@@ -21,6 +21,7 @@ import {
 } from '../controllers/userController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
+import { validateUploadedMedia } from '../middleware/mediaSecurityMiddleware.js';
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.put(
     { name: 'avatar', maxCount: 1 },
     { name: 'coverImage', maxCount: 1 }
   ]),
+  validateUploadedMedia as any,
   updateProfile as any
 );
 
