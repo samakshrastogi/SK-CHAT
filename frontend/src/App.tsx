@@ -5,6 +5,7 @@ import LandingPage from './pages/LandingPage.tsx';
 import JoinGroupPage from './pages/JoinGroupPage.tsx';
 import { getCentralSessionState, redirectToCentralLogin } from './api/centralAuth.js';
 import { AppErrorBoundary } from './components/AppErrorBoundary.js';
+import { ToastViewport } from './components/ToastViewport.js';
 
 const ChatDashboard = lazy(() => import('./pages/ChatDashboard.tsx'));
 
@@ -93,7 +94,7 @@ function App() {
     };
   }, [clearLocalSession, isAuthenticated]);
 
-  return <AppErrorBoundary><AppRoutes /></AppErrorBoundary>;
+  return <AppErrorBoundary><AppRoutes /><ToastViewport /></AppErrorBoundary>;
 }
 
 export default App;

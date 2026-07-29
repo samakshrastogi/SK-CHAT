@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { toast } from '../store/toastStore.js';
 import { useCallStore } from '../store/callStore.js';
 import { apiClient } from '../api/client.js';
 
@@ -28,7 +29,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       return stream;
     } catch (err: any) {
       console.error('Error getting media devices:', err.message);
-      alert('Could not open camera or microphone. Please grant access.');
+      toast.error('Could not open camera or microphone. Please grant access.');
       throw err;
     }
   };

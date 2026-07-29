@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { toast } from '../store/toastStore.js';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';
 import { useCallStore } from '../store/callStore.js';
@@ -720,7 +721,7 @@ export default function ChatDashboard() {
       handleIceCandidate(candidate);
     };
     const onCallRejected = ({ reason }: { reason: string }) => {
-      alert(`Call rejected: ${reason}`);
+      toast.error(`Call rejected: ${reason}`);
       callStore.resetCallStore();
     };
     const onNotificationNew = (notif: any) => {
@@ -1005,7 +1006,7 @@ export default function ChatDashboard() {
   const startSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Speech Recognition is not supported in this browser.');
+      toast.error('Speech Recognition is not supported in this browser.');
       return;
     }
     const recognition = new SpeechRecognition();
@@ -1046,7 +1047,7 @@ export default function ChatDashboard() {
       setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
       setNewRoleName('');
     } catch (err) {
-      alert('Error creating role');
+      toast.error('Error creating role');
     } finally {
       setIsCreatingRole(false);
     }
@@ -1059,7 +1060,7 @@ export default function ChatDashboard() {
       });
       setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
     } catch (err) {
-      alert('Error assigning role');
+      toast.error('Error assigning role');
     }
   };
 
@@ -1077,7 +1078,7 @@ export default function ChatDashboard() {
       setNewEventDesc('');
       setNewEventDate('');
     } catch (err) {
-      alert('Error creating event');
+      toast.error('Error creating event');
     } finally {
       setIsCreatingEvent(false);
     }
@@ -1090,7 +1091,7 @@ export default function ChatDashboard() {
       });
       setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
     } catch (err) {
-      alert('Error updating RSVP');
+      toast.error('Error updating RSVP');
     }
   };
 
@@ -1176,7 +1177,7 @@ export default function ChatDashboard() {
       setActiveChat(null);
       setIsGroupInfoOpen(false);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to leave group');
+      toast.info(e.response?.data?.message || 'Failed to leave group');
     }
   };
 
@@ -1188,7 +1189,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to remove member');
+      toast.info(e.response?.data?.message || 'Failed to remove member');
     }
   };
 
@@ -1199,7 +1200,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to add member');
+      toast.info(e.response?.data?.message || 'Failed to add member');
     }
   };
 
@@ -1224,7 +1225,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to promote member');
+      toast.info(e.response?.data?.message || 'Failed to promote member');
     }
   };
 
@@ -1243,7 +1244,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to update group profile');
+      toast.info(e.response?.data?.message || 'Failed to update group profile');
     }
   };
 
@@ -1285,7 +1286,7 @@ export default function ChatDashboard() {
       setActiveCommunity(resp.data.community);
       fetchCommunities();
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to update community settings');
+      toast.info(e.response?.data?.message || 'Failed to update community settings');
     }
   };
 
@@ -1299,7 +1300,7 @@ export default function ChatDashboard() {
       fetchCommunities();
       setIsGroupInfoOpen(false);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to leave community');
+      toast.info(e.response?.data?.message || 'Failed to leave community');
     }
   };
 
@@ -1311,7 +1312,7 @@ export default function ChatDashboard() {
       setCommunityRequests(reqs.data.requests);
       fetchActiveCommunity();
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to process request');
+      toast.info(e.response?.data?.message || 'Failed to process request');
     }
   };
 
@@ -1399,9 +1400,9 @@ export default function ChatDashboard() {
       });
       setJoinCommunityCode('');
       fetchCommunities();
-      alert(resp.data.message);
+      toast.info(resp.data.message);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Could not request to join community.');
+      toast.info(e.response?.data?.message || 'Could not request to join community.');
     }
   };
 
@@ -1470,7 +1471,7 @@ export default function ChatDashboard() {
       }
     } catch (err) {
       setUploadProgress(0);
-      alert('Failed to send message.');
+      toast.error('Failed to send message.');
     }
   };
 
@@ -1520,7 +1521,7 @@ export default function ChatDashboard() {
         drawWaveform();
       }, 100);
     } catch (err) {
-      alert('Could not record voice. Check microphone authorizations.');
+      toast.error('Could not record voice. Check microphone authorizations.');
     }
   };
 
@@ -1620,7 +1621,7 @@ export default function ChatDashboard() {
       });
       
       setStoryReplyText('');
-      alert('Reply sent successfully!');
+      toast.success('Reply sent successfully!');
     } catch (e) {
       console.error('Failed to reply to story:', e);
     }
@@ -1701,9 +1702,9 @@ export default function ChatDashboard() {
         text: msg.content,
         targetLanguage: lang
       });
-      alert(`Translation [${lang}]:\n"${resp.data.translated}"`);
+      toast.info(`Translation [${lang}]:\n"${resp.data.translated}"`);
     } catch (e) {
-      alert('Translation failed.');
+      toast.info('Translation failed.');
     }
   };
 
@@ -1713,9 +1714,9 @@ export default function ChatDashboard() {
         text: msg.content,
         tone
       });
-      alert(`Tone Rewrite [${tone}]:\n"${resp.data.rewritten}"`);
+      toast.info(`Tone Rewrite [${tone}]:\n"${resp.data.rewritten}"`);
     } catch (e) {
-      alert('Rewrite failed.');
+      toast.info('Rewrite failed.');
     }
   };
 
@@ -1761,7 +1762,7 @@ export default function ChatDashboard() {
   const handleToggleBanUser = async (uId: string) => {
     try {
       const resp = await apiClient.post(`/admin/users/${uId}/ban`);
-      alert(resp.data.message);
+      toast.info(resp.data.message);
       fetchAdminData();
     } catch (e) {}
   };
