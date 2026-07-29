@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { toast } from '../store/toastStore.js';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';
 import { useCallStore } from '../store/callStore.js';
@@ -8,6 +9,7 @@ import { useConnectionsStore } from '../store/connectionsStore.js';
 import { useSocket } from '../hooks/useSocket.js';
 import { useWebRTC } from '../hooks/useWebRTC.js';
 import { apiClient } from '../api/client.js';
+import { formatFingerprint, getOrCreateDeviceIdentity } from '../services/e2eeKeyStore.js';
 import { CENTRAL_PROFILE_URL } from '../api/centralAuth.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -21,6 +23,8 @@ import { Chat, Message, User, Status, Call, DeviceSession, Community } from '../
 import { StoryCreatorModal } from '../components/StoryCreatorModal.tsx';
 import { StoryViewerModal } from '../components/StoryViewerModal.tsx';
 import { NotificationPanel, NotificationBell } from '../components/NotificationPanel.tsx';
+
+const AICompanionPanel = React.lazy(() => import('../components/AICompanionPanel.js').then((module) => ({ default: module.AICompanionPanel })));
 
 const wallpaperClasses: { [key: string]: string } = {
   'gradient-mesh': 'bg-white dark:bg-slate-950',
@@ -301,6 +305,20 @@ export default function ChatDashboard() {
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [wallpaperPreset, setWallpaperPreset] = useState<string>(localStorage.getItem('wallpaper') || 'gradient-mesh');
   const [isAiOpen, setIsAiOpen] = useState(false);
+  const [aiConsent, setAiConsent] = useState(false);
+  const [aiDisclosure, setAiDisclosure] = useState('');
+  const aiAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!isAiOpen) return;
+    void apiClient.get('/ai/preferences').then((response) => {
+      setAiConsent(response.data.consented);
+      setAiDisclosure(response.data.disclosure);
+    }).catch(() => {
+      setAiConsent(false);
+      setAiDisclosure('AI preferences could not be loaded.');
+    });
+  }, [isAiOpen]);
   const [aiChatMessages, setAiChatMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([
     { sender: 'ai', text: 'Hello! I am your AI Companion. Tell me what you need, like drafting a message, summarizing chat history, or checking facts!' }
   ]);
@@ -568,6 +586,8 @@ export default function ChatDashboard() {
   const [storyPollOpt2, setStoryPollOpt2] = useState('');
   const [storyQuestion, setStoryQuestion] = useState('');
   const [storyEmojiSliderTarget, setStoryEmojiSliderTarget] = useState('🔥');
+  const [storySliderEnabled, setStorySliderEnabled] = useState(false);
+  const [storyAudience, setStoryAudience] = useState<'public' | 'contacts'>('contacts');
   const [storyReplyText, setStoryReplyText] = useState('');
 
   // Communities state
@@ -586,6 +606,21 @@ export default function ChatDashboard() {
 
   // Text inputs & attachments
   const [messageText, setMessageText] = useState('');
+  useEffect(() => {
+    if (!activeChat?._id) {
+      setMessageText('');
+      return;
+    }
+    setMessageText(window.localStorage.getItem(`sk_connect_draft:${activeChat._id}`) || '');
+  }, [activeChat?._id]);
+
+  const updateMessageDraft = (value: string) => {
+    setMessageText(value);
+    if (!activeChat?._id) return;
+    const key = `sk_connect_draft:${activeChat._id}`;
+    if (value) window.localStorage.setItem(key, value);
+    else window.localStorage.removeItem(key);
+  };
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -686,7 +721,7 @@ export default function ChatDashboard() {
       handleIceCandidate(candidate);
     };
     const onCallRejected = ({ reason }: { reason: string }) => {
-      alert(`Call rejected: ${reason}`);
+      toast.error(`Call rejected: ${reason}`);
       callStore.resetCallStore();
     };
     const onNotificationNew = (notif: any) => {
@@ -727,10 +762,14 @@ export default function ChatDashboard() {
     socket.on('call:candidate', onCallCandidate);
     socket.on('call:rejected', onCallRejected);
     socket.on('notification:new', onNotificationNew);
+    const onStatusRefresh = () => { void fetchStatuses(); };
+    socket.on('status:refresh', onStatusRefresh);
     socket.on('status:new', onStatusNew);
     socket.on('status:liked', onStatusLiked);
     socket.on('status:viewed', onStatusViewed);
     socket.on('status:deleted', onStatusDeleted);
+    const onCommunityRefresh = () => { void fetchCommunities(); };
+    socket.on('community:refresh', onCommunityRefresh);
     socket.on('community:created', onCommunityCreated);
     socket.on('community:updated', onCommunityUpdated);
 
@@ -742,10 +781,12 @@ export default function ChatDashboard() {
       socket.off('call:candidate', onCallCandidate);
       socket.off('call:rejected', onCallRejected);
       socket.off('notification:new', onNotificationNew);
+      socket.off('status:refresh', onStatusRefresh);
       socket.off('status:new', onStatusNew);
       socket.off('status:liked', onStatusLiked);
       socket.off('status:viewed', onStatusViewed);
       socket.off('status:deleted', onStatusDeleted);
+      socket.off('community:refresh', onCommunityRefresh);
       socket.off('community:created', onCommunityCreated);
       socket.off('community:updated', onCommunityUpdated);
     };
@@ -809,23 +850,25 @@ export default function ChatDashboard() {
   };
 
   const [e2eeKeyPair, setE2eeKeyPair] = useState<any>(null);
+  const [e2eeFingerprint, setE2eeFingerprint] = useState('');
   const [decryptedCache, setDecryptedCache] = useState<{ [msgId: string]: string }>({});
 
   const startSecretMode = async () => {
     if (!activeChat || activeChat.isGroup) return;
     setIsE2eeNegotiating(true);
     try {
-      const keyPair = await window.crypto.subtle.generateKey(
-        { name: 'ECDH', namedCurve: 'P-256' },
-        true,
-        ['deriveKey']
-      );
-      setE2eeKeyPair(keyPair);
-      const exportedPublic = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
+      const identity = await getOrCreateDeviceIdentity();
+      setE2eeKeyPair(identity);
+      setE2eeFingerprint(identity.fingerprint);
+      await apiClient.put('/e2ee/keys/current', { publicKey: identity.publicKey });
       
       const opponent = activeChat.participants.find(p => p._id !== (user?._id || user?.id));
       if (opponent && socket) {
-        socket.emit('e2ee:key_exchange', { targetUserId: opponent._id, keyData: exportedPublic });
+        socket.emit('e2ee:key_exchange', {
+          targetUserId: opponent._id,
+          chatId: activeChat._id,
+          keyData: identity.publicKey,
+        });
       }
       setIsSecretMode(true);
     } catch (err) {
@@ -864,18 +907,20 @@ export default function ChatDashboard() {
   useEffect(() => {
     if (!socket) return;
     
-    const handleE2eeKeyExchange = async ({ senderId, keyData }: { senderId: string; keyData: any }) => {
+    const handleE2eeKeyExchange = async ({ senderId, chatId, keyData }: { senderId: string; chatId: string; keyData: any }) => {
+      if (!activeChat || activeChat._id !== chatId || activeChat.isGroup) return;
       try {
         let currentKeyPair = e2eeKeyPair;
         if (!currentKeyPair) {
-          currentKeyPair = await window.crypto.subtle.generateKey(
-            { name: 'ECDH', namedCurve: 'P-256' },
-            true,
-            ['deriveKey']
-          );
+          currentKeyPair = await getOrCreateDeviceIdentity();
           setE2eeKeyPair(currentKeyPair);
-          const exportedPublic = await window.crypto.subtle.exportKey('jwk', currentKeyPair.publicKey);
-          socket.emit('e2ee:key_exchange', { targetUserId: senderId, keyData: exportedPublic });
+          setE2eeFingerprint(currentKeyPair.fingerprint);
+          await apiClient.put('/e2ee/keys/current', { publicKey: currentKeyPair.publicKey });
+          socket.emit('e2ee:key_exchange', {
+            targetUserId: senderId,
+            chatId,
+            keyData: currentKeyPair.publicKey,
+          });
         }
 
         const importedOpponentPublicKey = await window.crypto.subtle.importKey(
@@ -961,7 +1006,7 @@ export default function ChatDashboard() {
   const startSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Speech Recognition is not supported in this browser.');
+      toast.error('Speech Recognition is not supported in this browser.');
       return;
     }
     const recognition = new SpeechRecognition();
@@ -1002,7 +1047,7 @@ export default function ChatDashboard() {
       setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
       setNewRoleName('');
     } catch (err) {
-      alert('Error creating role');
+      toast.error('Error creating role');
     } finally {
       setIsCreatingRole(false);
     }
@@ -1015,7 +1060,7 @@ export default function ChatDashboard() {
       });
       setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
     } catch (err) {
-      alert('Error assigning role');
+      toast.error('Error assigning role');
     }
   };
 
@@ -1033,7 +1078,7 @@ export default function ChatDashboard() {
       setNewEventDesc('');
       setNewEventDate('');
     } catch (err) {
-      alert('Error creating event');
+      toast.error('Error creating event');
     } finally {
       setIsCreatingEvent(false);
     }
@@ -1046,7 +1091,7 @@ export default function ChatDashboard() {
       });
       setCommunities(prev => prev.map(c => c._id === communityId ? resp.data.community : c));
     } catch (err) {
-      alert('Error updating RSVP');
+      toast.error('Error updating RSVP');
     }
   };
 
@@ -1132,7 +1177,7 @@ export default function ChatDashboard() {
       setActiveChat(null);
       setIsGroupInfoOpen(false);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to leave group');
+      toast.info(e.response?.data?.message || 'Failed to leave group');
     }
   };
 
@@ -1144,7 +1189,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to remove member');
+      toast.info(e.response?.data?.message || 'Failed to remove member');
     }
   };
 
@@ -1155,7 +1200,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to add member');
+      toast.info(e.response?.data?.message || 'Failed to add member');
     }
   };
 
@@ -1180,7 +1225,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to promote member');
+      toast.info(e.response?.data?.message || 'Failed to promote member');
     }
   };
 
@@ -1199,7 +1244,7 @@ export default function ChatDashboard() {
       replaceChat(resp.data.chat);
       setActiveChat(resp.data.chat);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to update group profile');
+      toast.info(e.response?.data?.message || 'Failed to update group profile');
     }
   };
 
@@ -1241,7 +1286,7 @@ export default function ChatDashboard() {
       setActiveCommunity(resp.data.community);
       fetchCommunities();
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to update community settings');
+      toast.info(e.response?.data?.message || 'Failed to update community settings');
     }
   };
 
@@ -1255,7 +1300,7 @@ export default function ChatDashboard() {
       fetchCommunities();
       setIsGroupInfoOpen(false);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to leave community');
+      toast.info(e.response?.data?.message || 'Failed to leave community');
     }
   };
 
@@ -1267,7 +1312,7 @@ export default function ChatDashboard() {
       setCommunityRequests(reqs.data.requests);
       fetchActiveCommunity();
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to process request');
+      toast.info(e.response?.data?.message || 'Failed to process request');
     }
   };
 
@@ -1355,9 +1400,9 @@ export default function ChatDashboard() {
       });
       setJoinCommunityCode('');
       fetchCommunities();
-      alert(resp.data.message);
+      toast.info(resp.data.message);
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Could not request to join community.');
+      toast.info(e.response?.data?.message || 'Could not request to join community.');
     }
   };
 
@@ -1415,7 +1460,7 @@ export default function ChatDashboard() {
         iv
       );
 
-      setMessageText('');
+      updateMessageDraft('');
       setSelectedFile(null);
       setReplyingTo(null);
       setUploadProgress(0);
@@ -1426,7 +1471,7 @@ export default function ChatDashboard() {
       }
     } catch (err) {
       setUploadProgress(0);
-      alert('Failed to send message.');
+      toast.error('Failed to send message.');
     }
   };
 
@@ -1476,7 +1521,7 @@ export default function ChatDashboard() {
         drawWaveform();
       }, 100);
     } catch (err) {
-      alert('Could not record voice. Check microphone authorizations.');
+      toast.error('Could not record voice. Check microphone authorizations.');
     }
   };
 
@@ -1502,12 +1547,21 @@ export default function ChatDashboard() {
     if (storyMention.trim()) meta.mention = storyMention;
     if (storyLocation.trim()) meta.location = storyLocation;
     if (storyHashtags.trim()) meta.hashtags = storyHashtags.split(',').map((t) => t.trim());
+    const poll = storyPollQuestion.trim() && storyPollOpt1.trim() && storyPollOpt2.trim()
+      ? { question: storyPollQuestion.trim(), options: [storyPollOpt1.trim(), storyPollOpt2.trim()] }
+      : undefined;
+    const question = !poll && storyQuestion.trim() ? { prompt: storyQuestion.trim() } : undefined;
+    const slider = !poll && !question && storySliderEnabled ? { emoji: storyEmojiSliderTarget || '🔥' } : undefined;
     try {
       if (storyType === 'media' && storyFile) {
         const formData = new FormData();
         formData.append('type', storyFile.type.startsWith('video') ? 'video' : 'image');
         formData.append('file', storyFile);
-        formData.append('caption', JSON.stringify(meta));
+        formData.append('metadata', JSON.stringify(meta));
+        formData.append('audience', storyAudience);
+        if (poll) formData.append('poll', JSON.stringify(poll));
+        if (question) formData.append('question', JSON.stringify(question));
+        if (slider) formData.append('slider', JSON.stringify(slider));
         
         await apiClient.post('/status', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
@@ -1518,7 +1572,11 @@ export default function ChatDashboard() {
           type: 'text',
           content: textStatusContent,
           backgroundColor: textStatusBg,
-          caption: JSON.stringify(meta)
+          metadata: meta,
+          audience: storyAudience,
+          poll,
+          question,
+          slider
         });
       }
       
@@ -1534,6 +1592,7 @@ export default function ChatDashboard() {
       setStoryPollOpt1('');
       setStoryPollOpt2('');
       setStoryQuestion('');
+      setStorySliderEnabled(false);
       setStoryType('text');
       setTextStatusOpen(false);
       fetchStatuses();
@@ -1562,7 +1621,7 @@ export default function ChatDashboard() {
       });
       
       setStoryReplyText('');
-      alert('Reply sent successfully!');
+      toast.success('Reply sent successfully!');
     } catch (e) {
       console.error('Failed to reply to story:', e);
     }
@@ -1582,23 +1641,37 @@ export default function ChatDashboard() {
     }
   };
 
+  const refreshStoryInteractions = async () => {
+    const response = await apiClient.get('/status');
+    setStatuses(response.data.statuses);
+    setActiveStatusViewer((current) => current ? response.data.statuses : current);
+  };
+
+  const handleStoryPollVote = async (statusId: string, optionId: string) => {
+    await apiClient.put(`/status/${statusId}/poll`, { optionId });
+    await refreshStoryInteractions();
+  };
+  const handleStoryQuestionAnswer = async (statusId: string, text: string) => {
+    await apiClient.put(`/status/${statusId}/question`, { text });
+    await refreshStoryInteractions();
+  };
+  const handleStorySliderResponse = async (statusId: string, value: number) => {
+    await apiClient.put(`/status/${statusId}/slider`, { value });
+    await refreshStoryInteractions();
+  };
+
   // AI assistant handlers
   const handleAskAIAssistant = async () => {
     if (!aiPrompt.trim()) return;
     setAiLoading(true);
     setAiResponse('');
     try {
-      // Gather active chat messages if open as context
-      let context = '';
-      if (activeChat) {
-        const msgs = messages[activeChat._id] || [];
-        context = msgs.slice(-15).map((m: any) => `${m.senderId?.username || 'user'}: ${m.content}`).join('\n');
-      }
-
+      aiAbortRef.current?.abort();
+      aiAbortRef.current = new AbortController();
       const resp = await apiClient.post('/ai/ask', {
         prompt: aiPrompt,
-        context
-      });
+        chatId: activeChat?._id,
+      }, { signal: aiAbortRef.current.signal });
       setAiResponse(resp.data.response);
     } catch (e) {
       setAiResponse('AI service failed to respond. Check API parameters.');
@@ -1629,9 +1702,9 @@ export default function ChatDashboard() {
         text: msg.content,
         targetLanguage: lang
       });
-      alert(`Translation [${lang}]:\n"${resp.data.translated}"`);
+      toast.info(`Translation [${lang}]:\n"${resp.data.translated}"`);
     } catch (e) {
-      alert('Translation failed.');
+      toast.info('Translation failed.');
     }
   };
 
@@ -1641,9 +1714,9 @@ export default function ChatDashboard() {
         text: msg.content,
         tone
       });
-      alert(`Tone Rewrite [${tone}]:\n"${resp.data.rewritten}"`);
+      toast.info(`Tone Rewrite [${tone}]:\n"${resp.data.rewritten}"`);
     } catch (e) {
-      alert('Rewrite failed.');
+      toast.info('Rewrite failed.');
     }
   };
 
@@ -1657,16 +1730,12 @@ export default function ChatDashboard() {
     setAiChatLoading(true);
 
     try {
-      const recentMsgs = (messages[activeChat?._id || ''] || []).slice(-5).map(m => {
-        const isSelf = typeof m.senderId === 'string' ? m.senderId === user?.id : m.senderId._id === user?.id;
-        return `${isSelf ? 'You' : 'Other'}: ${m.content}`;
-      }).join('\n');
-      const context = activeChat ? `Conversation history:\n${recentMsgs}` : undefined;
-
+      aiAbortRef.current?.abort();
+      aiAbortRef.current = new AbortController();
       const resp = await apiClient.post('/ai/ask', {
         prompt: userPrompt,
-        context
-      });
+        chatId: activeChat?._id,
+      }, { signal: aiAbortRef.current.signal });
       setAiChatMessages((prev) => [...prev, { sender: 'ai', text: resp.data.response }]);
     } catch (e) {
       setAiChatMessages((prev) => [...prev, { sender: 'ai', text: 'Sorry, I failed to respond. Make sure GEMINI_API_KEY is configured in the backend.' }]);
@@ -1693,7 +1762,7 @@ export default function ChatDashboard() {
   const handleToggleBanUser = async (uId: string) => {
     try {
       const resp = await apiClient.post(`/admin/users/${uId}/ban`);
-      alert(resp.data.message);
+      toast.info(resp.data.message);
       fetchAdminData();
     } catch (e) {}
   };
@@ -2386,7 +2455,7 @@ export default function ChatDashboard() {
                           }
                         }}
                         className={`p-2 rounded-lg transition-all ${isSecretMode ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-500/10'}`}
-                        title={isSecretMode ? 'End-to-End Encryption Enabled' : 'Initiate Secret Chat (E2EE)'}
+                        title={isSecretMode ? `End-to-End Encryption Enabled${e2eeFingerprint ? ` · ${formatFingerprint(e2eeFingerprint)}` : ''}` : 'Initiate Secret Chat (E2EE)'}
                       >
                         <Shield className="h-4.5 w-4.5" />
                       </button>
@@ -2831,7 +2900,7 @@ export default function ChatDashboard() {
                       type="text"
                       value={messageText}
                       onChange={(e) => {
-                        setMessageText(e.target.value);
+                        updateMessageDraft(e.target.value);
                         if (socket) {
                           socket.emit('typing:start', activeChat._id);
                         }
@@ -2869,6 +2938,7 @@ export default function ChatDashboard() {
 
                 <button
                   type="submit"
+                  disabled={!aiConsent || aiChatLoading}
                   className="h-11 w-11 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20"
                 >
                   <Send className="h-5 w-5" />
@@ -2996,83 +3066,30 @@ export default function ChatDashboard() {
             })()
           )}
 
-          {/* AI companion sidebar panel */}
-          {isAiOpen && (
-            <div className="w-full md:w-80 border-l border-slate-200 dark:border-slate-800/40 bg-slate-50/95 dark:bg-slate-955/95 md:bg-white/40 md:dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 absolute md:relative right-0 top-0 z-30 overflow-hidden shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
-              {/* AI Header */}
-              <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
-                <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400">
-                  <Sparkles className="h-5 w-5 animate-pulse" />
-                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200">AI Companion</span>
-                </div>
-                <button 
-                  onClick={() => setIsAiOpen(false)} 
-                  className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white"
-                >
-                  <X className="h-4.5 w-4.5" />
-                </button>
-              </div>
-
-              {/* AI Messages List */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {aiChatMessages.map((m, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`flex flex-col max-w-[85%] ${m.sender === 'user' ? 'self-end ml-auto items-end' : 'items-start'}`}
-                  >
-                    <span className="text-[9px] font-bold text-slate-500 mb-1">
-                      {m.sender === 'user' ? 'You' : 'Companion'}
-                    </span>
-                    <div 
-                      className={`px-3 py-2.5 rounded-2xl text-xs leading-relaxed ${
-                        m.sender === 'user'
-                          ? 'bg-indigo-500 text-white rounded-tr-none'
-                          : 'bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-250 border border-slate-200 dark:border-slate-800 rounded-tl-none'
-                      }`}
-                    >
-                      {m.text}
-                    </div>
-                  </div>
-                ))}
-                {aiChatLoading && (
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                    <Sparkles className="h-3.5 w-3.5 animate-spin text-indigo-400" />
-                    <span>Thinking...</span>
-                  </div>
-                )}
-              </div>
-
-              {/* AI Toolbar Quick Actions */}
-              <div className="p-3 border-t border-slate-200 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-950/20 flex gap-2">
-                <button
-                  onClick={handleAiSummarizeInSidebar}
-                  className="flex-1 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold border border-indigo-500/20 transition-colors"
-                >
-                  📝 Summarize Chat
-                </button>
-              </div>
-
-              {/* AI Input Form */}
-              <form 
-                onSubmit={handleSendAiChatMessage} 
-                className="p-3 border-t border-slate-200 dark:border-slate-800/60 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md flex gap-2 items-center"
-              >
-                <input
-                  type="text"
-                  value={aiChatInput}
-                  onChange={(e) => setAiChatInput(e.target.value)}
-                  placeholder="Ask AI companion..."
-                  className="flex-1 h-9 px-3 rounded-xl text-xs font-semibold glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
-                />
-                <button
-                  type="submit"
-                  className="h-9 w-9 rounded-xl bg-indigo-500 hover:bg-indigo-650 flex items-center justify-center text-white"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
-          )}
+          <React.Suspense fallback={null}>
+          <AICompanionPanel
+            isOpen={isAiOpen}
+            consented={aiConsent}
+            disclosure={aiDisclosure}
+            messages={aiChatMessages}
+            input={aiChatInput}
+            loading={aiChatLoading}
+            onClose={() => setIsAiOpen(false)}
+            onConsent={async () => {
+              const response = await apiClient.put('/ai/preferences', { consented: true });
+              setAiConsent(response.data.consented);
+            }}
+            onRevoke={async () => {
+              await apiClient.put('/ai/preferences', { consented: false });
+              aiAbortRef.current?.abort();
+              setAiConsent(false);
+            }}
+            onCancel={() => aiAbortRef.current?.abort()}
+            onInputChange={setAiChatInput}
+            onSubmit={handleSendAiChatMessage}
+            onSummarize={handleAiSummarizeInSidebar}
+          />
+          </React.Suspense>
 
           {/* Group Details Info sidebar panel */}
           {isGroupInfoOpen && activeChat.isGroup && !activeChat.isCommunity && (
@@ -4381,6 +4398,10 @@ export default function ChatDashboard() {
         setStoryQuestion={setStoryQuestion}
         storyEmojiSliderTarget={storyEmojiSliderTarget}
         setStoryEmojiSliderTarget={setStoryEmojiSliderTarget}
+        storySliderEnabled={storySliderEnabled}
+        setStorySliderEnabled={setStorySliderEnabled}
+        storyAudience={storyAudience}
+        setStoryAudience={setStoryAudience}
         storyFile={storyFile}
         setStoryFile={setStoryFile}
         storyFileUrl={storyFileUrl}
@@ -4400,6 +4421,9 @@ export default function ChatDashboard() {
         setStoryReplyText={setStoryReplyText}
         onReply={handleReplyToStory}
         onLike={handleLikeStory}
+        onPollVote={handleStoryPollVote}
+        onQuestionAnswer={handleStoryQuestionAnswer}
+        onSliderResponse={handleStorySliderResponse}
       />
 
       {/* 10. Connect via Code Modal Overlay */}

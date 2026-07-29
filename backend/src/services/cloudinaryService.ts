@@ -1,5 +1,8 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { logger } from '../utils/logger.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -39,18 +42,6 @@ export const uploadMedia = async (
         resource_type: 'auto',
       });
 
-      // Cleanup local temp file if it was written to disk by Multer
-      if (file.path) {
-        try {
-          const fs = await import('fs');
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        } catch (unlinkErr: any) {
-          logger.warn(`Could not delete temporary file ${file.path}: ${unlinkErr.message}`);
-        }
-      }
-
       return {
         url: uploadResponse.secure_url,
         publicId: uploadResponse.public_id,
@@ -84,6 +75,12 @@ export const uploadMedia = async (
   } catch (error: any) {
     logger.error(`Error uploading media: ${error.message}`);
     throw error;
+  } finally {
+    if (isCloudinaryConfigured && file.path) {
+      await fs.unlink(file.path).catch((error: any) => {
+        logger.warn(`Could not delete temporary file ${file.path}: ${error.message}`);
+      });
+    }
   }
 };
 

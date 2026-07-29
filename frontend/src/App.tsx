@@ -1,65 +1,78 @@
-import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useAuthStore } from './store/authStore.js';
 import { useThemeStore } from './store/themeStore.js';
-const ChatDashboard = lazy(() => import('./pages/ChatDashboard.tsx'));
 import LandingPage from './pages/LandingPage.tsx';
-import { getCentralSessionState, redirectToCentralLogin } from './api/centralAuth.js';
-import RegisterPage from './pages/RegisterPage.tsx';
-import VerifyEmailPage from './pages/VerifyEmailPage.tsx';
-import ResetPasswordPage from './pages/ResetPasswordPage.tsx';
 import JoinGroupPage from './pages/JoinGroupPage.tsx';
+import { getCentralSessionState, redirectToCentralLogin } from './api/centralAuth.js';
+import { AppErrorBoundary } from './components/AppErrorBoundary.js';
+import { ToastViewport } from './components/ToastViewport.js';
 
-const DashboardRoute = () => (
+const ChatDashboard = lazy(() => import('./pages/ChatDashboard.tsx'));
+
+const Dashboard = () => (
   <Suspense fallback={<div className="min-h-screen grid place-items-center">Loading Connect…</div>}>
     <ChatDashboard />
   </Suspense>
 );
 
+const usePathname = () => {
+  const [pathname, setPathname] = useState(window.location.pathname);
+  useEffect(() => {
+    const update = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', update);
+    return () => window.removeEventListener('popstate', update);
+  }, []);
+  return pathname;
+};
+
+const replacePath = (path: string) => {
+  if (window.location.pathname === path) return;
+  window.history.replaceState(null, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
 function CentralLoginRedirect() {
   const { isAuthenticated, isLoading } = useAuthStore();
-
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) redirectToCentralLogin();
+    if (isLoading) return;
+    if (isAuthenticated) replacePath('/chat');
+    else redirectToCentralLogin();
   }, [isAuthenticated, isLoading]);
-
-  return isAuthenticated
-    ? <Navigate to="/chat" replace />
-    : <div className="min-h-screen grid place-items-center bg-slate-950 text-white font-bold">Connecting to SK Central...</div>;
+  return <div className="min-h-screen grid place-items-center bg-slate-950 text-white font-bold">Connecting to SK Central…</div>;
 }
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+
+function ProtectedRoute({ children }: React.PropsWithChildren) {
   const { isAuthenticated, isLoading } = useAuthStore();
-  const location = useLocation();
-
-  if (isLoading) {
-    return (
-      // Use CSS vars so spinner background respects active theme
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-app)' }}>
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
-      </div>
-    );
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) replacePath('/login');
+  }, [isAuthenticated, isLoading]);
+  if (isLoading || !isAuthenticated) {
+    return <div className="min-h-screen grid place-items-center" style={{ backgroundColor: 'var(--bg-app)' }} aria-label="Loading session">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+    </div>;
   }
+  return <>{children}</>;
+}
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" state={{ from: location }} replace />;
+function AppRoutes() {
+  const pathname = usePathname();
+  if (pathname === '/') return <LandingPage />;
+  if (['/login', '/register', '/verify-email', '/reset-password'].includes(pathname)) return <CentralLoginRedirect />;
+  if (pathname.startsWith('/join/')) return <ProtectedRoute><JoinGroupPage /></ProtectedRoute>;
+  if (pathname === '/chat' || pathname.startsWith('/chat/')) return <ProtectedRoute><Dashboard /></ProtectedRoute>;
+  replacePath('/chat');
+  return null;
 }
 
 function App() {
   const { checkAuth, clearLocalSession, isAuthenticated } = useAuthStore();
   const { applyTheme, theme } = useThemeStore();
 
-  // Re-apply theme whenever the store's theme value changes
-  useEffect(() => {
-    applyTheme();
-  }, [theme, applyTheme]);
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
+  useEffect(() => { applyTheme(); }, [theme, applyTheme]);
+  useEffect(() => { checkAuth(); }, []);
   useEffect(() => {
     if (!isAuthenticated) return;
     let checkInFlight = false;
-
     const verifyCentralSession = async () => {
       if (checkInFlight) return;
       checkInFlight = true;
@@ -67,11 +80,9 @@ function App() {
       checkInFlight = false;
       if (active === false) await clearLocalSession();
     };
-
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void verifyCentralSession();
     };
-
     void verifyCentralSession();
     window.addEventListener('focus', verifyCentralSession);
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -82,25 +93,8 @@ function App() {
       window.clearInterval(interval);
     };
   }, [clearLocalSession, isAuthenticated]);
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/"               element={<LandingPage />} />
-        <Route path="/login"          element={<CentralLoginRedirect />} />
-        <Route path="/register"       element={<CentralLoginRedirect />} />
-        <Route path="/verify-email"   element={<CentralLoginRedirect />} />
-        <Route path="/reset-password" element={<CentralLoginRedirect />} />
-        <Route path="/join/:codeOrToken" element={<ProtectedRoute><JoinGroupPage /></ProtectedRoute>} />
 
-        {/* Main Dashboard */}
-        <Route path="/chat"    element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
-        <Route path="/chat/*"  element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/chat" />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <AppErrorBoundary><AppRoutes /><ToastViewport /></AppErrorBoundary>;
 }
 
 export default App;

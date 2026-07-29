@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { X, Eye, Star } from 'lucide-react';
 import { Status, User } from '../types/index.js';
@@ -13,6 +13,9 @@ interface StoryViewerModalProps {
   setStoryReplyText: (val: string) => void;
   onReply: () => void;
   onLike: (statusId: string) => void;
+  onPollVote: (statusId: string, optionId: string) => void;
+  onQuestionAnswer: (statusId: string, text: string) => void;
+  onSliderResponse: (statusId: string, value: number) => void;
 }
 
 export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
@@ -25,7 +28,11 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   setStoryReplyText,
   onReply,
   onLike,
+  onPollVote,
+  onQuestionAnswer,
+  onSliderResponse,
 }) => {
+  const [questionAnswer, setQuestionAnswer] = useState('');
   return (
     <AnimatePresence>
       {activeStatusViewer && (
@@ -58,7 +65,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           {/* Slide item content */}
           {(() => {
             const currentStatus = activeStatusViewer[activeStatusIndex];
-            let metadata: any = null;
+            let metadata: any = currentStatus.metadata || null;
             try {
               if (currentStatus.caption && currentStatus.caption.trim().startsWith('{')) {
                 metadata = JSON.parse(currentStatus.caption);
@@ -97,7 +104,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                   <div className="flex items-center gap-3">
                     <span className="flex items-center gap-1 text-[9px] font-bold text-white/80" title="Views count">
                       <Eye className="h-3.5 w-3.5" />
-                      {currentStatus.views?.length || 0}
+                      {typeof currentStatus.views === 'number' ? currentStatus.views : (currentStatus.views?.length || 0)}
                     </span>
                     <button 
                       onClick={() => onLike(currentStatus._id)}
@@ -131,7 +138,33 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </div>
 
                 {/* Interactive Widget overlay (Poll / Questions / Slider) */}
-                <div className="absolute top-1/2 left-6 right-6 -translate-y-1/2 z-20 space-y-3">                </div>
+                <div className="absolute top-1/2 left-6 right-6 -translate-y-1/2 z-20 space-y-3">
+                  {currentStatus.poll && (
+                    <div className="rounded-2xl bg-slate-950/85 p-3 text-white backdrop-blur">
+                      <p className="mb-2 text-sm font-bold">{currentStatus.poll.question}</p>
+                      {currentStatus.poll.options.map((option) => (
+                        <button key={option.id} onClick={() => onPollVote(currentStatus._id, option.id)} className={`mb-1 flex w-full justify-between rounded-lg border px-3 py-2 text-xs ${option.selected ? 'border-indigo-400 bg-indigo-500/30' : 'border-white/20 bg-white/10'}`}>
+                          <span>{option.text}</span><span>{option.votes}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {currentStatus.question && (
+                    <div className="rounded-2xl bg-slate-950/85 p-3 text-white backdrop-blur">
+                      <p className="mb-2 text-sm font-bold">{currentStatus.question.prompt}</p>
+                      <div className="flex gap-2">
+                        <input value={questionAnswer} onChange={(event) => setQuestionAnswer(event.target.value)} maxLength={500} placeholder={currentStatus.question.answered ? 'Update your answer' : 'Type an answer'} className="min-w-0 flex-1 rounded-lg bg-white/10 px-2 text-xs" />
+                        <button onClick={() => { if (questionAnswer.trim()) { onQuestionAnswer(currentStatus._id, questionAnswer); setQuestionAnswer(''); } }} className="rounded-lg bg-pink-500 px-3 py-2 text-xs font-bold">Send</button>
+                      </div>
+                    </div>
+                  )}
+                  {currentStatus.slider && (
+                    <div className="rounded-2xl bg-slate-950/85 p-3 text-white backdrop-blur">
+                      <div className="mb-2 flex justify-between text-xl"><span>{currentStatus.slider.emoji}</span><span className="text-xs">{currentStatus.slider.average}% avg</span></div>
+                      <input type="range" min="0" max="100" defaultValue={currentStatus.slider.value ?? 50} onPointerUp={(event) => onSliderResponse(currentStatus._id, Number(event.currentTarget.value))} onBlur={(event) => onSliderResponse(currentStatus._id, Number(event.currentTarget.value))} className="w-full" aria-label="Story emoji slider" />
+                    </div>
+                  )}
+                </div>
 
                 {/* Caption & Hashtags bottom overlay */}
                 <div className="absolute bottom-16 left-4 right-4 z-20 space-y-1.5 text-center pointer-events-none">

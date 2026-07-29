@@ -36,6 +36,21 @@ describe('health endpoint', () => {
     expect(response.headers.get('access-control-allow-methods')).toContain('PATCH');
   });
 
+  it('returns a request identifier', async () => {
+    const response = await fetch(`${baseUrl}/health/live`, {
+      headers: { 'x-request-id': 'test-request-id' },
+    });
+    expect(response.headers.get('x-request-id')).toBe('test-request-id');
+  });
+
+  it('reports not-ready when MongoDB is disconnected', async () => {
+    const response = await fetch(`${baseUrl}/health/ready`);
+    const payload = await response.json() as { status: string; dependencies: { mongodb: { status: string } } };
+    expect(response.status).toBe(503);
+    expect(payload.status).toBe('not_ready');
+    expect(payload.dependencies.mongodb.status).toBe('unhealthy');
+  });
+
   it('returns healthy status', async () => {
     const response = await fetch(`${baseUrl}/health`);
     const payload = await response.json() as { status: string };

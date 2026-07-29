@@ -9,12 +9,18 @@ import {
   savePushSubscription,
   removePushSubscription,
   getVapidPublicKey,
+  getNotificationPreferences,
+  updateNotificationPreferences,
 } from '../controllers/notificationController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
 router.use(authenticateJWT as any);
+
+// Persisted notification preferences
+router.get('/preferences', getNotificationPreferences as any);
+router.put('/preferences', updateNotificationPreferences as any);
 
 // Notification CRUD
 router.get('/',               getNotifications as any);

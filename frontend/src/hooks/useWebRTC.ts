@@ -1,25 +1,27 @@
 import { useRef } from 'react';
+import { toast } from '../store/toastStore.js';
 import { useCallStore } from '../store/callStore.js';
 import { apiClient } from '../api/client.js';
 
-const turnUrls = (import.meta.env.VITE_TURN_URLS || '').split(',').map((value: string) => value.trim()).filter(Boolean);
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    ...(turnUrls.length ? [{ urls: turnUrls, username: import.meta.env.VITE_TURN_USERNAME, credential: import.meta.env.VITE_TURN_CREDENTIAL }] : [])
-  ]
-};
 
 export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const ringTimeoutRef = useRef<number | null>(null);
+  const clearRingTimeout = () => {
+    if (ringTimeoutRef.current) window.clearTimeout(ringTimeoutRef.current);
+    ringTimeoutRef.current = null;
+  };
+  const getRtcConfiguration = async (): Promise<RTCConfiguration> => {
+    const response = await apiClient.get('/calls/ice-servers');
+    return { iceServers: response.data.iceServers };
+  };
   const callStore = useCallStore();
 
-  const startLocalStream = async (type: 'voice' | 'video') => {
+  const startLocalStream = async (type: 'voice' | 'video', audioDeviceId?: string, videoDeviceId?: string) => {
     try {
       const constraints = {
-        audio: true,
-        video: type === 'video' ? { width: 1280, height: 720, facingMode: 'user' } : false
+        audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true,
+        video: type === 'video' ? { width: 1280, height: 720, facingMode: 'user', ...(videoDeviceId ? { deviceId: { exact: videoDeviceId } } : {}) } : false
       };
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -27,18 +29,18 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       return stream;
     } catch (err: any) {
       console.error('Error getting media devices:', err.message);
-      alert('Could not open camera or microphone. Please grant access.');
+      toast.error('Could not open camera or microphone. Please grant access.');
       throw err;
     }
   };
 
-  const initializePeerConnection = (
+  const initializePeerConnection = async (
     localStream: MediaStream,
     targetId: string,
     onRemoteStream: (stream: MediaStream) => void,
     callId: string
   ) => {
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(await getRtcConfiguration());
     pcRef.current = pc;
 
     // Add local tracks to peer
@@ -76,7 +78,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
 
       const localStream = await startLocalStream(type);
       
-      const pc = initializePeerConnection(localStream, receiverId, (remoteStream) => {
+      const pc = await initializePeerConnection(localStream, receiverId, (remoteStream) => {
         callStore.setCallConnected(remoteStream, pc);
       }, callId);
 
@@ -94,6 +96,12 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
 
       // Cache reference to backend call log id in localStorage to end it cleanly
       localStorage.setItem('active_backend_call_id', callId);
+      clearRingTimeout();
+      ringTimeoutRef.current = window.setTimeout(() => {
+        socketEmit('call:end', { targetId: receiverId, callId });
+        void apiClient.put(`/calls/${callId}/end`, { status: 'missed' });
+        callStore.resetCallStore();
+      }, 30_000);
     } catch (e) {
       callStore.resetCallStore();
     }
@@ -105,7 +113,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       
       const callId = callStore.callId;
       if (!callId) throw new Error('Missing call identifier');
-      const pc = initializePeerConnection(localStream, callerId, (remoteStream) => {
+      const pc = await initializePeerConnection(localStream, callerId, (remoteStream) => {
         callStore.setCallConnected(remoteStream, pc);
       }, callId);
 
@@ -142,6 +150,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   };
 
   const handleCallAccepted = async (answer: RTCSessionDescriptionInit) => {
+    clearRingTimeout();
     if (pcRef.current) {
       try {
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
@@ -203,7 +212,10 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     }
   };
 
+  const listMediaDevices = async () => navigator.mediaDevices.enumerateDevices();
+
   const hangUp = async () => {
+    clearRingTimeout();
     const activeCallRecordId = localStorage.getItem('active_backend_call_id');
     const target = callStore.callerId || callStore.receiverId;
 
@@ -236,6 +248,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     handleCallAccepted,
     startScreenShare,
     stopScreenShare,
-    hangUp
+    hangUp,
+    listMediaDevices
   };
 };

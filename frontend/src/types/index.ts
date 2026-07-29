@@ -60,6 +60,7 @@ export interface Message {
   chatId: string;
   senderId: User | string; // Populated User or ID string
   content: string;
+  clientId?: string;
   messageType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice' | 'location' | 'poll' | 'contact';
   mediaUrl?: string;
   mediaSize?: number;
@@ -118,8 +119,13 @@ export interface Status {
   content: string;
   caption?: string;
   backgroundColor?: string;
-  views: { userId: User; viewedAt: string }[];
-  likes: string[]; // User IDs
+  audience: 'public' | 'contacts' | 'selected';
+  metadata?: { music?: string; mention?: string; location?: string; hashtags?: string[] };
+  poll?: { question: string; options: { id: string; text: string; votes: number; selected: boolean }[] };
+  question?: { prompt: string; answered: boolean; answers?: { userId: User; text: string; createdAt: string }[] };
+  slider?: { emoji: string; responseCount: number; average: number; value?: number };
+  views: { userId: User; viewedAt: string }[] | number;
+  likes: string[];
   expiresAt: string;
   createdAt: string;
 }

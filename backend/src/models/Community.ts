@@ -45,6 +45,7 @@ export interface ICommunity extends Document {
   roles: ICommunityRole[];
   memberRoles: ICommunityMemberRole[];
   events: ICommunityEvent[];
+  bannedMembers: { userId: Types.ObjectId; reason?: string; bannedBy: Types.ObjectId; expiresAt?: Date; createdAt: Date }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -75,6 +76,13 @@ const CommunitySchema = new Schema<ICommunity>({
   memberRoles: [{
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     roleName: { type: String, required: true }
+  }],
+  bannedMembers: [{
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    reason: { type: String, maxlength: 500 },
+    bannedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    expiresAt: { type: Date },
+    createdAt: { type: Date, default: Date.now },
   }],
   events: [{
     title: { type: String, required: true },

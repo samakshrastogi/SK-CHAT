@@ -1,6 +1,11 @@
 import { create } from 'zustand';
-import type { Notification as AppNotification } from '../types/index.js';
+import type { Notification as AppNotification, NotificationType } from '../types/index.js';
 import { apiClient } from '../api/client.js';
+
+export type NotificationPreferences = {
+  enabledTypes: Partial<Record<NotificationType, boolean>>;
+  quietHours: { enabled: boolean; start: string; end: string; timezone: string };
+};
 
 interface NotificationState {
   notifications: AppNotification[];
@@ -8,6 +13,9 @@ interface NotificationState {
   isLoading: boolean;
   hasMore: boolean;
   page: number;
+  preferences: NotificationPreferences;
+  fetchPreferences: () => Promise<void>;
+  updatePreferences: (preferences: NotificationPreferences) => Promise<void>;
 
   fetchNotifications: (reset?: boolean) => Promise<void>;
   fetchUnreadCount: () => Promise<void>;
@@ -37,6 +45,25 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   isLoading: false,
   hasMore: true,
   page: 1,
+  preferences: {
+    enabledTypes: {},
+    quietHours: {
+      enabled: false,
+      start: '22:00',
+      end: '08:00',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    },
+  },
+
+  fetchPreferences: async () => {
+    const response = await apiClient.get('/notifications/preferences');
+    set({ preferences: response.data.preferences });
+  },
+
+  updatePreferences: async (preferences) => {
+    const response = await apiClient.put('/notifications/preferences', preferences);
+    set({ preferences: response.data.preferences });
+  },
 
   fetchNotifications: async (reset = false) => {
     set({ isLoading: true });

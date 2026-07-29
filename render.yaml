@@ -49,3 +49,19 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_SHARED_SECRET
+        sync: false
+      - key: TURN_CREDENTIAL_TTL_SECONDS
+        value: 3600
+      - key: UPLOAD_DAILY_QUOTA_MB
+        value: 250
+      - key: UPLOAD_DAILY_FILE_LIMIT
+        value: 100
+      - key: MALWARE_SCAN_REQUIRED
+        value: true
+      - key: MALWARE_SCAN_URL
+        sync: false
+      - key: MALWARE_SCAN_TOKEN
+        sync: false

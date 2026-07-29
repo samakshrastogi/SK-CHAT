@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Notification } from '../models/Notification.js';
 import { User } from '../models/User.js';
+import { NotificationPreference } from '../models/NotificationPreference.js';
 
 /** GET /api/notifications?page=1&limit=20 */
 export const getNotifications = async (req: Request, res: Response, next: NextFunction) => {
@@ -121,4 +122,61 @@ export const removePushSubscription = async (req: Request, res: Response, next: 
 export const getVapidPublicKey = async (_req: Request, res: Response) => {
   const key = process.env.VAPID_PUBLIC_KEY || '';
   res.json({ key });
+};
+
+
+export const getNotificationPreferences = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const preference = await NotificationPreference.findOneAndUpdate(
+      { userId },
+      { $setOnInsert: { userId } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+    res.json({ preferences: preference });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateNotificationPreferences = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const enabledTypes = req.body?.enabledTypes || {};
+    const quietHours = req.body?.quietHours;
+    const allowedTypes = new Set([
+      'new_message', 'mention', 'friend_request', 'friend_request_accepted',
+      'community_invitation', 'community_join_request', 'community_join_approved',
+      'event_reminder', 'reaction', 'reply', 'call_missed', 'group_added', 'system',
+    ]);
+    const sanitizedTypes = Object.fromEntries(
+      Object.entries(enabledTypes).filter(([key, value]) => allowedTypes.has(key) && typeof value === 'boolean'),
+    );
+    const update: Record<string, unknown> = { enabledTypes: sanitizedTypes };
+    if (quietHours) {
+      const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+      if (!timePattern.test(quietHours.start) || !timePattern.test(quietHours.end)) {
+        return res.status(400).json({ message: 'Quiet hours must use HH:mm format' });
+      }
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: quietHours.timezone }).format();
+      } catch {
+        return res.status(400).json({ message: 'Invalid quiet-hours timezone' });
+      }
+      update.quietHours = {
+        enabled: Boolean(quietHours.enabled),
+        start: quietHours.start,
+        end: quietHours.end,
+        timezone: quietHours.timezone,
+      };
+    }
+    const preferences = await NotificationPreference.findOneAndUpdate(
+      { userId },
+      { $set: update, $setOnInsert: { userId } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+    res.json({ preferences });
+  } catch (error) {
+    next(error);
+  }
 };

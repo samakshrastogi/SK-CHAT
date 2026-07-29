@@ -14,9 +14,9 @@ export const errorHandler = (
 
   // Log unexpected server errors
   if (statusCode === 500) {
-    logger.error(`[Unhandled Error] ${err.stack || err}`);
+    logger.error('unhandled_api_error', { requestId: res.locals.requestId, method: req.method, path: req.path, error: err });
   } else {
-    logger.debug(`[API Error] ${statusCode} - ${message}`);
+    logger.debug('api_error', { requestId: res.locals.requestId, method: req.method, path: req.path, statusCode, message });
   }
 
   // Handle Mongoose CastError / ValidationError
@@ -35,7 +35,9 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     message,
+    code: err.code,
     errors,
+    requestId: res.locals.requestId,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   });
 };

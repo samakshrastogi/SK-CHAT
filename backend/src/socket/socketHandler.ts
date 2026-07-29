@@ -277,7 +277,10 @@ export const socketHandler = (io: Server) => {
 
     // ── WebRTC Calling Signaling ───────────────────────────────────────────
     socket.on('call:initiate', async ({ receiverId, callId, type, offer }) => {
-      if (!await Call.exists({ _id: callId, callerId: user.id, receiverId })) return;
+      const call = await Call.findOne({ _id: callId, callerId: user.id, receiverId });
+      if (!call) return;
+      call.status = 'ringing';
+      await call.save();
       logger.info(`Call initiated by ${user.id} to ${receiverId} for call ${callId}`);
       socket.to(`user:${receiverId}`).emit('call:incoming', {
         callerId: user.id,
@@ -324,7 +327,12 @@ export const socketHandler = (io: Server) => {
     });
 
     socket.on('call:end', async ({ targetId, callId }) => {
-      if (!await Call.exists({ _id: callId, $or: [{ callerId: user.id, receiverId: targetId }, { callerId: targetId, receiverId: user.id }] })) return;
+      const call = await Call.findOne({ _id: callId, $or: [{ callerId: user.id, receiverId: targetId }, { callerId: targetId, receiverId: user.id }] });
+      if (!call) return;
+      call.status = call.status === 'ringing' ? 'missed' : 'completed';
+      call.endedAt = new Date();
+      call.duration = Math.max(0, Math.round((call.endedAt.getTime() - (call.startedAt || call.createdAt).getTime()) / 1000));
+      await call.save();
       logger.info(`Call ended by ${user.id} targeting ${targetId}`);
       socket.to(`user:${targetId}`).emit('call:ended', { senderId: user.id });
     });
@@ -341,8 +349,22 @@ export const socketHandler = (io: Server) => {
     });
 
     // ── E2EE Key Exchange ──────────────────────────────────────────────────
-    socket.on('e2ee:key_exchange', ({ targetUserId, keyData }: { targetUserId: string; keyData: any }) => {
-      socket.to(`user:${targetUserId}`).emit('e2ee:key_exchange', { senderId: user.id, keyData });
+    socket.on('e2ee:key_exchange', async ({
+      targetUserId,
+      chatId,
+      keyData,
+    }: { targetUserId: string; chatId: string; keyData: any }) => {
+      const authorized = await Chat.exists({
+        _id: chatId,
+        isGroup: false,
+        participants: { $all: [user.id, targetUserId] },
+      });
+      if (!authorized) return;
+      socket.to(`user:${targetUserId}`).emit('e2ee:key_exchange', {
+        senderId: user.id,
+        chatId,
+        keyData,
+      });
     });
 
     // ── In-Chat Typing state ───────────────────────────────────────────────

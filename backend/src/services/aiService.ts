@@ -8,12 +8,14 @@ const maxAttempts = Math.max(1, Number(process.env.GEMINI_MAX_ATTEMPTS || 2));
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function callGemini(prompt: string): Promise<string> {
+async function callGemini(prompt: string, requestSignal?: AbortSignal): Promise<string> {
   if (!geminiApiKey) throw new CustomError('AI service is not configured', 503);
 
   let lastError: Error | undefined;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
+    const abortFromRequest = () => controller.abort();
+    requestSignal?.addEventListener('abort', abortFromRequest, { once: true });
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(
@@ -33,18 +35,20 @@ async function callGemini(prompt: string): Promise<string> {
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Unknown Gemini error');
       logger.warn(`Gemini attempt ${attempt}/${maxAttempts} failed: ${lastError.message}`);
+      if (requestSignal?.aborted) throw new CustomError('AI request cancelled', 499);
       if (attempt < maxAttempts) await delay(250 * attempt);
     } finally {
       clearTimeout(timeout);
+      requestSignal?.removeEventListener('abort', abortFromRequest);
     }
   }
   logger.error(`Gemini request failed: ${lastError?.message}`);
   throw new CustomError('AI service is temporarily unavailable', 503);
 }
 
-export const getSmartReplies = async (recentMessages: { sender: string; text: string }[]): Promise<string[]> => {
+export const getSmartReplies = async (recentMessages: { sender: string; text: string }[], signal?: AbortSignal): Promise<string[]> => {
   const formatted = recentMessages.map((m) => `${m.sender}: ${m.text}`).join('\n');
-  const response = await callGemini(`Generate exactly 3 short contextual replies as a JSON string array only.\n\n${formatted}`);
+  const response = await callGemini(`Generate exactly 3 short contextual replies as a JSON string array only.\n\n${formatted}`, signal);
   try {
     const parsed = JSON.parse(response.replace(/```json|```/g, '').trim());
     if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string')) throw new Error('Invalid reply format');
@@ -54,15 +58,15 @@ export const getSmartReplies = async (recentMessages: { sender: string; text: st
   }
 };
 
-export const summarizeChat = async (messages: { sender: string; text: string }[]): Promise<string> => {
+export const summarizeChat = async (messages: { sender: string; text: string }[], signal?: AbortSignal): Promise<string> => {
   const formatted = messages.map((m) => `${m.sender}: ${m.text}`).join('\n');
-  return callGemini(`Summarize this chat in at most four concise bullet points:\n\n${formatted}`);
+  return callGemini(`Summarize this chat in at most four concise bullet points:\n\n${formatted}`, signal);
 };
-export const translateMessage = (text: string, language: string) =>
-  callGemini(`Translate into ${language}. Return only the translation:\n\n"${text}"`);
-export const rewriteMessage = (text: string, tone: 'professional' | 'casual' | 'friendly' | 'grammar') =>
+export const translateMessage = (text: string, language: string, signal?: AbortSignal) =>
+  callGemini(`Translate into ${language}. Return only the translation:\n\n"${text}"`, signal);
+export const rewriteMessage = (text: string, tone: 'professional' | 'casual' | 'friendly' | 'grammar', signal?: AbortSignal) =>
   callGemini(tone === 'grammar'
     ? `Correct grammar and spelling. Return only the corrected message:\n\n"${text}"`
-    : `Rewrite in a ${tone} tone. Return only the rewritten message:\n\n"${text}"`);
-export const generateAIResponse = (prompt: string, context?: string) =>
-  callGemini(context ? `Chat context:\n${context}\n\nQuestion: ${prompt}` : prompt);
+    : `Rewrite in a ${tone} tone. Return only the rewritten message:\n\n"${text}"`, signal);
+export const generateAIResponse = (prompt: string, context?: string, signal?: AbortSignal) =>
+  callGemini(context ? `Chat context:\n${context}\n\nQuestion: ${prompt}` : prompt, signal);

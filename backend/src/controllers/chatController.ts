@@ -1,9 +1,11 @@
 import { Response, NextFunction } from 'express';
 import { createNotification } from '../services/notificationService.js';
+import { enqueueJob } from '../services/jobQueue.js';
 import { Types } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { getJwtAccessSecret } from '../config/env.js';
 import { Chat } from '../models/Chat.js';
+import { ChatPreference } from '../models/ChatPreference.js';
 import { Message } from '../models/Message.js';
 import { User } from '../models/User.js';
 import { CustomError } from '../utils/customError.js';
@@ -126,19 +128,21 @@ export const getChats = async (req: AuthenticatedRequest, res: Response, next: N
 export const getChatMessages = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { chatId } = req.params;
-    const limit = parseInt(req.query.limit as string) || 30;
-    const skip = parseInt(req.query.skip as string) || 0;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 30));
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
 
     // Verify participant
     const chat = await Chat.findOne({ _id: chatId, participants: req.user!.id });
     if (!chat) {
       throw new CustomError('Chat not found or access denied', 403);
     }
+    if (cursor && !Types.ObjectId.isValid(cursor)) throw new CustomError('Invalid message cursor', 400);
+    const query: Record<string, unknown> = { chatId };
+    if (cursor) query._id = { $lt: new Types.ObjectId(cursor) };
 
-    const messages = await Message.find({ chatId })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
+    const messages = await Message.find(query)
+      .sort({ _id: -1 })
+      .limit(limit + 1)
       .populate('senderId', 'username avatar')
       .populate({
         path: 'replyTo',
@@ -147,8 +151,9 @@ export const getChatMessages = async (req: AuthenticatedRequest, res: Response, 
 
     res.status(200).json({
       success: true,
-      messages: messages.reverse(), // Return in chronological order
-      hasMore: messages.length === limit
+      messages: messages.slice(0, limit).reverse(),
+      hasMore: messages.length > limit,
+      nextCursor: messages.length > limit ? messages[limit - 1]._id.toString() : null
     });
   } catch (error) {
     next(error);
@@ -169,12 +174,22 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       expiresIn,
       isEncrypted,
       ciphertext,
-      iv
+      iv,
+      clientId
     } = req.body;
 
     const chat = await Chat.findOne({ _id: chatId, participants: req.user!.id });
     if (!chat) {
       throw new CustomError('Chat not found or access denied', 403);
+    }
+    if (clientId) {
+      const existing = await Message.findOne({ senderId: req.user!.id, clientId })
+        .populate('senderId', 'username avatar')
+        .populate({ path: 'replyTo', populate: { path: 'senderId', select: 'username' } });
+      if (existing) {
+        res.status(200).json({ success: true, message: existing, duplicate: true });
+        return;
+      }
     }
 
     // Check Group Settings: Announcement Mode & Slow Mode
@@ -271,10 +286,16 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       }
     }
 
+    const scheduleDate = scheduledAt ? new Date(scheduledAt) : undefined;
+    if (scheduleDate && Number.isNaN(scheduleDate.getTime())) throw new CustomError('Invalid scheduled message date', 400);
+    if (scheduleDate && scheduleDate.getTime() <= Date.now()) throw new CustomError('Scheduled messages must be in the future', 400);
+    if (scheduleDate && chat.isBroadcast) throw new CustomError('Scheduled broadcast messages are not supported', 400);
+
     const message = await Message.create({
       chatId,
       senderId: req.user!.id,
       content: finalContent,
+      clientId: clientId || undefined,
       messageType: finalMessageType,
       mediaUrl: finalMediaUrl,
       fileName: finalFileName,
@@ -283,13 +304,22 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       locationData: locationData ? (typeof locationData === 'string' ? JSON.parse(locationData) : locationData) : undefined,
       contactData: contactData ? (typeof contactData === 'string' ? JSON.parse(contactData) : contactData) : undefined,
       replyTo: replyTo || undefined,
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+      scheduledAt: scheduleDate,
       expiresAt,
       status: 'sent',
       isEncrypted: isEncrypted === true || isEncrypted === 'true',
       ciphertext: ciphertext || undefined,
       iv: iv || undefined
     });
+
+    if (scheduleDate) {
+      await enqueueJob('scheduled_message', { messageId: message._id.toString() }, {
+        idempotencyKey: `scheduled-message:${message._id.toString()}`,
+        runAt: scheduleDate,
+      });
+      res.status(202).json({ success: true, scheduled: true, message });
+      return;
+    }
 
     // Update last message in chat
     chat.lastMessage = message._id as any;
@@ -387,6 +417,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
         referenceId: chatId,
         referenceType: 'chat',
         expiresInHours: 72,
+        idempotencyKey: `message:${message._id.toString()}:${participantId.toString()}`,
       })));
 
     res.status(201).json({ success: true, message: populated });
@@ -644,7 +675,7 @@ export const togglePinMessage = async (req: AuthenticatedRequest, res: Response,
 
 export const searchMessages = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { q, chatId } = req.query;
+    const { q, chatId, senderId, type, from, to } = req.query;
     if (!q || typeof q !== 'string') {
       res.status(200).json({ success: true, messages: [] });
       return;
@@ -655,11 +686,23 @@ export const searchMessages = async (req: AuthenticatedRequest, res: Response, n
     };
 
     if (chatId) {
+      const allowed = await Chat.exists({ _id: chatId, participants: req.user!.id });
+      if (!allowed) throw new CustomError('Chat not found or access denied', 404);
       queryConditions.chatId = chatId;
     } else {
       // Restrict search to chats the user is in
       const myChats = await Chat.find({ participants: req.user!.id }).select('_id');
       queryConditions.chatId = { $in: myChats.map(c => c._id) };
+    }
+
+    if (senderId && Types.ObjectId.isValid(String(senderId))) queryConditions.senderId = senderId;
+    if (type && ['text', 'image', 'video', 'audio', 'document', 'voice', 'location', 'poll', 'contact'].includes(String(type))) {
+      queryConditions.messageType = type;
+    }
+    if (from || to) {
+      queryConditions.createdAt = {};
+      if (from) queryConditions.createdAt.$gte = new Date(String(from));
+      if (to) queryConditions.createdAt.$lte = new Date(String(to));
     }
 
     const messages = await Message.find(queryConditions)
@@ -1119,6 +1162,51 @@ export const getGroupSharedFiles = async (req: AuthenticatedRequest, res: Respon
       .sort({ createdAt: -1 });
 
     res.status(200).json({ success: true, files: messages });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+export const getChatPreferences = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const chatId = String(req.params.chatId);
+    if (!await Chat.exists({ _id: chatId, participants: req.user!.id })) {
+      throw new CustomError('Chat not found or access denied', 404);
+    }
+    const preferences = await ChatPreference.findOneAndUpdate(
+      { userId: req.user!.id, chatId },
+      { $setOnInsert: { userId: req.user!.id, chatId } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+    res.json({ success: true, preferences });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateChatPreferences = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const chatId = String(req.params.chatId);
+    if (!await Chat.exists({ _id: chatId, participants: req.user!.id })) {
+      throw new CustomError('Chat not found or access denied', 404);
+    }
+    const update: Record<string, unknown> = {};
+    if (['all', 'mentions', 'none'].includes(req.body.notifications)) update.notifications = req.body.notifications;
+    if (typeof req.body.sound === 'boolean') update.sound = req.body.sound;
+    if (typeof req.body.archived === 'boolean') update.archived = req.body.archived;
+    if (req.body.mutedUntil === null) update.mutedUntil = null;
+    else if (req.body.mutedUntil) {
+      const mutedUntil = new Date(req.body.mutedUntil);
+      if (Number.isNaN(mutedUntil.getTime())) throw new CustomError('Invalid mutedUntil value', 400);
+      update.mutedUntil = mutedUntil;
+    }
+    const preferences = await ChatPreference.findOneAndUpdate(
+      { userId: req.user!.id, chatId },
+      { $set: update, $setOnInsert: { userId: req.user!.id, chatId } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+    res.json({ success: true, preferences });
   } catch (error) {
     next(error);
   }
