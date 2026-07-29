@@ -302,6 +302,20 @@ export default function ChatDashboard() {
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [wallpaperPreset, setWallpaperPreset] = useState<string>(localStorage.getItem('wallpaper') || 'gradient-mesh');
   const [isAiOpen, setIsAiOpen] = useState(false);
+  const [aiConsent, setAiConsent] = useState(false);
+  const [aiDisclosure, setAiDisclosure] = useState('');
+  const aiAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!isAiOpen) return;
+    void apiClient.get('/ai/preferences').then((response) => {
+      setAiConsent(response.data.consented);
+      setAiDisclosure(response.data.disclosure);
+    }).catch(() => {
+      setAiConsent(false);
+      setAiDisclosure('AI preferences could not be loaded.');
+    });
+  }, [isAiOpen]);
   const [aiChatMessages, setAiChatMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([
     { sender: 'ai', text: 'Hello! I am your AI Companion. Tell me what you need, like drafting a message, summarizing chat history, or checking facts!' }
   ]);
@@ -1649,17 +1663,12 @@ export default function ChatDashboard() {
     setAiLoading(true);
     setAiResponse('');
     try {
-      // Gather active chat messages if open as context
-      let context = '';
-      if (activeChat) {
-        const msgs = messages[activeChat._id] || [];
-        context = msgs.slice(-15).map((m: any) => `${m.senderId?.username || 'user'}: ${m.content}`).join('\n');
-      }
-
+      aiAbortRef.current?.abort();
+      aiAbortRef.current = new AbortController();
       const resp = await apiClient.post('/ai/ask', {
         prompt: aiPrompt,
-        context
-      });
+        chatId: activeChat?._id,
+      }, { signal: aiAbortRef.current.signal });
       setAiResponse(resp.data.response);
     } catch (e) {
       setAiResponse('AI service failed to respond. Check API parameters.');
@@ -1718,16 +1727,12 @@ export default function ChatDashboard() {
     setAiChatLoading(true);
 
     try {
-      const recentMsgs = (messages[activeChat?._id || ''] || []).slice(-5).map(m => {
-        const isSelf = typeof m.senderId === 'string' ? m.senderId === user?.id : m.senderId._id === user?.id;
-        return `${isSelf ? 'You' : 'Other'}: ${m.content}`;
-      }).join('\n');
-      const context = activeChat ? `Conversation history:\n${recentMsgs}` : undefined;
-
+      aiAbortRef.current?.abort();
+      aiAbortRef.current = new AbortController();
       const resp = await apiClient.post('/ai/ask', {
         prompt: userPrompt,
-        context
-      });
+        chatId: activeChat?._id,
+      }, { signal: aiAbortRef.current.signal });
       setAiChatMessages((prev) => [...prev, { sender: 'ai', text: resp.data.response }]);
     } catch (e) {
       setAiChatMessages((prev) => [...prev, { sender: 'ai', text: 'Sorry, I failed to respond. Make sure GEMINI_API_KEY is configured in the backend.' }]);
@@ -2930,6 +2935,7 @@ export default function ChatDashboard() {
 
                 <button
                   type="submit"
+                  disabled={!aiConsent || aiChatLoading}
                   className="h-11 w-11 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20"
                 >
                   <Send className="h-5 w-5" />
@@ -3074,6 +3080,23 @@ export default function ChatDashboard() {
                 </button>
               </div>
 
+              {!aiConsent && (
+                <div className="m-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs text-slate-700 dark:text-slate-200">
+                  <p className="font-bold">Enable AI features</p>
+                  <p className="mt-1 text-[10px] leading-relaxed">{aiDisclosure}</p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const response = await apiClient.put('/ai/preferences', { consented: true });
+                      setAiConsent(response.data.consented);
+                    }}
+                    className="mt-2 rounded-lg bg-indigo-500 px-3 py-1.5 font-bold text-white"
+                  >
+                    I agree and enable AI
+                  </button>
+                </div>
+              )}
+
               {/* AI Messages List */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {aiChatMessages.map((m, idx) => (
@@ -3099,14 +3122,32 @@ export default function ChatDashboard() {
                   <div className="flex items-center gap-2 text-[10px] text-slate-500">
                     <Sparkles className="h-3.5 w-3.5 animate-spin text-indigo-400" />
                     <span>Thinking...</span>
+                    <button type="button" onClick={() => aiAbortRef.current?.abort()} className="rounded bg-slate-200 px-2 py-1 dark:bg-slate-800">Cancel</button>
                   </div>
                 )}
               </div>
+
+              {aiConsent && (
+                <div className="px-3 pb-2 text-right">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await apiClient.put('/ai/preferences', { consented: false });
+                      aiAbortRef.current?.abort();
+                      setAiConsent(false);
+                    }}
+                    className="text-[9px] font-semibold text-slate-500 underline hover:text-red-500"
+                  >
+                    Disable AI and revoke consent
+                  </button>
+                </div>
+              )}
 
               {/* AI Toolbar Quick Actions */}
               <div className="p-3 border-t border-slate-200 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-950/20 flex gap-2">
                 <button
                   onClick={handleAiSummarizeInSidebar}
+                  disabled={!aiConsent || aiChatLoading}
                   className="flex-1 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold border border-indigo-500/20 transition-colors"
                 >
                   📝 Summarize Chat
@@ -3121,6 +3162,7 @@ export default function ChatDashboard() {
                 <input
                   type="text"
                   value={aiChatInput}
+                  disabled={!aiConsent || aiChatLoading}
                   onChange={(e) => setAiChatInput(e.target.value)}
                   placeholder="Ask AI companion..."
                   className="flex-1 h-9 px-3 rounded-xl text-xs font-semibold glass-input text-slate-800 dark:text-white placeholder:text-slate-500"

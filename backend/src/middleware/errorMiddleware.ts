@@ -35,6 +35,7 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     message,
+    code: err.code,
     errors,
     requestId: res.locals.requestId,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined

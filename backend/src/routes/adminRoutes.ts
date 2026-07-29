@@ -5,6 +5,7 @@ import {
   toggleBanUser
 } from '../controllers/adminController.js';
 import { authenticateJWT, authorizeRoles } from '../middleware/authMiddleware.js';
+import { getAIAdminSettings, updateAIAdminSettings, getAIMetrics } from '../controllers/aiAdminController.js';
 
 const router = Router();
 
@@ -23,5 +24,8 @@ router.use(authorizeRoles('admin', 'moderator') as any);
 router.get('/stats', getDashboardStats as any);
 router.get('/users', getUsersAdmin as any);
 router.post('/users/:userId/ban', toggleBanUser as any);
+router.get('/ai/settings', getAIAdminSettings as any);
+router.put('/ai/settings', authorizeRoles('admin') as any, updateAIAdminSettings as any);
+router.get('/ai/metrics', getAIMetrics as any);
 
 export default router;
