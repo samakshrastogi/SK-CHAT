@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { DeviceSession } from '../models/DeviceSession.js';
 import { CustomError } from '../utils/customError.js';
+import { getJwtAccessSecret, getJwtRefreshSecret } from '../config/env.js';
 
 type CentralPayload = {
   iss: string;
@@ -84,30 +85,32 @@ export const centralLogin = async (req: Request, res: Response, next: NextFuncti
       });
     } else {
       user.isVerified = true;
-      if (payload.role === 'admin') user.role = 'admin';
+      user.role = payload.role === 'admin' ? 'admin' : 'user';
       await user.save();
     }
 
-    const deviceId = crypto.randomUUID();
+    const requestedDeviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
+    const deviceId = requestedDeviceId || crypto.randomUUID();
     const accessToken = jwt.sign(
       { id: user._id, email: user.email, username: user.username, role: user.role, deviceId },
-      process.env.JWT_ACCESS_SECRET as string,
+      getJwtAccessSecret(),
       { expiresIn: (process.env.JWT_ACCESS_EXPIRY || '15m') as jwt.SignOptions['expiresIn'] }
     );
     const refreshToken = jwt.sign(
       { id: user._id, deviceId },
-      process.env.JWT_REFRESH_SECRET as string,
+      getJwtRefreshSecret(),
       { expiresIn: (process.env.JWT_REFRESH_EXPIRY || '7d') as jwt.SignOptions['expiresIn'] }
     );
 
-    await DeviceSession.create({
+    await DeviceSession.findOneAndUpdate({ userId: user._id, deviceId }, {
       userId: user._id,
       refreshToken: crypto.createHash('sha256').update(refreshToken).digest('hex'),
       deviceId,
       deviceType: req.body?.deviceType || req.headers['user-agent'] || 'SK Central Web',
       ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
       lastActive: new Date(),
-    });
+      isActive: true,
+    }, { upsert: true, new: true, setDefaultsOnInsert: true });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,

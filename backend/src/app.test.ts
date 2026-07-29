@@ -24,6 +24,18 @@ describe('health endpoint', () => {
     });
   });
 
+  it('allows PATCH notification requests in CORS preflights', async () => {
+    const response = await fetch(`${baseUrl}/api/notifications/read-all`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'PATCH',
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-methods')).toContain('PATCH');
+  });
+
   it('returns healthy status', async () => {
     const response = await fetch(`${baseUrl}/health`);
     const payload = await response.json() as { status: string };

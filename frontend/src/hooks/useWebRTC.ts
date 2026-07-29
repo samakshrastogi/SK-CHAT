@@ -2,10 +2,12 @@ import { useRef } from 'react';
 import { useCallStore } from '../store/callStore.js';
 import { apiClient } from '../api/client.js';
 
-const RTC_CONFIG = {
+const turnUrls = (import.meta.env.VITE_TURN_URLS || '').split(',').map((value: string) => value.trim()).filter(Boolean);
+const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    ...(turnUrls.length ? [{ urls: turnUrls, username: import.meta.env.VITE_TURN_USERNAME, credential: import.meta.env.VITE_TURN_CREDENTIAL }] : [])
   ]
 };
 

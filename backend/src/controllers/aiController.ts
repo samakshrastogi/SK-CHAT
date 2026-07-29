@@ -3,6 +3,13 @@ import { getSmartReplies, summarizeChat, translateMessage, rewriteMessage, gener
 import { Message } from '../models/Message.js';
 import { CustomError } from '../utils/customError.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
+import { Chat } from '../models/Chat.js';
+
+const requireChatMembership = async (chatId: string, userId?: string) => {
+  if (!userId || !await Chat.exists({ _id: chatId, participants: userId })) {
+    throw new CustomError('Chat not found or access denied', 404);
+  }
+};
 
 export const askAI = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -20,6 +27,7 @@ export const askAI = async (req: AuthenticatedRequest, res: Response, next: Next
 export const getSmartRepliesRoute = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { chatId } = req.params;
+    await requireChatMembership(String(chatId), req.user?.id);
     
     // Get last 10 messages for context
     const messages = await Message.find({ chatId })
@@ -42,6 +50,7 @@ export const getSmartRepliesRoute = async (req: AuthenticatedRequest, res: Respo
 export const summarizeChatRoute = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { chatId } = req.params;
+    await requireChatMembership(String(chatId), req.user?.id);
     
     // Fetch last 50 messages to summarize
     const messages = await Message.find({ chatId })

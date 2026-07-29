@@ -20,7 +20,7 @@
     "react": "^19.0.0-rc-f994737d14-20240528",
     "react-dom": "^19.0.0-rc-f994737d14-20240528",
     "react-hook-form": "^7.51.5",
-    "react-router-dom": "^6.23.1",
+    "react-router-dom": "^7.18.2",
     "socket.io-client": "^4.7.5",
     "tailwind-merge": "^2.3.0",
     "zustand": "^4.5.2"
@@ -32,11 +32,11 @@
   "devDependencies": {
     "@types/react": "^19.0.0-rc.0",
     "@types/react-dom": "^19.0.0-rc.0",
-    "@vitejs/plugin-react": "^4.3.0",
+    "@vitejs/plugin-react": "^6.0.4",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5",
-    "vite": "^5.2.11"
+    "vite": "^8.1.5"
   }
 }

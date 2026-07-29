@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { CustomError } from '../utils/customError.js';
 import { User } from '../models/User.js';
+import { getJwtAccessSecret } from '../config/env.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -25,7 +26,7 @@ export const authenticateJWT = async (
     }
 
     const token = authHeader.split(' ')[1];
-    const accessSecret = process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#';
+    const accessSecret = getJwtAccessSecret();
 
     jwt.verify(token, accessSecret, async (err, decoded: any) => {
       if (err) {

@@ -19,17 +19,19 @@ import { centralLogin } from '../controllers/centralAuthController.js';
 
 const router = Router();
 
-router.post('/register', registerValidator, register);
-router.get('/verify', verifyEmail);
-router.post('/verify-otp', verifyEmail);
-router.post('/login', loginValidator, login);
+if (process.env.NODE_ENV !== 'production') {
+  router.post('/register', registerValidator, register);
+  router.get('/verify', verifyEmail);
+  router.post('/verify-otp', verifyEmail);
+  router.post('/login', loginValidator, login);
+  router.post('/forgot-password', forgotPassword);
+  router.post('/reset-password', resetPasswordValidator, resetPassword);
+  router.post('/google-sso', googleSSO);
+  router.post('/google-sso-redirect', googleSSORedirect);
+}
 router.post('/central', centralLogin);
 router.post('/logout', logout);
 router.post('/refresh', refreshToken);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPasswordValidator, resetPassword);
-router.post('/google-sso', googleSSO);
-router.post('/google-sso-redirect', googleSSORedirect);
 
 // Multi-Device Sessions (Protected)
 router.get('/sessions', authenticateJWT as any, getActiveSessions as any);
