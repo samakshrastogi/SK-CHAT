@@ -4,6 +4,14 @@ import { apiClient, setAccessTokenInMemory } from '../api/client.js';
 import { getCentralProfile, requestCentralAppToken } from '../api/centralAuth.js';
 
 let authCheckPromise: Promise<boolean> | null = null;
+const getBrowserDeviceId = () => {
+  const key = 'sk_connect_device_id';
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const created = window.crypto.randomUUID();
+  window.localStorage.setItem(key, created);
+  return created;
+};
 
 interface AuthState {
   user: User | null;
@@ -101,6 +109,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const response = await apiClient.post('/auth/central', {
           token: centralToken,
           deviceType: navigator.userAgent,
+          deviceId: getBrowserDeviceId(),
         });
         const { accessToken, user } = response.data;
         const centralProfile = getCentralProfile();
@@ -164,11 +173,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   terminateSession: async (sessionId) => {
     try {
+      const target = get().sessions.find(s => s.id === sessionId);
       await apiClient.delete(`/auth/sessions/${sessionId}`);
       set({ sessions: get().sessions.filter(s => s.id !== sessionId) });
       
       // If we terminated our own session, clear state
-      const target = get().sessions.find(s => s.id === sessionId);
       if (target?.isCurrent) {
         setAccessTokenInMemory('');
         set({ user: null, isAuthenticated: false });

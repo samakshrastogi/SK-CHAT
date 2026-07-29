@@ -1502,26 +1502,6 @@ export default function ChatDashboard() {
     if (storyMention.trim()) meta.mention = storyMention;
     if (storyLocation.trim()) meta.location = storyLocation;
     if (storyHashtags.trim()) meta.hashtags = storyHashtags.split(',').map((t) => t.trim());
-    if (storyPollQuestion.trim()) {
-      meta.poll = {
-        question: storyPollQuestion,
-        opt1: storyPollOpt1 || 'Yes',
-        opt2: storyPollOpt2 || 'No',
-        votes1: [],
-        votes2: []
-      };
-    }
-    if (storyQuestion.trim()) {
-      meta.question = {
-        text: storyQuestion,
-        answers: []
-      };
-    }
-    meta.emojiSlider = {
-      target: storyEmojiSliderTarget,
-      score: 50
-    };
-
     try {
       if (storyType === 'media' && storyFile) {
         const formData = new FormData();

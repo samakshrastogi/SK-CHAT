@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { Call } from '../models/Call.js';
 import { CustomError } from '../utils/customError.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
+import { Chat } from '../models/Chat.js';
 
 export const getCallHistory = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -26,6 +27,15 @@ export const logCallStart = async (req: AuthenticatedRequest, res: Response, nex
   try {
     const { receiverId, chatId, type } = req.body;
 
+    if (!receiverId || receiverId === req.user!.id) {
+      throw new CustomError('A valid receiver is required', 400);
+    }
+    if (!['voice', 'video'].includes(type)) {
+      throw new CustomError('Call type must be voice or video', 400);
+    }
+    const chat = await Chat.findOne({ _id: chatId, participants: { $all: [req.user!.id, receiverId] } });
+    if (!chat) throw new CustomError('Call chat not found or access denied', 404);
+
     const call = await Call.create({
       callerId: req.user!.id,
       receiverId,
@@ -46,11 +56,16 @@ export const logCallEnd = async (req: AuthenticatedRequest, res: Response, next:
     const { callId } = req.params;
     const { status, duration } = req.body; // status: completed, rejected, missed, busy etc
 
-    const call = await Call.findById(callId);
+    const call = await Call.findOne({
+      _id: callId,
+      $or: [{ callerId: req.user!.id }, { receiverId: req.user!.id }],
+    });
     if (!call) {
       throw new CustomError('Call record not found', 404);
     }
 
+    const allowedStatuses = ['connected', 'rejected', 'missed', 'completed', 'busy'];
+    if (status && !allowedStatuses.includes(status)) throw new CustomError('Invalid call status', 400);
     call.status = status || 'completed';
     call.endedAt = new Date();
     call.duration = duration || Math.round((call.endedAt.getTime() - (call.startedAt || new Date()).getTime()) / 1000);

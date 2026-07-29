@@ -131,62 +131,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </div>
 
                 {/* Interactive Widget overlay (Poll / Questions / Slider) */}
-                <div className="absolute top-1/2 left-6 right-6 -translate-y-1/2 z-20 space-y-3">
-                  {metadata?.poll && (
-                    <div className="bg-black/60 backdrop-blur-md border border-white/10 p-3.5 rounded-2xl text-center text-white">
-                      <p className="font-bold text-[11px] mb-2">{metadata.poll.question}</p>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); alert('Option 1 Voted! 73% yes'); }}
-                          className="flex-1 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold text-[10px]"
-                        >
-                          {metadata.poll.opt1}
-                        </button>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); alert('Option 2 Voted! 27% no'); }}
-                          className="flex-1 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-xl font-bold text-[10px]"
-                        >
-                          {metadata.poll.opt2}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {metadata?.question && (
-                    <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-2xl text-center text-white space-y-2">
-                      <p className="font-extrabold uppercase tracking-widest text-indigo-300 text-[8px]">Ask me anything</p>
-                      <p className="font-semibold text-xs">{metadata.question.text}</p>
-                      <div className="bg-black/30 border border-white/10 rounded-xl p-1.5 flex gap-2 items-center">
-                        <input 
-                          type="text" 
-                          placeholder="Type an answer..." 
-                          className="flex-1 bg-transparent border-0 outline-none text-[10px] text-white focus:ring-0 px-2"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); alert('Answer submitted!'); }} 
-                          className="bg-white text-slate-900 text-[8px] font-bold px-2 py-1 rounded-lg"
-                        >
-                          Reply
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {metadata?.emojiSlider && (
-                    <div className="bg-black/50 backdrop-blur-md p-2.5 rounded-2xl flex items-center gap-3 border border-white/10">
-                      <span className="text-base">{metadata.emojiSlider.target || '🔥'}</span>
-                      <input 
-                        type="range" 
-                        min="0" 
-                        max="100" 
-                        defaultValue={50} 
-                        className="flex-1 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  )}
-                </div>
+                <div className="absolute top-1/2 left-6 right-6 -translate-y-1/2 z-20 space-y-3">                </div>
 
                 {/* Caption & Hashtags bottom overlay */}
                 <div className="absolute bottom-16 left-4 right-4 z-20 space-y-1.5 text-center pointer-events-none">

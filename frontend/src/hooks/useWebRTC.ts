@@ -35,7 +35,8 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   const initializePeerConnection = (
     localStream: MediaStream,
     targetId: string,
-    onRemoteStream: (stream: MediaStream) => void
+    onRemoteStream: (stream: MediaStream) => void,
+    callId: string
   ) => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     pcRef.current = pc;
@@ -57,6 +58,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       if (event.candidate) {
         socketEmit('call:candidate', {
           targetId,
+          callId,
           candidate: event.candidate
         });
       }
@@ -67,18 +69,16 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
 
   const makeCall = async (receiverId: string, chatId: string, type: 'voice' | 'video') => {
     try {
-      const callId = Math.random().toString(36).substring(7);
-      callStore.setOutgoingCall(receiverId, callId, type);
-
-      // Start REST log entry in backend
+      // Create the authorized backend call record before signaling.
       const logResp = await apiClient.post('/calls/start', { receiverId, chatId, type });
-      const backendCallRecordId = logResp.data.call._id;
+      const callId = logResp.data.call._id;
+      callStore.setOutgoingCall(receiverId, callId, type);
 
       const localStream = await startLocalStream(type);
       
       const pc = initializePeerConnection(localStream, receiverId, (remoteStream) => {
         callStore.setCallConnected(remoteStream, pc);
-      });
+      }, callId);
 
       // Create SDP Offer
       const offer = await pc.createOffer();
@@ -93,7 +93,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       });
 
       // Cache reference to backend call log id in localStorage to end it cleanly
-      localStorage.setItem('active_backend_call_id', backendCallRecordId);
+      localStorage.setItem('active_backend_call_id', callId);
     } catch (e) {
       callStore.resetCallStore();
     }
@@ -103,9 +103,11 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     try {
       const localStream = await startLocalStream(callStore.callType || 'video');
       
+      const callId = callStore.callId;
+      if (!callId) throw new Error('Missing call identifier');
       const pc = initializePeerConnection(localStream, callerId, (remoteStream) => {
         callStore.setCallConnected(remoteStream, pc);
-      });
+      }, callId);
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       
@@ -116,6 +118,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       // Signal acceptance
       socketEmit('call:accept', {
         callerId,
+        callId,
         answer
       });
     } catch (e) {
@@ -124,7 +127,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   };
 
   const rejectCall = (callerId: string, reason = 'declined') => {
-    socketEmit('call:reject', { callerId, reason });
+    socketEmit('call:reject', { callerId, callId: callStore.callId, reason });
     callStore.resetCallStore();
   };
 
@@ -205,7 +208,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     const target = callStore.callerId || callStore.receiverId;
 
     if (target) {
-      socketEmit('call:end', { targetId: target });
+      socketEmit('call:end', { targetId: target, callId: callStore.callId });
     }
 
     if (activeCallRecordId) {

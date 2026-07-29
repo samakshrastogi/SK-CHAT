@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 import { Chat } from '../models/Chat.js';
 import { Message } from '../models/Message.js';
+import { Call } from '../models/Call.js';
 import { logger } from '../utils/logger.js';
 import { initNotificationService, createNotification } from '../services/notificationService.js';
 import { getJwtAccessSecret } from '../config/env.js';
@@ -276,6 +277,7 @@ export const socketHandler = (io: Server) => {
 
     // ── WebRTC Calling Signaling ───────────────────────────────────────────
     socket.on('call:initiate', async ({ receiverId, callId, type, offer }) => {
+      if (!await Call.exists({ _id: callId, callerId: user.id, receiverId })) return;
       logger.info(`Call initiated by ${user.id} to ${receiverId} for call ${callId}`);
       socket.to(`user:${receiverId}`).emit('call:incoming', {
         callerId: user.id,
@@ -286,12 +288,21 @@ export const socketHandler = (io: Server) => {
       });
     });
 
-    socket.on('call:accept', ({ callerId, answer }) => {
+    socket.on('call:accept', async ({ callerId, callId, answer }) => {
+      const call = await Call.findOne({ _id: callId, callerId, receiverId: user.id });
+      if (!call) return;
+      call.status = 'connected';
+      await call.save();
       logger.info(`Call accepted by ${user.id} for caller ${callerId}`);
-      socket.to(`user:${callerId}`).emit('call:accepted', { receiverId: user.id, answer });
+      socket.to(`user:${callerId}`).emit('call:accepted', { receiverId: user.id, callId, answer });
     });
 
-    socket.on('call:reject', async ({ callerId, reason }) => {
+    socket.on('call:reject', async ({ callerId, callId, reason }) => {
+      const call = await Call.findOne({ _id: callId, callerId, receiverId: user.id });
+      if (!call) return;
+      call.status = 'rejected';
+      call.endedAt = new Date();
+      await call.save();
       logger.info(`Call rejected by ${user.id} for caller ${callerId}`);
       socket.to(`user:${callerId}`).emit('call:rejected', { receiverId: user.id, reason });
       // Notify caller of missed call
@@ -307,11 +318,13 @@ export const socketHandler = (io: Server) => {
       });
     });
 
-    socket.on('call:candidate', ({ targetId, candidate }) => {
+    socket.on('call:candidate', async ({ targetId, callId, candidate }) => {
+      if (!await Call.exists({ _id: callId, $or: [{ callerId: user.id, receiverId: targetId }, { callerId: targetId, receiverId: user.id }] })) return;
       socket.to(`user:${targetId}`).emit('call:candidate', { senderId: user.id, candidate });
     });
 
-    socket.on('call:end', async ({ targetId }) => {
+    socket.on('call:end', async ({ targetId, callId }) => {
+      if (!await Call.exists({ _id: callId, $or: [{ callerId: user.id, receiverId: targetId }, { callerId: targetId, receiverId: user.id }] })) return;
       logger.info(`Call ended by ${user.id} targeting ${targetId}`);
       socket.to(`user:${targetId}`).emit('call:ended', { senderId: user.id });
     });
