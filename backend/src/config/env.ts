@@ -15,5 +15,5 @@ export const parseAllowedOrigins = (): string[] => {
 };
 export const validateProductionEnv = () => {
   if (process.env.NODE_ENV !== 'production') return;
-  ['MONGODB_URI', 'FRONTEND_URL', 'BACKEND_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'SK_CENTRAL_SSO_SECRET'].forEach(getRequiredEnv);
+  ['MONGODB_URI', 'FRONTEND_URL', 'BACKEND_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'SK_CENTRAL_SSO_SECRET', 'SK_CENTRAL_SERVICE_TOKEN', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'].forEach(getRequiredEnv);
 };

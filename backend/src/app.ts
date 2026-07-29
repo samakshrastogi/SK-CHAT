@@ -21,11 +21,16 @@ import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 import { parseAllowedOrigins } from './config/env.js';
+import { requestContext } from './middleware/requestContext.js';
+import { getReadiness } from './services/healthService.js';
+import { logger } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.disable('x-powered-by');
+app.use(requestContext);
 
 // Security Hardening using Helmet
 app.use(helmet({
@@ -41,7 +46,10 @@ app.use(cors({
 }));
 
 // Request Loggers
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+morgan.token('request-id', (_req, res) => (res as any).locals?.requestId);
+app.use(morgan(':method :url :status :response-time ms requestId=:request-id', {
+  stream: { write: (message) => logger.info('http_request', { summary: message.trim() }) },
+}));
 
 // Payload Parsing
 app.use(express.json());
@@ -78,9 +86,21 @@ app.use('/api/ai',            aiRoutes);
 app.use('/api/admin',         adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Base Check-in Route
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date() });
+// Kubernetes/Render-compatible liveness and readiness checks.
+app.get(['/health', '/health/live'], (_req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+app.get('/health/ready', async (_req, res, next) => {
+  try {
+    const readiness = await getReadiness();
+    res.status(readiness.ready ? 200 : 503).json({
+      status: readiness.ready ? 'ready' : 'not_ready',
+      timestamp: new Date().toISOString(),
+      dependencies: readiness.dependencies,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Global Error Handler
