@@ -73,7 +73,7 @@ export default function ResetPasswordPage() {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Sign In
           </Link>
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-2">
-            <span className="text-sm font-black tracking-tighter text-white">SK</span>
+            <img src="/sk-logo.png" alt="" className="h-full w-full rounded-xl object-cover" />
           </div>
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white">
             {step === 2 ? 'Enter Reset OTP' : 'Reset password'}

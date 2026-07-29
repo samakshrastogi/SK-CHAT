@@ -78,7 +78,7 @@ function LoginForm() {
       <div className="w-full max-w-[420px] z-10">
         <div className="text-center mb-5">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-3 animate-logo-glow">
-            <span className="text-sm font-black tracking-tighter text-white">SK</span>
+            <img src="/sk-logo.png" alt="" className="h-full w-full rounded-xl object-cover" />
           </div>
           <h2 className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-300 dark:via-purple-300 dark:to-pink-300">Welcome back</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-medium">Sign in to your SK Connect account to continue</p>

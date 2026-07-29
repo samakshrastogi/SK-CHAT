@@ -154,7 +154,7 @@ export default function LandingPage() {
       <header className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-5 sm:py-6 flex items-center justify-between gap-3 z-10 gsap-header">
         <div className="flex items-center gap-2 min-w-0">
           <div className={`h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br ${style.logo} flex items-center justify-center shadow-md transition-all duration-500 shrink-0`}>
-            <span className="text-sm font-black tracking-tighter text-white">SK</span>
+            <img src="/sk-logo.png" alt="" className="h-full w-full rounded-xl object-cover" />
           </div>
           <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-800 truncate">
             SK Connect

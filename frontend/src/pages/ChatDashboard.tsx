@@ -1713,7 +1713,7 @@ export default function ChatDashboard() {
         <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800/40 flex items-center justify-between bg-white/30 dark:bg-slate-900/30">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <span className="text-sm font-black tracking-tighter text-white">SK</span>
+              <img src="/sk-logo.png" alt="" className="h-full w-full rounded-xl object-cover" />
             </div>
             <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-200 dark:to-purple-300">SK Connect</span>
           </div>

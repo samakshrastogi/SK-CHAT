@@ -80,7 +80,7 @@ function RegisterForm() {
 
         <div className="w-full max-w-[420px] bg-white/70 dark:bg-slate-900/70 border border-slate-200/50 dark:border-indigo-500/20 backdrop-blur-2xl rounded-[28px] px-6 py-6 shadow-2xl shadow-indigo-500/5 dark:shadow-purple-500/10 text-center z-10 transition-all duration-300">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-3 animate-logo-glow">
-            <span className="text-sm font-black tracking-tighter text-white">SK</span>
+            <img src="/sk-logo.png" alt="" className="h-full w-full rounded-xl object-cover" />
           </div>
 
           {verifyStatus === 'success' ? (
@@ -152,7 +152,7 @@ function RegisterForm() {
       <div className="w-full max-w-[420px] z-10">
         <div className="text-center mb-5">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 mx-auto mb-3 animate-logo-glow">
-            <span className="text-sm font-black tracking-tighter text-white">SK</span>
+            <img src="/sk-logo.png" alt="" className="h-full w-full rounded-xl object-cover" />
           </div>
           <h2 className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-300 dark:via-purple-300 dark:to-pink-300">Create an account</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-medium">Join SK Connect today to experience next-gen chatting</p>
