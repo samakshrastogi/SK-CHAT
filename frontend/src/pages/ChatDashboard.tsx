@@ -23,6 +23,8 @@ import { StoryCreatorModal } from '../components/StoryCreatorModal.tsx';
 import { StoryViewerModal } from '../components/StoryViewerModal.tsx';
 import { NotificationPanel, NotificationBell } from '../components/NotificationPanel.tsx';
 
+const AICompanionPanel = React.lazy(() => import('../components/AICompanionPanel.js').then((module) => ({ default: module.AICompanionPanel })));
+
 const wallpaperClasses: { [key: string]: string } = {
   'gradient-mesh': 'bg-white dark:bg-slate-950',
   'deep-space': 'bg-gradient-to-tr from-slate-200 to-purple-100 dark:from-indigo-950 dark:to-slate-950',
@@ -3063,119 +3065,30 @@ export default function ChatDashboard() {
             })()
           )}
 
-          {/* AI companion sidebar panel */}
-          {isAiOpen && (
-            <div className="w-full md:w-80 border-l border-slate-200 dark:border-slate-800/40 bg-slate-50/95 dark:bg-slate-955/95 md:bg-white/40 md:dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 absolute md:relative right-0 top-0 z-30 overflow-hidden shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
-              {/* AI Header */}
-              <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
-                <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400">
-                  <Sparkles className="h-5 w-5 animate-pulse" />
-                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200">AI Companion</span>
-                </div>
-                <button 
-                  onClick={() => setIsAiOpen(false)} 
-                  className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white"
-                >
-                  <X className="h-4.5 w-4.5" />
-                </button>
-              </div>
-
-              {!aiConsent && (
-                <div className="m-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs text-slate-700 dark:text-slate-200">
-                  <p className="font-bold">Enable AI features</p>
-                  <p className="mt-1 text-[10px] leading-relaxed">{aiDisclosure}</p>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const response = await apiClient.put('/ai/preferences', { consented: true });
-                      setAiConsent(response.data.consented);
-                    }}
-                    className="mt-2 rounded-lg bg-indigo-500 px-3 py-1.5 font-bold text-white"
-                  >
-                    I agree and enable AI
-                  </button>
-                </div>
-              )}
-
-              {/* AI Messages List */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {aiChatMessages.map((m, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`flex flex-col max-w-[85%] ${m.sender === 'user' ? 'self-end ml-auto items-end' : 'items-start'}`}
-                  >
-                    <span className="text-[9px] font-bold text-slate-500 mb-1">
-                      {m.sender === 'user' ? 'You' : 'Companion'}
-                    </span>
-                    <div 
-                      className={`px-3 py-2.5 rounded-2xl text-xs leading-relaxed ${
-                        m.sender === 'user'
-                          ? 'bg-indigo-500 text-white rounded-tr-none'
-                          : 'bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-250 border border-slate-200 dark:border-slate-800 rounded-tl-none'
-                      }`}
-                    >
-                      {m.text}
-                    </div>
-                  </div>
-                ))}
-                {aiChatLoading && (
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                    <Sparkles className="h-3.5 w-3.5 animate-spin text-indigo-400" />
-                    <span>Thinking...</span>
-                    <button type="button" onClick={() => aiAbortRef.current?.abort()} className="rounded bg-slate-200 px-2 py-1 dark:bg-slate-800">Cancel</button>
-                  </div>
-                )}
-              </div>
-
-              {aiConsent && (
-                <div className="px-3 pb-2 text-right">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await apiClient.put('/ai/preferences', { consented: false });
-                      aiAbortRef.current?.abort();
-                      setAiConsent(false);
-                    }}
-                    className="text-[9px] font-semibold text-slate-500 underline hover:text-red-500"
-                  >
-                    Disable AI and revoke consent
-                  </button>
-                </div>
-              )}
-
-              {/* AI Toolbar Quick Actions */}
-              <div className="p-3 border-t border-slate-200 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-950/20 flex gap-2">
-                <button
-                  onClick={handleAiSummarizeInSidebar}
-                  disabled={!aiConsent || aiChatLoading}
-                  className="flex-1 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold border border-indigo-500/20 transition-colors"
-                >
-                  📝 Summarize Chat
-                </button>
-              </div>
-
-              {/* AI Input Form */}
-              <form 
-                onSubmit={handleSendAiChatMessage} 
-                className="p-3 border-t border-slate-200 dark:border-slate-800/60 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md flex gap-2 items-center"
-              >
-                <input
-                  type="text"
-                  value={aiChatInput}
-                  disabled={!aiConsent || aiChatLoading}
-                  onChange={(e) => setAiChatInput(e.target.value)}
-                  placeholder="Ask AI companion..."
-                  className="flex-1 h-9 px-3 rounded-xl text-xs font-semibold glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
-                />
-                <button
-                  type="submit"
-                  className="h-9 w-9 rounded-xl bg-indigo-500 hover:bg-indigo-650 flex items-center justify-center text-white"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
-          )}
+          <React.Suspense fallback={null}>
+          <AICompanionPanel
+            isOpen={isAiOpen}
+            consented={aiConsent}
+            disclosure={aiDisclosure}
+            messages={aiChatMessages}
+            input={aiChatInput}
+            loading={aiChatLoading}
+            onClose={() => setIsAiOpen(false)}
+            onConsent={async () => {
+              const response = await apiClient.put('/ai/preferences', { consented: true });
+              setAiConsent(response.data.consented);
+            }}
+            onRevoke={async () => {
+              await apiClient.put('/ai/preferences', { consented: false });
+              aiAbortRef.current?.abort();
+              setAiConsent(false);
+            }}
+            onCancel={() => aiAbortRef.current?.abort()}
+            onInputChange={setAiChatInput}
+            onSubmit={handleSendAiChatMessage}
+            onSummarize={handleAiSummarizeInSidebar}
+          />
+          </React.Suspense>
 
           {/* Group Details Info sidebar panel */}
           {isGroupInfoOpen && activeChat.isGroup && !activeChat.isCommunity && (

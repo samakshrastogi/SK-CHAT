@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client.js';
 import { useChatStore } from '../store/chatStore.js';
 import { Compass, CheckCircle, AlertTriangle, Loader } from 'lucide-react';
 
 export default function JoinGroupPage() {
-  const { codeOrToken } = useParams<{ codeOrToken: string }>();
-  const navigate = useNavigate();
+  const codeOrToken = decodeURIComponent(window.location.pathname.split('/').filter(Boolean).at(-1) || '');
   const { upsertChat } = useChatStore();
 
   const [loading, setLoading] = useState(false);
@@ -28,7 +26,7 @@ export default function JoinGroupPage() {
       
       // Redirect to the main dashboard after a short delay
       setTimeout(() => {
-        navigate('/chat');
+        window.location.assign('/chat');
       }, 1500);
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Failed to join group chat. The link may be invalid or expired.');
@@ -83,12 +81,12 @@ export default function JoinGroupPage() {
                     'Accept Invitation & Join'
                   )}
                 </button>
-                <Link
-                  to="/"
+                <a
+                  href="/"
                   className="inline-block w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white py-2"
                 >
                   Decline & Go Back
-                </Link>
+                </a>
               </div>
             </div>
           )}

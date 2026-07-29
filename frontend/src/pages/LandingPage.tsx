@@ -1,5 +1,4 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { MessageSquare, Shield, Zap, Sparkles, Video, Globe, AppWindow } from 'lucide-react';
 import { useAuthStore } from '../store/authStore.js';
@@ -162,13 +161,13 @@ export default function LandingPage() {
         </div>
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           {isAuthenticated ? (
-            <Link to="/chat" className={`px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500 flex items-center gap-1.5`}>
+            <a href="/chat" className={`px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500 flex items-center gap-1.5`}>
               <AppWindow className="h-4 w-4" /> <span className="hidden sm:inline">Go to </span>App
-            </Link>
+            </a>
           ) : (
             <>
-              <Link to="/login" className="px-2 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</Link>
-              <Link to="/register" className={`px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500 whitespace-nowrap`}>Get Started</Link>
+              <a href="/login" className="px-2 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</a>
+              <a href="/register" className={`px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold bg-gradient-to-r ${style.button} text-white rounded-xl shadow-lg transition-all duration-500 whitespace-nowrap`}>Get Started</a>
             </>
           )}
         </div>
@@ -191,13 +190,13 @@ export default function LandingPage() {
 
           <div className="flex flex-wrap gap-4 mt-2">
             {isAuthenticated ? (
-              <Link to="/chat" className={`px-8 py-4 text-base font-semibold bg-gradient-to-r ${style.button} text-white rounded-2xl shadow-xl transition-all duration-500 transform hover:-translate-y-0.5 gsap-cta`}>
+              <a href="/chat" className={`px-8 py-4 text-base font-semibold bg-gradient-to-r ${style.button} text-white rounded-2xl shadow-xl transition-all duration-500 transform hover:-translate-y-0.5 gsap-cta`}>
                 Go to Dashboard
-              </Link>
+              </a>
             ) : (
-              <Link to="/register" className={`px-8 py-4 text-base font-semibold bg-gradient-to-r ${style.button} text-white rounded-2xl shadow-xl transition-all duration-500 transform hover:-translate-y-0.5 gsap-cta`}>
+              <a href="/register" className={`px-8 py-4 text-base font-semibold bg-gradient-to-r ${style.button} text-white rounded-2xl shadow-xl transition-all duration-500 transform hover:-translate-y-0.5 gsap-cta`}>
                 Start Chatting Now
-              </Link>
+              </a>
             )}
             <a href="#features" className="px-8 py-4 text-base font-semibold bg-white hover:bg-slate-50 border border-slate-200/80 text-slate-700 rounded-2xl shadow-sm hover:shadow transition-all gsap-cta">
               Explore Features
@@ -431,13 +430,13 @@ export default function LandingPage() {
           <p className="text-sm text-white/80 mb-6 max-w-md mx-auto relative z-10">Join thousands of teams already using SK Connect for real-time collaboration.</p>
           <div className="relative z-10">
             {isAuthenticated ? (
-              <Link to="/chat" className="inline-block px-8 py-3 bg-white font-bold text-sm rounded-2xl text-indigo-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+              <a href="/chat" className="inline-block px-8 py-3 bg-white font-bold text-sm rounded-2xl text-indigo-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
                 Open Dashboard
-              </Link>
+              </a>
             ) : (
-              <Link to="/register" className="inline-block px-8 py-3 bg-white font-bold text-sm rounded-2xl text-indigo-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+              <a href="/register" className="inline-block px-8 py-3 bg-white font-bold text-sm rounded-2xl text-indigo-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
                 Get Started Free
-              </Link>
+              </a>
             )}
           </div>
         </div>
