@@ -32,6 +32,7 @@ export interface IMessage extends Document {
   chatId: Types.ObjectId;
   senderId: Types.ObjectId;
   content: string;
+  clientId?: string;
   messageType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice' | 'location' | 'poll' | 'contact';
   mediaUrl?: string;
   mediaSize?: number;
@@ -88,6 +89,7 @@ const MessageSchema = new Schema<IMessage>({
   chatId: { type: Schema.Types.ObjectId, ref: 'Chat', required: true, index: true },
   senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   content: { type: String, default: '' },
+  clientId: { type: String },
   messageType: {
     type: String,
     enum: ['text', 'image', 'video', 'audio', 'document', 'voice', 'location', 'poll', 'contact'],
@@ -122,6 +124,8 @@ const MessageSchema = new Schema<IMessage>({
   timestamps: true,
 });
 
+MessageSchema.index({ senderId: 1, clientId: 1 }, { unique: true, sparse: true });
+MessageSchema.index({ chatId: 1, _id: -1 });
 // Indexing for search
 MessageSchema.index({ content: 'text' });
 

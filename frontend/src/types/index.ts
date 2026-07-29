@@ -60,6 +60,7 @@ export interface Message {
   chatId: string;
   senderId: User | string; // Populated User or ID string
   content: string;
+  clientId?: string;
   messageType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice' | 'location' | 'poll' | 'contact';
   mediaUrl?: string;
   mediaSize?: number;

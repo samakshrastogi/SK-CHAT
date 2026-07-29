@@ -20,7 +20,9 @@ import {
   removeGroupMember,
   leaveGroup,
   getGroupSharedMedia,
-  getGroupSharedFiles
+  getGroupSharedFiles,
+  getChatPreferences,
+  updateChatPreferences
 } from '../controllers/chatController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -43,6 +45,8 @@ router.post('/:chatId/leave', leaveGroup as any);
 router.get('/:chatId/media', getGroupSharedMedia as any);
 router.get('/:chatId/files', getGroupSharedFiles as any);
 
+router.get('/:chatId/preferences', getChatPreferences as any);
+router.put('/:chatId/preferences', updateChatPreferences as any);
 router.get('/:chatId/messages', getChatMessages as any);
 router.post('/:chatId/messages', upload.single('file'), sendMessage as any);
 router.post('/:chatId/pin', togglePinMessage as any);

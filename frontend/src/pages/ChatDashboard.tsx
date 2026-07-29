@@ -586,6 +586,21 @@ export default function ChatDashboard() {
 
   // Text inputs & attachments
   const [messageText, setMessageText] = useState('');
+  useEffect(() => {
+    if (!activeChat?._id) {
+      setMessageText('');
+      return;
+    }
+    setMessageText(window.localStorage.getItem(`sk_connect_draft:${activeChat._id}`) || '');
+  }, [activeChat?._id]);
+
+  const updateMessageDraft = (value: string) => {
+    setMessageText(value);
+    if (!activeChat?._id) return;
+    const key = `sk_connect_draft:${activeChat._id}`;
+    if (value) window.localStorage.setItem(key, value);
+    else window.localStorage.removeItem(key);
+  };
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -1415,7 +1430,7 @@ export default function ChatDashboard() {
         iv
       );
 
-      setMessageText('');
+      updateMessageDraft('');
       setSelectedFile(null);
       setReplyingTo(null);
       setUploadProgress(0);
@@ -2831,7 +2846,7 @@ export default function ChatDashboard() {
                       type="text"
                       value={messageText}
                       onChange={(e) => {
-                        setMessageText(e.target.value);
+                        updateMessageDraft(e.target.value);
                         if (socket) {
                           socket.emit('typing:start', activeChat._id);
                         }

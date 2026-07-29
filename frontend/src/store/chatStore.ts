@@ -3,6 +3,24 @@ import { Chat, Message, User } from '../types/index.js';
 import { apiClient } from '../api/client.js';
 import { useAuthStore } from './authStore.js';
 
+type OutboxItem = {
+  clientId: string;
+  chatId: string;
+  content: string;
+  type: string;
+  replyToId?: string;
+  expiresIn?: number;
+  createdAt: string;
+};
+const OUTBOX_KEY = 'sk_connect_outbox';
+const readOutbox = (): OutboxItem[] => {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(window.localStorage.getItem(OUTBOX_KEY) || '[]'); } catch { return []; }
+};
+const writeOutbox = (items: OutboxItem[]) => {
+  if (typeof window !== 'undefined') window.localStorage.setItem(OUTBOX_KEY, JSON.stringify(items));
+};
+
 interface ChatState {
   chats: Chat[];
   activeChat: Chat | null;
@@ -11,10 +29,12 @@ interface ChatState {
   isLoadingChats: boolean;
   isLoadingMessages: boolean;
   hasMoreMessages: { [chatId: string]: boolean };
+  messageCursors: { [chatId: string]: string | null };
   unreadCounts: { [chatId: string]: number };
   
   fetchChats: () => Promise<void>;
   fetchMessages: (chatId: string, refresh?: boolean) => Promise<void>;
+  flushOutbox: () => Promise<void>;
   setActiveChat: (chat: Chat | null) => void;
   sendChatMessage: (
     chatId: string,
@@ -60,6 +80,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoadingChats: false,
   isLoadingMessages: false,
   hasMoreMessages: {},
+  messageCursors: {},
   unreadCounts: {},
 
   fetchChats: async () => {
@@ -80,12 +101,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   fetchMessages: async (chatId, refresh = false) => {
     const currentMessages = get().messages[chatId] || [];
-    const skip = refresh ? 0 : currentMessages.length;
+    const cursor = refresh ? undefined : get().messageCursors[chatId] || undefined;
     
     set({ isLoadingMessages: true });
     try {
       const response = await apiClient.get(`/chats/${chatId}/messages`, {
-        params: { limit: 30, skip }
+        params: { limit: 30, cursor }
       });
       const newMessages = response.data.messages;
       
@@ -104,6 +125,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           hasMoreMessages: {
             ...state.hasMoreMessages,
             [chatId]: response.data.hasMore
+          },
+          messageCursors: {
+            ...state.messageCursors,
+            [chatId]: response.data.nextCursor || null
           },
           isLoadingMessages: false
         };
@@ -187,11 +212,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  flushOutbox: async () => {
+    for (const item of readOutbox()) {
+      try {
+        const response = await apiClient.post(`/chats/${item.chatId}/messages`, {
+          content: item.content,
+          messageType: item.type,
+          replyTo: item.replyToId,
+          expiresIn: item.expiresIn,
+          clientId: item.clientId,
+        });
+        get().optimisticAddMessage(item.chatId, response.data.message);
+        writeOutbox(readOutbox().filter((entry) => entry.clientId !== item.clientId));
+      } catch {
+        // Preserve remaining items for the next online retry.
+      }
+    }
+  },
+
   sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn, isEncrypted, ciphertext, iv) => {
+    const clientId = window.crypto.randomUUID();
+    const outboxItem: OutboxItem = {
+      clientId, chatId, content, type, replyToId, expiresIn, createdAt: new Date().toISOString(),
+    };
+    if (!file) writeOutbox([...readOutbox(), outboxItem]);
     try {
       const formData = new FormData();
       formData.append('content', content);
       formData.append('messageType', type);
+      formData.append('clientId', clientId);
       if (file) {
         formData.append('file', file);
       }
@@ -216,6 +265,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
       
       const newMsg = response.data.message;
+      writeOutbox(readOutbox().filter((item) => item.clientId !== clientId));
 
       // Optimistically append the message to chat if not already added by socket
       set((state) => {
@@ -656,3 +706,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   }
 }));
+
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => void useChatStore.getState().flushOutbox());
+  queueMicrotask(() => {
+    if (navigator.onLine) void useChatStore.getState().flushOutbox();
+  });
+}
