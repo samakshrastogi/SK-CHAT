@@ -28,6 +28,7 @@ export interface INotification extends Document {
   isDelivered: boolean;
   createdAt: Date;
   expiresAt?: Date;
+  idempotencyKey?: string;
 }
 
 const NotificationSchema = new Schema<INotification>(
@@ -43,6 +44,7 @@ const NotificationSchema = new Schema<INotification>(
     isRead:      { type: Boolean, default: false },
     isDelivered: { type: Boolean, default: false },
     expiresAt:   { type: Date },
+    idempotencyKey: { type: String, unique: true, sparse: true, index: true },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },

@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { createNotification } from '../services/notificationService.js';
+import { enqueueJob } from '../services/jobQueue.js';
 import { Types } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { getJwtAccessSecret } from '../config/env.js';
@@ -271,6 +272,11 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       }
     }
 
+    const scheduleDate = scheduledAt ? new Date(scheduledAt) : undefined;
+    if (scheduleDate && Number.isNaN(scheduleDate.getTime())) throw new CustomError('Invalid scheduled message date', 400);
+    if (scheduleDate && scheduleDate.getTime() <= Date.now()) throw new CustomError('Scheduled messages must be in the future', 400);
+    if (scheduleDate && chat.isBroadcast) throw new CustomError('Scheduled broadcast messages are not supported', 400);
+
     const message = await Message.create({
       chatId,
       senderId: req.user!.id,
@@ -283,13 +289,22 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       locationData: locationData ? (typeof locationData === 'string' ? JSON.parse(locationData) : locationData) : undefined,
       contactData: contactData ? (typeof contactData === 'string' ? JSON.parse(contactData) : contactData) : undefined,
       replyTo: replyTo || undefined,
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+      scheduledAt: scheduleDate,
       expiresAt,
       status: 'sent',
       isEncrypted: isEncrypted === true || isEncrypted === 'true',
       ciphertext: ciphertext || undefined,
       iv: iv || undefined
     });
+
+    if (scheduleDate) {
+      await enqueueJob('scheduled_message', { messageId: message._id.toString() }, {
+        idempotencyKey: `scheduled-message:${message._id.toString()}`,
+        runAt: scheduleDate,
+      });
+      res.status(202).json({ success: true, scheduled: true, message });
+      return;
+    }
 
     // Update last message in chat
     chat.lastMessage = message._id as any;
@@ -387,6 +402,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
         referenceId: chatId,
         referenceType: 'chat',
         expiresInHours: 72,
+        idempotencyKey: `message:${message._id.toString()}:${participantId.toString()}`,
       })));
 
     res.status(201).json({ success: true, message: populated });

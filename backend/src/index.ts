@@ -9,6 +9,7 @@ import { socketHandler } from './socket/socketHandler.js';
 import { logger } from './utils/logger.js';
 import { rescheduleSelfDestructMessages } from './utils/selfDestruct.js';
 import { parseAllowedOrigins, validateProductionEnv } from './config/env.js';
+import { startJobWorker, stopJobWorker } from './services/jobQueue.js';
 
 const port = process.env.PORT || 5000;
 
@@ -49,6 +50,7 @@ const startServer = async () => {
 
     // Bind Socket actions
     socketHandler(io);
+    startJobWorker(io);
 
     try {
       logger.info('Running startup database tasks...');
@@ -68,8 +70,15 @@ const startServer = async () => {
       process.exit(1);
     });
 
+    const shutdown = () => {
+      stopJobWorker();
+      server.close(() => process.exit(0));
+    };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+
     server.listen(port, () => {
-      logger.info(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
+      logger.info('server_started', { mode: process.env.NODE_ENV || 'development', port });
     });
   } catch (error: any) {
     logger.error(`Failed to start server: ${error.message}`);

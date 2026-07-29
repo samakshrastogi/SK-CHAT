@@ -113,7 +113,16 @@ interface SettingsPanelProps {
 }
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
-  const { subscribeToPush, unsubscribeFromPush, requestBrowserPermission } = useNotificationStore();
+  const {
+    subscribeToPush,
+    unsubscribeFromPush,
+    requestBrowserPermission,
+    preferences,
+    fetchPreferences,
+    updatePreferences,
+  } = useNotificationStore();
+
+  useEffect(() => { void fetchPreferences(); }, [fetchPreferences]);
 
   const handleEnablePush = async () => {
     await requestBrowserPermission();
@@ -182,23 +191,74 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Notification Types</h4>
           <div className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden divide-y divide-slate-200 dark:divide-slate-800">
             {[
-              { label: 'New messages',         sub: 'When someone sends you a message' },
-              { label: 'Mentions',             sub: 'When someone @mentions you' },
-              { label: 'Friend requests',      sub: 'When someone adds you' },
-              { label: 'Community invitations',sub: 'When invited to a community' },
-              { label: 'Event reminders',      sub: 'Before an event starts' },
-              { label: 'Missed calls',         sub: 'When you miss a call' },
-            ].map(({ label, sub }) => (
-              <div key={label} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm text-slate-900 dark:text-slate-200">{label}</p>
-                  <p className="text-xs text-slate-500">{sub}</p>
+              { type: 'new_message' as NotificationType, label: 'New messages', sub: 'When someone sends you a message' },
+              { type: 'mention' as NotificationType, label: 'Mentions', sub: 'When someone @mentions you' },
+              { type: 'friend_request' as NotificationType, label: 'Friend requests', sub: 'When someone adds you' },
+              { type: 'community_invitation' as NotificationType, label: 'Community invitations', sub: 'When invited to a community' },
+              { type: 'event_reminder' as NotificationType, label: 'Event reminders', sub: 'Before an event starts' },
+              { type: 'call_missed' as NotificationType, label: 'Missed calls', sub: 'When you miss a call' },
+            ].map(({ type, label, sub }) => {
+              const enabled = preferences.enabledTypes[type] !== false;
+              return (
+                <div key={type} className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="text-sm text-slate-900 dark:text-slate-200">{label}</p>
+                    <p className="text-xs text-slate-500">{sub}</p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-pressed={enabled}
+                    aria-label={`Toggle ${label}`}
+                    onClick={() => void updatePreferences({
+                      ...preferences,
+                      enabledTypes: { ...preferences.enabledTypes, [type]: !enabled },
+                    })}
+                    className={`h-5 w-9 rounded-full relative transition-colors ${enabled ? 'bg-indigo-600' : 'bg-slate-400'}`}
+                  >
+                    <span className={`absolute top-0.5 h-4 w-4 bg-white rounded-full shadow transition-all ${enabled ? 'right-0.5' : 'left-0.5'}`} />
+                  </button>
                 </div>
-                <div className="h-5 w-9 bg-indigo-600 rounded-full relative cursor-pointer">
-                  <span className="absolute right-0.5 top-0.5 h-4 w-4 bg-white rounded-full shadow" />
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Quiet Hours</h4>
+          <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-4 space-y-3">
+            <label className="flex items-center justify-between text-sm text-slate-900 dark:text-slate-200">
+              Suppress push notifications
+              <input
+                type="checkbox"
+                checked={preferences.quietHours.enabled}
+                onChange={(event) => void updatePreferences({
+                  ...preferences,
+                  quietHours: { ...preferences.quietHours, enabled: event.target.checked },
+                })}
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="time"
+                aria-label="Quiet hours start"
+                value={preferences.quietHours.start}
+                onChange={(event) => void updatePreferences({
+                  ...preferences,
+                  quietHours: { ...preferences.quietHours, start: event.target.value },
+                })}
+                className="rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-2 py-1 text-sm"
+              />
+              <input
+                type="time"
+                aria-label="Quiet hours end"
+                value={preferences.quietHours.end}
+                onChange={(event) => void updatePreferences({
+                  ...preferences,
+                  quietHours: { ...preferences.quietHours, end: event.target.value },
+                })}
+                className="rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-2 py-1 text-sm"
+              />
+            </div>
           </div>
         </section>
       </div>
