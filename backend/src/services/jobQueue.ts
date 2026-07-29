@@ -2,6 +2,7 @@ import type { Server } from 'socket.io';
 import { Job, type JobType } from '../models/Job.js';
 import { Chat } from '../models/Chat.js';
 import { Message } from '../models/Message.js';
+import { Community } from '../models/Community.js';
 import { logger } from '../utils/logger.js';
 import { deliverWebPush, createNotification } from './notificationService.js';
 
@@ -68,6 +69,22 @@ const deliverScheduledMessage = async (messageId: string, io: Server) => {
     })));
 };
 
+const deliverCommunityEventReminder = async (communityId: string, eventId: string) => {
+  const community = await Community.findById(communityId).select('name members events').lean();
+  const event = community?.events.find((item: any) => item._id.toString() === eventId);
+  if (!community || !event) return;
+  await Promise.all(community.members.map((memberId) => createNotification({
+    recipientId: memberId.toString(),
+    type: 'event_reminder',
+    title: `Upcoming event in ${community.name}`,
+    body: `${event.title} starts at ${new Date(event.date).toLocaleString('en-US', { timeZone: 'UTC' })} UTC`,
+    referenceId: communityId,
+    referenceType: 'community',
+    idempotencyKey: `event-reminder:${eventId}:${memberId.toString()}`,
+    expiresInHours: 24,
+  })));
+};
+
 const processJob = async (job: any, io: Server) => {
   if (job.type === 'web_push') {
     await deliverWebPush(
@@ -76,6 +93,10 @@ const processJob = async (job: any, io: Server) => {
       String(job.payload.body),
       job.payload.icon ? String(job.payload.icon) : undefined,
     );
+    return;
+  }
+  if (job.type === 'community_event_reminder') {
+    await deliverCommunityEventReminder(String(job.payload.communityId), String(job.payload.eventId));
     return;
   }
   if (job.type === 'scheduled_message') {

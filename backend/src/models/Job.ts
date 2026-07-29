@@ -1,6 +1,6 @@
 import { Schema, model, type Document } from 'mongoose';
 
-export type JobType = 'web_push' | 'scheduled_message';
+export type JobType = 'web_push' | 'scheduled_message' | 'community_event_reminder';
 
 export interface IJob extends Document {
   type: JobType;
@@ -18,7 +18,7 @@ export interface IJob extends Document {
 }
 
 const JobSchema = new Schema<IJob>({
-  type: { type: String, enum: ['web_push', 'scheduled_message'], required: true, index: true },
+  type: { type: String, enum: ['web_push', 'scheduled_message', 'community_event_reminder'], required: true, index: true },
   payload: { type: Schema.Types.Mixed, required: true },
   idempotencyKey: { type: String, required: true, unique: true, index: true },
   status: { type: String, enum: ['pending', 'processing', 'completed', 'failed'], default: 'pending', index: true },

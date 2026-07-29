@@ -13,7 +13,10 @@ import {
   createCommunityRole,
   assignMemberRole,
   createCommunityEvent,
-  rsvpToEvent
+  rsvpToEvent,
+  banCommunityMember,
+  unbanCommunityMember,
+  getCommunityAuditLog
 } from '../controllers/communityController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -59,5 +62,8 @@ router.post('/:communityId/members/:userId/role', assignMemberRole as any);
 // Events & RSVPs
 router.post('/:communityId/events', createCommunityEvent as any);
 router.post('/:communityId/events/:eventId/rsvp', rsvpToEvent as any);
+router.post('/:communityId/members/:userId/ban', banCommunityMember as any);
+router.delete('/:communityId/members/:userId/ban', unbanCommunityMember as any);
+router.get('/:communityId/audit-log', getCommunityAuditLog as any);
 
 export default router;

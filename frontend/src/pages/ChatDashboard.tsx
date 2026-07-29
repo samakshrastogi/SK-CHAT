@@ -751,6 +751,8 @@ export default function ChatDashboard() {
     socket.on('status:liked', onStatusLiked);
     socket.on('status:viewed', onStatusViewed);
     socket.on('status:deleted', onStatusDeleted);
+    const onCommunityRefresh = () => { void fetchCommunities(); };
+    socket.on('community:refresh', onCommunityRefresh);
     socket.on('community:created', onCommunityCreated);
     socket.on('community:updated', onCommunityUpdated);
 
@@ -767,6 +769,7 @@ export default function ChatDashboard() {
       socket.off('status:liked', onStatusLiked);
       socket.off('status:viewed', onStatusViewed);
       socket.off('status:deleted', onStatusDeleted);
+      socket.off('community:refresh', onCommunityRefresh);
       socket.off('community:created', onCommunityCreated);
       socket.off('community:updated', onCommunityUpdated);
     };
