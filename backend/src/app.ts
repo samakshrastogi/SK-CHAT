@@ -20,6 +20,7 @@ import aiRoutes from './routes/aiRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
+import { parseAllowedOrigins } from './config/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,12 +33,10 @@ app.use(helmet({
 }));
 
 // CORS Configuration
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-const allowedOrigins = [frontendUrl, ...(process.env.ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean), 'http://localhost:3000'];
 app.use(cors({
-  origin: allowedOrigins,
+  origin: parseAllowedOrigins(),
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 

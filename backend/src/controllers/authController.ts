@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
+import { getJwtAccessSecret, getJwtRefreshSecret } from '../config/env.js';
 import { User } from '../models/User.js';
 import { DeviceSession } from '../models/DeviceSession.js';
 import { CustomError } from '../utils/customError.js';
@@ -15,7 +16,7 @@ const googleOAuthClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const generateAccessToken = (user: any, deviceId: string) => {
   return jwt.sign(
     { id: user._id, email: user.email, username: user.username, role: user.role, deviceId },
-    process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#',
+    getJwtAccessSecret(),
     { expiresIn: (process.env.JWT_ACCESS_EXPIRY || '15m') as any }
   );
 };
@@ -23,7 +24,7 @@ const generateAccessToken = (user: any, deviceId: string) => {
 const generateRefreshToken = (user: any, deviceId: string) => {
   return jwt.sign(
     { id: user._id, deviceId },
-    process.env.JWT_REFRESH_SECRET || 'supersecretrefreshkeyconnect987!@#',
+    getJwtRefreshSecret(),
     { expiresIn: (process.env.JWT_REFRESH_EXPIRY || '7d') as any }
   );
 };
@@ -208,7 +209,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
       throw new CustomError('Refresh token required', 401);
     }
 
-    const refreshSecret = process.env.JWT_REFRESH_SECRET || 'supersecretrefreshkeyconnect987!@#';
+    const refreshSecret = getJwtRefreshSecret();
     jwt.verify(token, refreshSecret, async (err: any, decoded: any) => {
       if (err) {
         return next(new CustomError('Invalid or expired refresh token', 401));
@@ -397,21 +398,11 @@ export const googleSSO = async (req: Request, res: Response, next: NextFunction)
     }
 
     let payload;
-    if (credential === 'mock_google_credential' || credential.startsWith('mock_')) {
-      payload = {
-        email: 'googleuser@mockconnect.com',
-        name: 'Mock Google User',
-        picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150',
-        sub: 'mock_google_id_123456'
-      };
-    } else {
-      // Verify the ID token with Google's public keys
-      const ticket = await googleOAuthClient.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
-    }
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    payload = ticket.getPayload();
 
     if (!payload || !payload.email) {
       throw new CustomError('Invalid Google token payload', 400);
@@ -505,20 +496,11 @@ export const googleSSORedirect = async (req: Request, res: Response, next: NextF
     }
 
     let payload;
-    if (credential === 'mock_google_credential' || credential.startsWith('mock_')) {
-      payload = {
-        email: 'googleuser@mockconnect.com',
-        name: 'Mock Google User',
-        picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150',
-        sub: 'mock_google_id_123456'
-      };
-    } else {
-      const ticket = await googleOAuthClient.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
-    }
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    payload = ticket.getPayload();
 
     if (!payload || !payload.email) {
       throw new CustomError('Invalid Google token payload', 400);

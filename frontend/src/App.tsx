@@ -1,14 +1,20 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './store/authStore.js';
 import { useThemeStore } from './store/themeStore.js';
-import ChatDashboard from './pages/ChatDashboard.tsx';
+const ChatDashboard = lazy(() => import('./pages/ChatDashboard.tsx'));
 import LandingPage from './pages/LandingPage.tsx';
 import { getCentralSessionState, redirectToCentralLogin } from './api/centralAuth.js';
 import RegisterPage from './pages/RegisterPage.tsx';
 import VerifyEmailPage from './pages/VerifyEmailPage.tsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx';
 import JoinGroupPage from './pages/JoinGroupPage.tsx';
+
+const DashboardRoute = () => (
+  <Suspense fallback={<div className="min-h-screen grid place-items-center">Loading Connect…</div>}>
+    <ChatDashboard />
+  </Suspense>
+);
 
 function CentralLoginRedirect() {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -87,8 +93,8 @@ function App() {
         <Route path="/join/:codeOrToken" element={<ProtectedRoute><JoinGroupPage /></ProtectedRoute>} />
 
         {/* Main Dashboard */}
-        <Route path="/chat"    element={<ProtectedRoute><ChatDashboard /></ProtectedRoute>} />
-        <Route path="/chat/*"  element={<ProtectedRoute><ChatDashboard /></ProtectedRoute>} />
+        <Route path="/chat"    element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
+        <Route path="/chat/*"  element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/chat" />} />

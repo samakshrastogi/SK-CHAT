@@ -28,10 +28,15 @@ const storage = multer.diskStorage({
 export const upload = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB Max limit
+    fileSize: 25 * 1024 * 1024 // 50MB Max limit
   },
   fileFilter: (req, file, cb) => {
-    // Allow any standard type (images, videos, audio, documents, compression)
-    cb(null, true);
+    const allowed = new Set([
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'video/mp4', 'video/webm', 'audio/mpeg', 'audio/ogg', 'audio/wav',
+      'application/pdf', 'text/plain',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]);
+    cb(null, allowed.has(file.mimetype));
   }
 });

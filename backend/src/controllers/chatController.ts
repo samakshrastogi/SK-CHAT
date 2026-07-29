@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
 import jwt from 'jsonwebtoken';
+import { getJwtAccessSecret } from '../config/env.js';
 import { Chat } from '../models/Chat.js';
 import { Message } from '../models/Message.js';
 import { User } from '../models/User.js';
@@ -676,7 +677,7 @@ export const generateInviteLink = async (req: AuthenticatedRequest, res: Respons
     // Generate signed private token (valid for 24h)
     const privateToken = jwt.sign(
       { chatId: chat._id, type: 'private' },
-      process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#',
+      getJwtAccessSecret(),
       { expiresIn: '1d' }
     );
 
@@ -706,7 +707,7 @@ export const joinChatGroup = async (req: AuthenticatedRequest, res: Response, ne
       try {
         const decoded: any = jwt.verify(
           codeOrToken,
-          process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#'
+          getJwtAccessSecret()
         );
         chatId = decoded.chatId;
         joinType = 'private';

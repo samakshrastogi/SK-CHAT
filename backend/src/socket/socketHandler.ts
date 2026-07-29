@@ -5,6 +5,7 @@ import { Chat } from '../models/Chat.js';
 import { Message } from '../models/Message.js';
 import { logger } from '../utils/logger.js';
 import { initNotificationService, createNotification } from '../services/notificationService.js';
+import { getJwtAccessSecret } from '../config/env.js';
 
 interface SocketUser {
   id: string;
@@ -23,7 +24,7 @@ export const socketHandler = (io: Server) => {
       const token = socket.handshake.auth.token || socket.handshake.query.token;
       if (!token) return next(new Error('Authentication error: Token required'));
 
-      const accessSecret = process.env.JWT_ACCESS_SECRET || 'supersecretaccesskeyconnect123!@#';
+      const accessSecret = getJwtAccessSecret();
       const decoded = jwt.verify(token as string, accessSecret) as SocketUser;
       socket.data.user = decoded;
       next();
@@ -65,9 +66,19 @@ export const socketHandler = (io: Server) => {
     }
 
     // ── Chat rooms ─────────────────────────────────────────────────────────
-    socket.on('chat:join', (chatId: string) => {
-      socket.join(`chat:${chatId}`);
-      logger.debug(`Socket ${socket.id} joined room chat:${chatId}`);
+    const isChatMember = async (chatId: string) => Boolean(await Chat.exists({ _id: chatId, participants: user.id }));
+    socket.on('chat:join', async (chatId: string, acknowledge?: (result: { ok: boolean; error?: string }) => void) => {
+      try {
+        if (!await isChatMember(chatId)) {
+          acknowledge?.({ ok: false, error: 'Chat access denied' });
+          return;
+        }
+        await socket.join(`chat:${chatId}`);
+        acknowledge?.({ ok: true });
+        logger.debug(`Socket ${socket.id} joined room chat:${chatId}`);
+      } catch {
+        acknowledge?.({ ok: false, error: 'Unable to join chat' });
+      }
     });
 
     socket.on('chat:leave', (chatId: string) => {
@@ -76,7 +87,8 @@ export const socketHandler = (io: Server) => {
     });
 
     // ── Typing indicators ──────────────────────────────────────────────────
-    socket.on('typing:start', (chatId: string) => {
+    socket.on('typing:start', async (chatId: string) => {
+      if (!await isChatMember(chatId)) return;
       socket.to(`chat:${chatId}`).emit('typing:start', {
         chatId,
         userId: user.id,
@@ -84,15 +96,17 @@ export const socketHandler = (io: Server) => {
       });
     });
 
-    socket.on('typing:stop', (chatId: string) => {
+    socket.on('typing:stop', async (chatId: string) => {
+      if (!await isChatMember(chatId)) return;
       socket.to(`chat:${chatId}`).emit('typing:stop', { chatId, userId: user.id });
     });
 
     // ── Read receipts ──────────────────────────────────────────────────────
     socket.on('message:seen', async ({ chatId, messageIds }: { chatId: string; messageIds: string[] }) => {
       try {
+        if (!await isChatMember(chatId)) return;
         await Message.updateMany(
-          { _id: { $in: messageIds } },
+          { _id: { $in: messageIds }, chatId, senderId: { $ne: user.id } },
           {
             $set: { status: 'seen' },
             $addToSet: { seenBy: { userId: user.id as any, seenAt: new Date() } },
@@ -112,8 +126,9 @@ export const socketHandler = (io: Server) => {
     // ── Delivery receipts ──────────────────────────────────────────────────
     socket.on('message:delivered', async ({ chatId, messageId }: { chatId: string; messageId: string }) => {
       try {
+        if (!await isChatMember(chatId)) return;
         await Message.updateOne(
-          { _id: messageId, status: 'sent' },
+          { _id: messageId, chatId, senderId: { $ne: user.id }, status: 'sent' },
           { $set: { status: 'delivered' } }
         );
         socket.to(`chat:${chatId}`).emit('message:delivered', {
@@ -144,7 +159,11 @@ export const socketHandler = (io: Server) => {
         preview: string;
         messageId: string;
       }) => {
+        if (!await isChatMember(chatId)) return;
+        const chat = await Chat.findOne({ _id: chatId, participants: user.id }).select('participants').lean();
+        const allowedRecipients = new Set((chat?.participants || []).map(String));
         for (const rid of recipientIds) {
+          if (!allowedRecipients.has(rid)) continue;
           if (rid === user.id) continue; // don't notify sender
           await createNotification({
             recipientId:   rid,
@@ -164,6 +183,9 @@ export const socketHandler = (io: Server) => {
     socket.on(
       'mention:notify',
       async ({ recipientId, chatId, messageId, preview }: { recipientId: string; chatId: string; messageId: string; preview: string }) => {
+        if (!await isChatMember(chatId)) return;
+        const recipientAllowed = await Chat.exists({ _id: chatId, participants: { $all: [user.id, recipientId] } });
+        if (!recipientAllowed) return;
         await createNotification({
           recipientId,
           actorId:       user.id,
@@ -295,11 +317,13 @@ export const socketHandler = (io: Server) => {
     });
 
     // ── Whiteboard Canvas Sync ─────────────────────────────────────────────
-    socket.on('canvas:draw', ({ chatId, drawData }: { chatId: string; drawData: any }) => {
+    socket.on('canvas:draw', async ({ chatId, drawData }: { chatId: string; drawData: any }) => {
+      if (!await isChatMember(chatId)) return;
       socket.to(`chat:${chatId}`).emit('canvas:draw', { drawData, userId: user.id });
     });
 
-    socket.on('canvas:clear', ({ chatId }: { chatId: string }) => {
+    socket.on('canvas:clear', async ({ chatId }: { chatId: string }) => {
+      if (!await isChatMember(chatId)) return;
       socket.to(`chat:${chatId}`).emit('canvas:clear');
     });
 
@@ -309,7 +333,8 @@ export const socketHandler = (io: Server) => {
     });
 
     // ── In-Chat Typing state ───────────────────────────────────────────────
-    socket.on('typing:state', ({ chatId, isTyping }: { chatId: string; isTyping: boolean }) => {
+    socket.on('typing:state', async ({ chatId, isTyping }: { chatId: string; isTyping: boolean }) => {
+      if (!await isChatMember(chatId)) return;
       socket.to(`chat:${chatId}`).emit('typing:state', { chatId, userId: user.id, username: user.username, isTyping });
     });
 
