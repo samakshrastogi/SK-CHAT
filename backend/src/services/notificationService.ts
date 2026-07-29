@@ -13,7 +13,7 @@ export interface CreateNotificationPayload {
   body: string;
   imageUrl?: string;
   referenceId?: string;
-  referenceType?: 'chat' | 'community' | 'message' | 'user' | 'call';
+  referenceType?: 'chat' | 'community' | 'message' | 'user' | 'call' | 'status';
   expiresInHours?: number;
   idempotencyKey?: string;         // Auto-expire after N hours
 }

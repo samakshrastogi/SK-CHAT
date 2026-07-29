@@ -23,7 +23,7 @@ export interface INotification extends Document {
   body: string;
   imageUrl?: string;
   referenceId?: string;   // chatId / communityId / messageId etc.
-  referenceType?: 'chat' | 'community' | 'message' | 'user' | 'call';
+  referenceType?: 'chat' | 'community' | 'message' | 'user' | 'call' | 'status';
   isRead: boolean;
   isDelivered: boolean;
   createdAt: Date;
@@ -40,7 +40,7 @@ const NotificationSchema = new Schema<INotification>(
     body:        { type: String, required: true },
     imageUrl:    { type: String },
     referenceId:   { type: String },
-    referenceType: { type: String, enum: ['chat', 'community', 'message', 'user', 'call'] },
+    referenceType: { type: String, enum: ['chat', 'community', 'message', 'user', 'call', 'status'] },
     isRead:      { type: Boolean, default: false },
     isDelivered: { type: Boolean, default: false },
     expiresAt:   { type: Date },

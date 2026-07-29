@@ -28,6 +28,10 @@ interface StoryCreatorModalProps {
   setStoryQuestion: (val: string) => void;
   storyEmojiSliderTarget: string;
   setStoryEmojiSliderTarget: (val: string) => void;
+  storySliderEnabled: boolean;
+  setStorySliderEnabled: (val: boolean) => void;
+  storyAudience: 'public' | 'contacts';
+  setStoryAudience: (val: 'public' | 'contacts') => void;
   storyFile: File | null;
   setStoryFile: (file: File | null) => void;
   storyFileUrl: string | null;
@@ -62,6 +66,11 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
   storyQuestion,
   setStoryQuestion,
   storyEmojiSliderTarget,
+  setStoryEmojiSliderTarget,
+  storySliderEnabled,
+  setStorySliderEnabled,
+  storyAudience,
+  setStoryAudience,
   storyFile,
   setStoryFile,
   storyFileUrl,
@@ -248,7 +257,7 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
                   </div>
 
                   {/* Interactive widgets additions */}
-                  <div className="hidden">
+                  <div className="space-y-3 pt-2 border-t border-slate-800">
                     <div>
                       <label className="block text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1">📊 Create Poll Overlay</label>
                       <input 
@@ -277,6 +286,23 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
                     </div>
 
                     <div>
+                      <label className="flex items-center gap-2 text-[9px] font-bold text-amber-400 uppercase tracking-widest mb-1">
+                        <input type="checkbox" checked={storySliderEnabled} onChange={(event) => setStorySliderEnabled(event.target.checked)} />
+                        Emoji slider
+                      </label>
+                      {storySliderEnabled && (
+                        <input
+                          type="text"
+                          maxLength={4}
+                          value={storyEmojiSliderTarget}
+                          onChange={(event) => setStoryEmojiSliderTarget(event.target.value)}
+                          className="w-full h-8 rounded-lg text-xs px-2.5 bg-slate-950 border border-slate-850 text-slate-200"
+                          aria-label="Slider emoji"
+                        />
+                      )}
+                    </div>
+
+                    <div>
                       <label className="block text-[9px] font-bold text-pink-400 uppercase tracking-widest mb-1">❓ Ask a Question Overlay</label>
                       <input 
                         type="text" 
@@ -290,7 +316,14 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex gap-3 justify-end pt-4 border-t border-slate-850 shrink-0">
+              <div className="flex items-end gap-3 justify-end pt-4 border-t border-slate-850 shrink-0">
+                <label className="mr-auto text-[9px] uppercase tracking-wider font-bold text-slate-400">
+                  Audience
+                  <select value={storyAudience} onChange={(event) => setStoryAudience(event.target.value as 'public' | 'contacts')} className="block mt-1 h-9 rounded-lg bg-slate-950 border border-slate-700 px-2 text-xs text-white normal-case">
+                    <option value="contacts">Contacts</option>
+                    <option value="public">Public</option>
+                  </select>
+                </label>
                 <button 
                   onClick={onClose}
                   className="h-10 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"

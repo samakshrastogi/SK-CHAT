@@ -4,7 +4,10 @@ import {
   getStatuses,
   viewStatus,
   likeStatus,
-  deleteStatus
+  deleteStatus,
+  voteStatusPoll,
+  answerStatusQuestion,
+  respondStatusSlider
 } from '../controllers/statusController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -18,6 +21,9 @@ router.post('/', upload.single('file'), validateUploadedMedia as any, createStat
 router.get('/', getStatuses as any);
 router.post('/:statusId/view', viewStatus as any);
 router.post('/:statusId/like', likeStatus as any);
+router.put('/:statusId/poll', voteStatusPoll as any);
+router.put('/:statusId/question', answerStatusQuestion as any);
+router.put('/:statusId/slider', respondStatusSlider as any);
 router.delete('/:statusId', deleteStatus as any);
 
 export default router;

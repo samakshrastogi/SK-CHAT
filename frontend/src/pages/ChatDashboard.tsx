@@ -569,6 +569,8 @@ export default function ChatDashboard() {
   const [storyPollOpt2, setStoryPollOpt2] = useState('');
   const [storyQuestion, setStoryQuestion] = useState('');
   const [storyEmojiSliderTarget, setStoryEmojiSliderTarget] = useState('🔥');
+  const [storySliderEnabled, setStorySliderEnabled] = useState(false);
+  const [storyAudience, setStoryAudience] = useState<'public' | 'contacts'>('contacts');
   const [storyReplyText, setStoryReplyText] = useState('');
 
   // Communities state
@@ -743,6 +745,8 @@ export default function ChatDashboard() {
     socket.on('call:candidate', onCallCandidate);
     socket.on('call:rejected', onCallRejected);
     socket.on('notification:new', onNotificationNew);
+    const onStatusRefresh = () => { void fetchStatuses(); };
+    socket.on('status:refresh', onStatusRefresh);
     socket.on('status:new', onStatusNew);
     socket.on('status:liked', onStatusLiked);
     socket.on('status:viewed', onStatusViewed);
@@ -758,6 +762,7 @@ export default function ChatDashboard() {
       socket.off('call:candidate', onCallCandidate);
       socket.off('call:rejected', onCallRejected);
       socket.off('notification:new', onNotificationNew);
+      socket.off('status:refresh', onStatusRefresh);
       socket.off('status:new', onStatusNew);
       socket.off('status:liked', onStatusLiked);
       socket.off('status:viewed', onStatusViewed);
@@ -1522,12 +1527,21 @@ export default function ChatDashboard() {
     if (storyMention.trim()) meta.mention = storyMention;
     if (storyLocation.trim()) meta.location = storyLocation;
     if (storyHashtags.trim()) meta.hashtags = storyHashtags.split(',').map((t) => t.trim());
+    const poll = storyPollQuestion.trim() && storyPollOpt1.trim() && storyPollOpt2.trim()
+      ? { question: storyPollQuestion.trim(), options: [storyPollOpt1.trim(), storyPollOpt2.trim()] }
+      : undefined;
+    const question = !poll && storyQuestion.trim() ? { prompt: storyQuestion.trim() } : undefined;
+    const slider = !poll && !question && storySliderEnabled ? { emoji: storyEmojiSliderTarget || '🔥' } : undefined;
     try {
       if (storyType === 'media' && storyFile) {
         const formData = new FormData();
         formData.append('type', storyFile.type.startsWith('video') ? 'video' : 'image');
         formData.append('file', storyFile);
-        formData.append('caption', JSON.stringify(meta));
+        formData.append('metadata', JSON.stringify(meta));
+        formData.append('audience', storyAudience);
+        if (poll) formData.append('poll', JSON.stringify(poll));
+        if (question) formData.append('question', JSON.stringify(question));
+        if (slider) formData.append('slider', JSON.stringify(slider));
         
         await apiClient.post('/status', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
@@ -1538,7 +1552,11 @@ export default function ChatDashboard() {
           type: 'text',
           content: textStatusContent,
           backgroundColor: textStatusBg,
-          caption: JSON.stringify(meta)
+          metadata: meta,
+          audience: storyAudience,
+          poll,
+          question,
+          slider
         });
       }
       
@@ -1554,6 +1572,7 @@ export default function ChatDashboard() {
       setStoryPollOpt1('');
       setStoryPollOpt2('');
       setStoryQuestion('');
+      setStorySliderEnabled(false);
       setStoryType('text');
       setTextStatusOpen(false);
       fetchStatuses();
@@ -1600,6 +1619,25 @@ export default function ChatDashboard() {
     } catch (e) {
       console.error('Failed to like story:', e);
     }
+  };
+
+  const refreshStoryInteractions = async () => {
+    const response = await apiClient.get('/status');
+    setStatuses(response.data.statuses);
+    setActiveStatusViewer((current) => current ? response.data.statuses : current);
+  };
+
+  const handleStoryPollVote = async (statusId: string, optionId: string) => {
+    await apiClient.put(`/status/${statusId}/poll`, { optionId });
+    await refreshStoryInteractions();
+  };
+  const handleStoryQuestionAnswer = async (statusId: string, text: string) => {
+    await apiClient.put(`/status/${statusId}/question`, { text });
+    await refreshStoryInteractions();
+  };
+  const handleStorySliderResponse = async (statusId: string, value: number) => {
+    await apiClient.put(`/status/${statusId}/slider`, { value });
+    await refreshStoryInteractions();
   };
 
   // AI assistant handlers
@@ -4401,6 +4439,10 @@ export default function ChatDashboard() {
         setStoryQuestion={setStoryQuestion}
         storyEmojiSliderTarget={storyEmojiSliderTarget}
         setStoryEmojiSliderTarget={setStoryEmojiSliderTarget}
+        storySliderEnabled={storySliderEnabled}
+        setStorySliderEnabled={setStorySliderEnabled}
+        storyAudience={storyAudience}
+        setStoryAudience={setStoryAudience}
         storyFile={storyFile}
         setStoryFile={setStoryFile}
         storyFileUrl={storyFileUrl}
@@ -4420,6 +4462,9 @@ export default function ChatDashboard() {
         setStoryReplyText={setStoryReplyText}
         onReply={handleReplyToStory}
         onLike={handleLikeStory}
+        onPollVote={handleStoryPollVote}
+        onQuestionAnswer={handleStoryQuestionAnswer}
+        onSliderResponse={handleStorySliderResponse}
       />
 
       {/* 10. Connect via Code Modal Overlay */}
