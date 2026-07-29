@@ -19,6 +19,7 @@ import communityRoutes from './routes/communityRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import e2eeRoutes from './routes/e2eeRoutes.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 import { parseAllowedOrigins } from './config/env.js';
 import { requestContext } from './middleware/requestContext.js';
@@ -85,6 +86,7 @@ app.use('/api/community',     communityRoutes);
 app.use('/api/ai',            aiRoutes);
 app.use('/api/admin',         adminRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/e2ee',          e2eeRoutes);
 
 // Kubernetes/Render-compatible liveness and readiness checks.
 app.get(['/health', '/health/live'], (_req, res) => {

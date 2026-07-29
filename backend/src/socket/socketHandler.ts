@@ -341,8 +341,22 @@ export const socketHandler = (io: Server) => {
     });
 
     // ── E2EE Key Exchange ──────────────────────────────────────────────────
-    socket.on('e2ee:key_exchange', ({ targetUserId, keyData }: { targetUserId: string; keyData: any }) => {
-      socket.to(`user:${targetUserId}`).emit('e2ee:key_exchange', { senderId: user.id, keyData });
+    socket.on('e2ee:key_exchange', async ({
+      targetUserId,
+      chatId,
+      keyData,
+    }: { targetUserId: string; chatId: string; keyData: any }) => {
+      const authorized = await Chat.exists({
+        _id: chatId,
+        isGroup: false,
+        participants: { $all: [user.id, targetUserId] },
+      });
+      if (!authorized) return;
+      socket.to(`user:${targetUserId}`).emit('e2ee:key_exchange', {
+        senderId: user.id,
+        chatId,
+        keyData,
+      });
     });
 
     // ── In-Chat Typing state ───────────────────────────────────────────────

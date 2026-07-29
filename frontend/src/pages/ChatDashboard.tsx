@@ -8,6 +8,7 @@ import { useConnectionsStore } from '../store/connectionsStore.js';
 import { useSocket } from '../hooks/useSocket.js';
 import { useWebRTC } from '../hooks/useWebRTC.js';
 import { apiClient } from '../api/client.js';
+import { formatFingerprint, getOrCreateDeviceIdentity } from '../services/e2eeKeyStore.js';
 import { CENTRAL_PROFILE_URL } from '../api/centralAuth.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -824,23 +825,25 @@ export default function ChatDashboard() {
   };
 
   const [e2eeKeyPair, setE2eeKeyPair] = useState<any>(null);
+  const [e2eeFingerprint, setE2eeFingerprint] = useState('');
   const [decryptedCache, setDecryptedCache] = useState<{ [msgId: string]: string }>({});
 
   const startSecretMode = async () => {
     if (!activeChat || activeChat.isGroup) return;
     setIsE2eeNegotiating(true);
     try {
-      const keyPair = await window.crypto.subtle.generateKey(
-        { name: 'ECDH', namedCurve: 'P-256' },
-        true,
-        ['deriveKey']
-      );
-      setE2eeKeyPair(keyPair);
-      const exportedPublic = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
+      const identity = await getOrCreateDeviceIdentity();
+      setE2eeKeyPair(identity);
+      setE2eeFingerprint(identity.fingerprint);
+      await apiClient.put('/e2ee/keys/current', { publicKey: identity.publicKey });
       
       const opponent = activeChat.participants.find(p => p._id !== (user?._id || user?.id));
       if (opponent && socket) {
-        socket.emit('e2ee:key_exchange', { targetUserId: opponent._id, keyData: exportedPublic });
+        socket.emit('e2ee:key_exchange', {
+          targetUserId: opponent._id,
+          chatId: activeChat._id,
+          keyData: identity.publicKey,
+        });
       }
       setIsSecretMode(true);
     } catch (err) {
@@ -879,18 +882,20 @@ export default function ChatDashboard() {
   useEffect(() => {
     if (!socket) return;
     
-    const handleE2eeKeyExchange = async ({ senderId, keyData }: { senderId: string; keyData: any }) => {
+    const handleE2eeKeyExchange = async ({ senderId, chatId, keyData }: { senderId: string; chatId: string; keyData: any }) => {
+      if (!activeChat || activeChat._id !== chatId || activeChat.isGroup) return;
       try {
         let currentKeyPair = e2eeKeyPair;
         if (!currentKeyPair) {
-          currentKeyPair = await window.crypto.subtle.generateKey(
-            { name: 'ECDH', namedCurve: 'P-256' },
-            true,
-            ['deriveKey']
-          );
+          currentKeyPair = await getOrCreateDeviceIdentity();
           setE2eeKeyPair(currentKeyPair);
-          const exportedPublic = await window.crypto.subtle.exportKey('jwk', currentKeyPair.publicKey);
-          socket.emit('e2ee:key_exchange', { targetUserId: senderId, keyData: exportedPublic });
+          setE2eeFingerprint(currentKeyPair.fingerprint);
+          await apiClient.put('/e2ee/keys/current', { publicKey: currentKeyPair.publicKey });
+          socket.emit('e2ee:key_exchange', {
+            targetUserId: senderId,
+            chatId,
+            keyData: currentKeyPair.publicKey,
+          });
         }
 
         const importedOpponentPublicKey = await window.crypto.subtle.importKey(
@@ -2401,7 +2406,7 @@ export default function ChatDashboard() {
                           }
                         }}
                         className={`p-2 rounded-lg transition-all ${isSecretMode ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-500/10'}`}
-                        title={isSecretMode ? 'End-to-End Encryption Enabled' : 'Initiate Secret Chat (E2EE)'}
+                        title={isSecretMode ? `End-to-End Encryption Enabled${e2eeFingerprint ? ` · ${formatFingerprint(e2eeFingerprint)}` : ''}` : 'Initiate Secret Chat (E2EE)'}
                       >
                         <Shield className="h-4.5 w-4.5" />
                       </button>
