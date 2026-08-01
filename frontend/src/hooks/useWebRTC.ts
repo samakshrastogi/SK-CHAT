@@ -14,35 +14,37 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   };
   const state = () => useCallStore.getState();
 
-  const requestMediaWithRecovery = async (constraints: MediaStreamConstraints) => {
-    try {
-      return await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (error) {
-      const denied = error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name);
-      if (!denied) throw error;
-      toast.info('Camera or microphone permission was denied. Allow it in the browser site controls; SK Connect will ask once more.');
-      await new Promise((resolve) => window.setTimeout(resolve, 350));
-      try {
-        return await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (retryError) {
-        toast.error('Permission is still blocked. Enable Camera and Microphone for this site, then tap the call button again.');
-        throw retryError;
-      }
-    }
-  };
+  const requestMediaWithRecovery = (constraints: MediaStreamConstraints) =>
+    navigator.mediaDevices.getUserMedia(constraints);
+
   const startLocalStream = async (type: 'voice' | 'video') => {
     const existing = state().localStream;
     if (existing) return existing;
+
+    const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
     try {
       const stream = await requestMediaWithRecovery({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio,
         video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
       });
       state().setLocalStream(stream);
       return stream;
-    } catch (error) {
-      toast.error('Could not open camera or microphone. Please grant access.');
-      throw error;
+    } catch {
+      if (type === 'video') {
+        try {
+          const audioOnlyStream = await requestMediaWithRecovery({ audio, video: false });
+          state().setLocalStream(audioOnlyStream);
+          toast.info('Camera access is blocked. You joined with microphone only.');
+          return audioOnlyStream;
+        } catch {
+          // Continue into listen-only mode below.
+        }
+      }
+
+      const listenOnlyStream = new MediaStream();
+      state().setLocalStream(listenOnlyStream);
+      toast.info('Camera and microphone are blocked. You joined in listen-only mode; enable site permissions to speak or share video.');
+      return listenOnlyStream;
     }
   };
 
@@ -56,13 +58,17 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     pendingCandidatesRef.current.delete(targetId);
     for (const candidate of queued) await peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => undefined);
   };
-  const createPeer = async (targetId: string, callId: string, localStream: MediaStream, group = false, name?: string) => {
+  const createPeer = async (targetId: string, callId: string, localStream: MediaStream, group = false, name?: string, offerer = false) => {
     const existing = peersRef.current.get(targetId);
     if (existing) return existing;
     const peer = new RTCPeerConnection(await getRtcConfiguration());
     peersRef.current.set(targetId, peer);
     state().setPeerConnection(targetId, peer);
     localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
+    if (offerer && localStream.getAudioTracks().length === 0) peer.addTransceiver('audio', { direction: 'recvonly' });
+    if (offerer && state().callType === 'video' && localStream.getVideoTracks().length === 0) {
+      peer.addTransceiver('video', { direction: 'recvonly' });
+    }
     peer.ontrack = (event) => {
       const stream = event.streams[0] || new MediaStream([event.track]);
       state().setCallConnected(stream, peer, targetId, name);
@@ -85,7 +91,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       const callId = logResp.data.call._id;
       state().setOutgoingCall(receiverId, callId, type);
       const stream = await startLocalStream(type);
-      const peer = await createPeer(receiverId, callId, stream);
+      const peer = await createPeer(receiverId, callId, stream, false, undefined, true);
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       socketEmit('call:initiate', { receiverId, callId, type, offer });
@@ -147,7 +153,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   const handleGroupParticipantJoined = async ({ userId, username }: { userId: string; username?: string }) => {
     const current = state();
     if (!current.callId || !current.localStream || userId === current.callerId) return;
-    const peer = await createPeer(userId, current.callId, current.localStream, true, username);
+    const peer = await createPeer(userId, current.callId, current.localStream, true, username, true);
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
     socketEmit('call:peer-offer', { targetId: userId, callId: current.callId, offer });

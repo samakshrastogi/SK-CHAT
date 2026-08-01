@@ -2727,10 +2727,31 @@ export default function ChatDashboard() {
                       )}
 
                       {/* Audio / Voice Attachment */}
-                      {msg.messageType === 'voice' && msg.mediaUrl && (
+                      {(msg.messageType === 'voice' || msg.messageType === 'audio') && msg.mediaUrl && (
                         <VoiceMessagePlayer mediaUrl={msg.mediaUrl} isMe={isMe} />
                       )}
 
+                      {/* Fallback for any uploaded attachment type not covered above. */}
+                      {msg.mediaUrl && !['document', 'image', 'video', 'voice', 'audio'].includes(msg.messageType) && (
+                        <a
+                          href={msg.mediaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={msg.fileName || undefined}
+                          className="mb-2.5 flex min-w-[210px] items-center gap-3 rounded-xl border border-slate-200 bg-white/80 p-3 text-slate-900 shadow-sm transition-colors hover:bg-white dark:border-slate-700 dark:bg-slate-950/50 dark:text-white"
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500">
+                            <FileText className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1 text-left">
+                            <p className="truncate text-xs font-bold">{msg.fileName || 'Attachment'}</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                              {msg.mediaSize ? `${(msg.mediaSize / 1024).toFixed(1)} KB` : 'Tap to open attachment'}
+                            </p>
+                          </div>
+                          <Download className="h-4 w-4 shrink-0 text-indigo-500" />
+                        </a>
+                      )}
                       {/* Poll View */}
                       {msg.messageType === 'poll' && msg.pollData && (
                         <div className="space-y-2 p-2 rounded-xl bg-black/10 text-xs">

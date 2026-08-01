@@ -245,12 +245,20 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
     let mediaUrl = undefined;
     let fileName = undefined;
     let mediaSize = undefined;
+    let uploadedMessageType: 'image' | 'video' | 'audio' | 'document' | undefined;
 
     if (req.file) {
       const upload = await uploadMedia(req.file, 'attachments');
       mediaUrl = upload.url;
       fileName = req.file.originalname;
       mediaSize = req.file.size;
+      uploadedMessageType = req.file.mimetype.startsWith('image/')
+        ? 'image'
+        : req.file.mimetype.startsWith('video/')
+          ? 'video'
+          : req.file.mimetype.startsWith('audio/')
+            ? 'audio'
+            : 'document';
     }
 
     let cleanPollData = undefined;
@@ -272,7 +280,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
     }
 
     let finalContent = content || '';
-    let finalMessageType = messageType || 'text';
+    let finalMessageType = uploadedMessageType || messageType || 'text';
     let finalMediaUrl = mediaUrl;
     let finalFileName = fileName;
     let finalMediaSize = mediaSize;
