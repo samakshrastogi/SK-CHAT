@@ -60,7 +60,7 @@ services:
       - key: UPLOAD_DAILY_FILE_LIMIT
         value: 100
       - key: MALWARE_SCAN_REQUIRED
-        value: true
+        value: false
       - key: MALWARE_SCAN_URL
         sync: false
       - key: MALWARE_SCAN_TOKEN

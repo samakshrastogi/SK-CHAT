@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { createClient } from 'redis';
+import { isConfiguredEnvValue } from '../config/env.js';
 
 type DependencyStatus = {
   status: 'healthy' | 'unhealthy' | 'not_configured';
@@ -42,8 +43,11 @@ export const getReadiness = async () => {
     ? { status: 'healthy' }
     : { status: 'unhealthy', message: 'MongoDB is not connected' };
   const redis = await redisStatus();
-  const cloudinary: DependencyStatus = process.env.CLOUDINARY_CLOUD_NAME &&
-    process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET
+  const cloudinary: DependencyStatus = [
+    process.env.CLOUDINARY_CLOUD_NAME,
+    process.env.CLOUDINARY_API_KEY,
+    process.env.CLOUDINARY_API_SECRET,
+  ].every(isConfiguredEnvValue)
     ? { status: 'healthy' }
     : { status: 'not_configured' };
 

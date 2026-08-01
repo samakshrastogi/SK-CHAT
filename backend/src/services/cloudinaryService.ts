@@ -3,6 +3,8 @@ import { logger } from '../utils/logger.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isConfiguredEnvValue } from '../config/env.js';
+import { CustomError } from '../utils/customError.js';
 
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -10,7 +12,7 @@ const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
 let isCloudinaryConfigured = false;
 
-if (cloudName && apiKey && apiSecret) {
+if ([cloudName, apiKey, apiSecret].every(isConfiguredEnvValue)) {
   cloudinary.config({
     cloud_name: cloudName,
     api_key: apiKey,
@@ -19,7 +21,7 @@ if (cloudName && apiKey && apiSecret) {
   isCloudinaryConfigured = true;
   logger.info('Cloudinary configured successfully');
 } else {
-  logger.warn('Cloudinary credentials missing. Media service will use local file hosting');
+  logger.warn('Cloudinary credentials are absent or placeholders. Media uploads are disabled in production');
 }
 
 export const uploadMedia = async (
@@ -47,6 +49,9 @@ export const uploadMedia = async (
         publicId: uploadResponse.public_id,
       };
     } else {
+      if (process.env.NODE_ENV === 'production') {
+        throw new CustomError('Media uploads are temporarily unavailable', 503);
+      }
       // Fallback: File is written to local filesystem by multer.
       // Multer file object contains the generated local filepath.
       // We will generate the local web asset URL.
