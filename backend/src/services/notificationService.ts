@@ -3,7 +3,6 @@ import { Notification, NotificationType } from '../models/Notification.js';
 import { User } from '../models/User.js';
 import mongoose from 'mongoose';
 import { NotificationPreference } from '../models/NotificationPreference.js';
-import { ChatPreference } from '../models/ChatPreference.js';
 
 export interface CreateNotificationPayload {
   recipientId: string;
@@ -54,18 +53,11 @@ const isQuietHour = (preference: any) => {
 };
 
 export const createNotification = async (payload: CreateNotificationPayload): Promise<void> => {
+  if (payload.type === 'new_message') return;
   try {
     const preference = await NotificationPreference.findOne({ userId: payload.recipientId }).lean();
     if (preference?.enabledTypes?.[payload.type] === false) return;
-    if (payload.type === 'new_message' && payload.referenceId) {
-      const chatPreference = await ChatPreference.findOne({
-        userId: payload.recipientId,
-        chatId: payload.referenceId,
-      }).lean();
-      if (chatPreference?.notifications === 'none') return;
-      if (chatPreference?.notifications === 'mentions') return;
-      if (chatPreference?.mutedUntil && new Date(chatPreference.mutedUntil).getTime() > Date.now()) return;
-    }
+
     const expiresAt = payload.expiresInHours
       ? new Date(Date.now() + payload.expiresInHours * 3600 * 1000)
       : undefined;

@@ -610,6 +610,8 @@ export default function ChatDashboard() {
   // Text inputs & attachments
   const [messageText, setMessageText] = useState('');
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
+  const sendInFlightRef = useRef(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   useEffect(() => {
     if (!activeChat?._id) {
       setMessageText('');
@@ -1459,10 +1461,13 @@ export default function ChatDashboard() {
   // Message uploads & submissions
   const handleSendMessageSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!messageText.trim() && !selectedFile) return;
+    if (sendInFlightRef.current || (!messageText.trim() && !selectedFile)) return;
 
     const activeChatId = activeChat?._id;
     if (!activeChatId) return;
+
+    sendInFlightRef.current = true;
+    setIsSendingMessage(true);
 
     try {
       // Simulate file upload loading bar
@@ -1522,6 +1527,9 @@ export default function ChatDashboard() {
     } catch (err) {
       setUploadProgress(0);
       toast.error('Failed to send message.');
+    } finally {
+      sendInFlightRef.current = false;
+      setIsSendingMessage(false);
     }
   };
 
@@ -1818,7 +1826,7 @@ export default function ChatDashboard() {
   };
 
   return (
-    <div className="h-screen w-screen flex bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden relative font-sans">
+    <div className="h-[100dvh] w-screen flex bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden relative font-sans">
 
       {/* Soft colorful backdrop blobs for vibrant design aesthetics */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-400/20 dark:bg-indigo-600/10 blur-[120px] pointer-events-none z-0" />
@@ -2037,7 +2045,7 @@ export default function ChatDashboard() {
                 return (
                   <div key={call._id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800/30">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                         {displayUser?.avatar ? <img src={displayUser.avatar} alt="" className="h-full w-full object-cover" /> : null}
                       </div>
                       <div>
@@ -2048,7 +2056,12 @@ export default function ChatDashboard() {
                         </div>
                       </div>
                     </div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500">{call.type}</span>
+                    <div className="flex items-center gap-1.5">
+  {displayUser?._id && call.chatId && <>
+    <button onClick={() => makeCall(displayUser._id, call.chatId, 'voice')} className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors" title="Voice call"><Phone className="h-3.5 w-3.5" /></button>
+    <button onClick={() => makeCall(displayUser._id, call.chatId, 'video')} className="h-8 w-8 rounded-full bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500 hover:text-white flex items-center justify-center transition-colors" title="Video call"><Video className="h-3.5 w-3.5" /></button>
+  </>}
+</div>
                   </div>
                 );
               })}
@@ -2447,8 +2460,8 @@ export default function ChatDashboard() {
                 <div className="flex-1 flex flex-col h-full justify-between overflow-hidden border-r border-slate-200 dark:border-slate-800/40">
 
                 {/* Active chat header */}
-                <header className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 md:px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
-                  <div className="flex items-center gap-2.5 max-w-[75%]">
+                <header className="h-14 sm:h-16 border-b border-slate-200 dark:border-slate-800/60 px-2 sm:px-4 md:px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
                     {/* Back Button (Mobile only) */}
                     <button
                       onClick={() => setActiveChat(null)}
@@ -2459,13 +2472,13 @@ export default function ChatDashboard() {
                     </button>
 
                     <div
-                      className="flex items-center gap-3 cursor-pointer group truncate"
+                      className="flex items-center gap-2 sm:gap-3 cursor-pointer group truncate min-w-0"
                       onClick={() => {
                         setIsGroupInfoOpen(!isGroupInfoOpen);
                         setIsAiOpen(false);
                       }}
                     >
-                      <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-300 dark:border-slate-700/40 transition-transform group-hover:scale-105 shrink-0">
+                      <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-slate-200 dark:bg-slate-850 overflow-hidden border border-slate-300 dark:border-slate-700/40 transition-transform group-hover:scale-105 shrink-0">
                       {activeChat.isGroup ? (
                         activeChat.avatar ? <img src={activeChat.avatar} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center font-bold text-slate-500 bg-indigo-500/10 text-indigo-500">G</div>
                       ) : (
@@ -2493,7 +2506,7 @@ export default function ChatDashboard() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-0.5 sm:gap-2 shrink-0">
                     {/* E2EE Secret Chat Toggle (Direct Chats Only) */}
                     {!activeChat.isGroup && (
                       <button
@@ -2542,7 +2555,7 @@ export default function ChatDashboard() {
                     {/* Search Messages Toggle */}
                     <button
                       onClick={() => setChatSearchOpen(!chatSearchOpen)}
-                      className={`p-2 rounded-lg transition-all ${chatSearchOpen ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+                      className={`hidden sm:block p-2 rounded-lg transition-all ${chatSearchOpen ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800'}`}
                       title="Search Messages"
                     >
                       <Search className="h-4.5 w-4.5" />
@@ -2581,7 +2594,7 @@ export default function ChatDashboard() {
                     {/* AI Companion Toggle */}
                     <button
                       onClick={() => setIsAiOpen(!isAiOpen)}
-                      className={`p-2 rounded-lg transition-all ${isAiOpen ? 'bg-indigo-500/10 text-indigo-500' : 'text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10'}`}
+                      className={`hidden sm:block p-2 rounded-lg transition-all ${isAiOpen ? 'bg-indigo-500/10 text-indigo-500' : 'text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10'}`}
                       title="AI Companion"
                     >
                       <Sparkles className="h-4.5 w-4.5" />
@@ -2590,7 +2603,7 @@ export default function ChatDashboard() {
                 </header>
             {chatSearchOpen && (
               <div className="px-6 py-2 border-b border-slate-200 dark:border-slate-800/60 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md flex gap-3 items-center shrink-0 z-10">
-                <div className="flex-1 relative">
+                <div className="relative flex-1">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <input
                     type="text"
@@ -2638,7 +2651,7 @@ export default function ChatDashboard() {
             })()}
 
             {/* Message Area */}
-            <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 py-4 md:py-6 space-y-5 md:space-y-7 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-10 py-3 md:py-5 space-y-2.5 sm:space-y-3 custom-scrollbar">
               {(() => {
                 const rawMsgs = messages[activeChat._id] || [];
                 const filteredMsgs = chatSearchQuery.trim()
@@ -2655,7 +2668,7 @@ export default function ChatDashboard() {
                     <div
                       key={msg._id}
                       id={`msg-${msg._id}`}
-                      className={`flex flex-col gap-2 max-w-[82%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'} cursor-pointer select-none`}
+                      className={`flex flex-col gap-1 max-w-[88%] sm:max-w-[76%] ${isMe ? 'self-end ml-auto items-end' : 'items-start'} cursor-pointer select-none`}
                       onDoubleClick={() => setReplyingTo(msg)}
                       title="Double click to reply"
                     >
@@ -2666,7 +2679,7 @@ export default function ChatDashboard() {
                       )}
 
                       <div
-                        className={`pl-5 pr-14 pt-3.5 pb-4 rounded-2xl relative group shadow-sm transition-all duration-200 ${
+                        className={`pl-3.5 pr-11 pt-2.5 pb-3 rounded-xl relative group shadow-sm transition-all duration-200 ${
                           isMe
                             ? 'bg-slate-100 dark:bg-gradient-to-br dark:from-indigo-500 dark:to-indigo-650 text-slate-900 dark:text-white rounded-tr-none border border-slate-250 dark:border-transparent'
                             : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 rounded-tl-none'
@@ -2750,11 +2763,11 @@ export default function ChatDashboard() {
                         </div>
                       )}
 
-                      <p className="text-sm font-medium leading-relaxed break-words">{msg.isEncrypted ? (decryptedCache[msg._id] || '🔒 [Decrypting secret message...]') : msg.content}</p>
+                      <p className="text-[13px] sm:text-sm font-medium leading-snug break-words">{msg.isEncrypted ? (decryptedCache[msg._id] || '🔒 [Decrypting secret message...]') : msg.content}</p>
 
                       {/* Message Reactions Badges display */}
                       {msg.reactions && msg.reactions.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1.5 pb-1 relative z-10 select-none">
+                        <div className="flex flex-wrap gap-1 mt-1 pb-0.5 relative z-10 select-none">
                           {(() => {
                             const grouped: { [emoji: string]: number } = {};
                             msg.reactions.forEach(r => {
@@ -2765,7 +2778,7 @@ export default function ChatDashboard() {
                               <button
                                 key={emoji}
                                 onClick={() => reactToMessage(msg._id, emoji)}
-                                className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100/60 dark:bg-slate-950/50 hover:bg-slate-200/80 dark:hover:bg-slate-900 border border-slate-200/40 dark:border-slate-800/40 text-[9px] font-black text-slate-800 dark:text-slate-200 transition-all hover:scale-105 active:scale-95 shadow-sm"
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/80 dark:bg-slate-950/70 hover:bg-slate-200/80 dark:hover:bg-slate-900 border border-slate-200/40 dark:border-slate-800/40 text-[9px] font-black text-slate-800 dark:text-slate-200 transition-all hover:scale-105 active:scale-95 shadow-sm"
                                 title="Click to remove or add reaction"
                               >
                                 <span>{emoji}</span>
@@ -2776,19 +2789,26 @@ export default function ChatDashboard() {
                         </div>
                       )}
 
-                      {/* Emojis hover popup (centered above bubble to prevent cut-off) */}
-                      <div className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 ${openReactionMessageId === msg._id ? 'flex' : 'hidden group-hover:flex'} gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-30`}>
+                      {/* Compact reaction picker stays open after tapping on touch screens. */}
+                      <div className={`absolute bottom-full mb-1.5 ${isMe ? 'right-0' : 'left-0'} ${openReactionMessageId === msg._id ? 'flex' : 'hidden sm:group-hover:flex'} gap-0.5 p-1.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 shadow-2xl z-30`}>
                         {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emo) => (
                           <button
                             key={emo}
                             onClick={() => { void reactToMessage(msg._id, emo); setOpenReactionMessageId(null); }}
-                            className="hover:scale-125 transition-transform"
+                            className="h-8 w-8 rounded-xl flex items-center justify-center text-lg hover:bg-indigo-50 dark:hover:bg-slate-800 hover:scale-110 transition-all"
                           >
                             {emo}
                           </button>
                         ))}
                       </div>
 
+                      <button
+                        type="button"
+                        onClick={() => setOpenReactionMessageId((current) => current === msg._id ? null : msg._id)}
+                        className={`absolute -bottom-3 ${isMe ? 'left-1' : 'right-1'} h-6 w-6 rounded-full bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-500 hover:text-indigo-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all z-20`}
+                        aria-label="React to message"
+                        aria-expanded={openReactionMessageId === msg._id}
+                      ><Smile className="h-3.5 w-3.5" /></button>
                       {/* Actions hover list (rendered on inner side relative to sender alignment) */}
                       <div className={`absolute top-1/2 -translate-y-1/2 hidden group-hover:flex gap-1.5 px-2 py-1 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-20 ${
                         isMe ? 'right-full mr-2' : 'left-full ml-2'
@@ -2891,7 +2911,7 @@ export default function ChatDashboard() {
                 </div>
               )}
 
-              <form onSubmit={handleSendMessageSubmit} className="flex gap-3 items-center">
+              <form onSubmit={handleSendMessageSubmit} className="flex gap-1.5 sm:gap-3 items-center min-w-0">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -2908,7 +2928,7 @@ export default function ChatDashboard() {
                   <select
                     value={expiresIn}
                     onChange={(e) => setExpiresIn(Number(e.target.value))}
-                    className="h-11 px-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-450 text-[10px] font-bold hover:text-slate-800 dark:hover:text-white transition-all cursor-pointer outline-none min-w-[70px] text-center"
+                    className="h-10 sm:h-11 px-1.5 sm:px-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-450 text-[10px] font-bold hover:text-slate-800 dark:hover:text-white transition-all cursor-pointer outline-none w-[62px] sm:w-auto sm:min-w-[70px] text-center"
                     title="Self-Destruct Timer"
                   >
                     <option value={0}>⏲️ Off</option>
@@ -2922,7 +2942,7 @@ export default function ChatDashboard() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="h-11 w-11 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors"
+                  className="h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors"
                   title="Attach file"
                 >
                   <Paperclip className="h-5 w-5" />
@@ -2959,7 +2979,7 @@ export default function ChatDashboard() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex-1 relative">
+                  <div className="relative flex-1 min-w-0">
                     <input
                       type="text"
                       value={messageText}
@@ -2975,14 +2995,14 @@ export default function ChatDashboard() {
                         }
                       }}
                       placeholder="Type a message..."
-                      className="w-full h-11 pl-4 pr-18 rounded-xl text-sm font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
+                      className="w-full min-w-0 h-10 sm:h-11 pl-3 sm:pl-4 pr-16 sm:pr-18 rounded-xl text-[13px] sm:text-sm font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
                     />
 
                     {/* Speech Recognition Sparkles trigger */}
                     <button
                       type="button"
                       onClick={startSpeechRecognition}
-                      className={`absolute right-10 top-3 transition-colors ${isSpeechListening ? 'text-indigo-500 animate-pulse' : 'text-slate-500 hover:text-indigo-600'}`}
+                      className={`absolute right-9 top-2.5 sm:top-3 transition-colors ${isSpeechListening ? 'text-indigo-500 animate-pulse' : 'text-slate-500 hover:text-indigo-600'}`}
                       title="Dictate message (Speech to text)"
                     >
                       <Sparkles className="h-5 w-5" />
@@ -2992,7 +3012,7 @@ export default function ChatDashboard() {
                     <button
                       type="button"
                       onClick={startRecording}
-                      className="absolute right-3 top-3 text-slate-500 hover:text-indigo-500 transition-colors"
+                      className="absolute right-2.5 top-2.5 sm:top-3 text-slate-500 hover:text-indigo-500 transition-colors"
                       title="Record voice note"
                     >
                       <Mic className="h-5 w-5" />
@@ -3002,8 +3022,8 @@ export default function ChatDashboard() {
 
                 <button
                   type="submit"
-                  disabled={!messageText.trim() && !selectedFile}
-                  className="h-11 w-11 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20"
+                  disabled={isSendingMessage || (!messageText.trim() && !selectedFile)}
+                  className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 flex shrink-0 items-center justify-center text-white shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="h-5 w-5" />
                 </button>
@@ -4182,7 +4202,7 @@ export default function ChatDashboard() {
                 <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
                 <div className="absolute -bottom-12 -left-12 w-28 h-28 rounded-full bg-pink-500/10 blur-2xl pointer-events-none" />
 
-                <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
                   <h3 className="font-extrabold text-base text-slate-850 dark:text-white flex items-center gap-2.5">
                     <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
                       <Users className="h-4.5 w-4.5" />
@@ -4394,7 +4414,7 @@ export default function ChatDashboard() {
               <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
               <div className="absolute -bottom-12 -left-12 w-28 h-28 rounded-full bg-pink-500/10 blur-2xl pointer-events-none" />
 
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
                 <h3 className="font-extrabold text-base text-slate-850 dark:text-white flex items-center gap-2.5">
                   <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
                     <Globe className="h-4.5 w-4.5" />
@@ -4518,7 +4538,7 @@ export default function ChatDashboard() {
       <AnimatePresence>
         {connectModalOpen && (
           <div
-            className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-6 overflow-hidden"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setConnectModalOpen(false);
@@ -4535,13 +4555,13 @@ export default function ChatDashboard() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
               transition={{ type: "spring", duration: 0.4 }}
-              className="w-full max-w-[420px] bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] space-y-5 text-left relative overflow-hidden"
+              className="w-full max-w-[380px] max-h-[calc(100dvh-1rem)] bg-white/90 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-2xl sm:rounded-3xl p-3 sm:p-5 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] space-y-3 sm:space-y-4 text-left relative overflow-hidden"
             >
               {/* Background glowing decorations */}
               <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
               <div className="absolute -bottom-12 -left-12 w-28 h-28 rounded-full bg-pink-500/10 blur-2xl pointer-events-none" />
 
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/40 relative z-10">
                 <h3 className="font-extrabold text-lg text-slate-850 dark:text-white flex items-center gap-2.5">
                   <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
                     <UserPlus className="h-5 w-5" />
@@ -4564,22 +4584,22 @@ export default function ChatDashboard() {
               </div>
 
               {/* Enter Connection Code */}
-              <form onSubmit={handleResolveCode} className="space-y-3.5 pt-1 relative z-10">
+              <form onSubmit={handleResolveCode} className="space-y-2 pt-0.5 relative z-10">
                 <div>
-                  <label className="block text-[9.5px] font-black text-slate-500 dark:text-slate-450 uppercase tracking-widest mb-2">Enter Friend's 4-Digit Code</label>
-                  <div className="flex gap-2.5">
+                  <label className="block text-[9.5px] font-black text-slate-500 dark:text-slate-450 uppercase tracking-widest mb-1">Enter Friend's 4-Digit Code</label>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                     <input
                       type="text"
                       maxLength={4}
                       value={enterConnectionCode}
                       onChange={(e) => setEnterConnectionCode(e.target.value.replace(/\D/g, ''))}
                       placeholder="e.g. 5839"
-                      className="flex-1 h-11.5 rounded-2xl text-center text-xl font-black tracking-[0.2em] bg-slate-50/50 dark:bg-slate-950/40 border border-slate-205 dark:border-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-800 dark:text-white transition-all placeholder:text-slate-400 placeholder:font-normal placeholder:tracking-normal"
+                      className="min-w-0 h-10 rounded-xl text-center text-lg font-black tracking-[0.2em] bg-slate-50/50 dark:bg-slate-950/40 border border-slate-205 dark:border-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-800 dark:text-white transition-all placeholder:text-slate-400 placeholder:font-normal placeholder:tracking-normal"
                     />
                     <button
                       type="submit"
                       disabled={connectLoading || enterConnectionCode.length !== 4}
-                      className="px-6 h-11.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:from-indigo-500/40 disabled:to-purple-600/40 disabled:scale-100 disabled:cursor-not-allowed hover:scale-[1.02] text-white font-extrabold text-xs shadow-md shadow-indigo-500/15 active:scale-98 transition-all flex items-center justify-center shrink-0"
+                      className="px-3 sm:px-4 h-10 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:from-indigo-500/40 disabled:to-purple-600/40 disabled:scale-100 disabled:cursor-not-allowed hover:scale-[1.02] text-white font-extrabold text-xs shadow-md shadow-indigo-500/15 active:scale-98 transition-all flex items-center justify-center shrink-0"
                     >
                       {connectLoading ? 'Connecting...' : 'Connect'}
                     </button>
@@ -4587,20 +4607,20 @@ export default function ChatDashboard() {
                 </div>
               </form>
 
-              <div className="relative py-2 flex items-center shrink-0 z-10">
+              <div className="relative py-0.5 flex items-center shrink-0 z-10">
                 <div className="flex-grow border-t border-slate-100 dark:border-slate-800/40"></div>
                 <span className="flex-shrink mx-4 text-[8.5px] font-black text-slate-400 dark:text-slate-550 uppercase tracking-widest">OR</span>
                 <div className="flex-grow border-t border-slate-100 dark:border-slate-800/40"></div>
               </div>
 
               {/* Generate Your Code */}
-              <div className="space-y-4 text-center relative z-10">
+              <div className="space-y-2.5 text-center relative z-10">
                 <div>
-                  <p className="text-[9.5px] font-black text-slate-500 dark:text-slate-455 uppercase tracking-widest mb-2.5">Share Your Temporary Code</p>
+                  <p className="text-[9.5px] font-black text-slate-500 dark:text-slate-455 uppercase tracking-widest mb-1">Share Your Temporary Code</p>
 
                   {myConnectionCode ? (
-                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-500/5 to-purple-500/5 dark:from-indigo-550/10 dark:to-purple-550/10 border border-indigo-500/15 dark:border-indigo-500/25 flex flex-col items-center gap-2.5 shadow-inner">
-                      <span className="text-4xl font-extrabold tracking-[0.2em] bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 font-mono select-all">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500/5 to-purple-500/5 dark:from-indigo-550/10 dark:to-purple-550/10 border border-indigo-500/15 dark:border-indigo-500/25 flex flex-col items-center gap-2.5 shadow-inner">
+                      <span className="text-3xl font-extrabold tracking-[0.2em] bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 font-mono select-all">
                         {myConnectionCode}
                       </span>
                       <span className="text-[9px] font-black tracking-wide text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 dark:bg-indigo-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
@@ -4609,7 +4629,7 @@ export default function ChatDashboard() {
                       </span>
                     </div>
                   ) : (
-                    <div className="p-5 rounded-2xl bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800/40 italic text-xs text-slate-500 dark:text-slate-450">
+                    <div className="p-3 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800/40 italic text-xs text-slate-500 dark:text-slate-450">
                       No active connection code generated yet.
                     </div>
                   )}
@@ -4618,7 +4638,7 @@ export default function ChatDashboard() {
                 <button
                   type="button"
                   onClick={generateMyCode}
-                  className="w-full h-11 rounded-2xl bg-white dark:bg-slate-950 hover:bg-slate-55 dark:hover:bg-slate-900 border border-slate-205 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-all active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
+                  className="w-full h-10 rounded-xl bg-white dark:bg-slate-950 hover:bg-slate-55 dark:hover:bg-slate-900 border border-slate-205 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-all active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
                 >
                   {myConnectionCode ? 'Generate New Code' : 'Generate Temporary Code'}
                 </button>
@@ -4626,12 +4646,12 @@ export default function ChatDashboard() {
 
               {/* Notifications / Alerts */}
               {connectError && (
-                <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold text-center animate-in fade-in slide-in-from-top-1">
+                <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold text-center animate-in fade-in slide-in-from-top-1">
                   {connectError}
                 </div>
               )}
               {connectSuccess && (
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-bold text-center animate-in fade-in slide-in-from-top-1">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-bold text-center animate-in fade-in slide-in-from-top-1">
                   {connectSuccess}
                 </div>
               )}
@@ -4643,7 +4663,7 @@ export default function ChatDashboard() {
       {/* Footer Branding Widget */}
       <div
         ref={brandingRef}
-        className="fixed bottom-20 right-4 z-40 flex items-center gap-2 pointer-events-auto select-none"
+        className="hidden sm:flex fixed bottom-20 right-4 z-40 items-center gap-2 pointer-events-auto select-none"
         onMouseEnter={() => setBrandingHovered(true)}
         onMouseLeave={() => setBrandingHovered(false)}
       >
@@ -4668,7 +4688,7 @@ export default function ChatDashboard() {
 
         <button
           onClick={() => setShowBrandingLabel((current) => !current)}
-          className="h-10 w-10 rounded-full bg-[#0f172a] dark:bg-slate-950 flex items-center justify-center text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)] shrink-0 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-[#0f172a] dark:bg-slate-950 flex items-center justify-center text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)] shrink-0 transition-all hover:scale-105 active:scale-95 cursor-pointer"
           title="Developer Info"
         >
           <Code2 className="h-4.5 w-4.5 text-white on-color" />

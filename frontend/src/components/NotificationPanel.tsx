@@ -131,7 +131,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
 
   return (
     <div className="absolute inset-0 bg-white dark:bg-slate-950/95 backdrop-blur-sm z-10 rounded-2xl flex flex-col">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 border-b border-slate-200 dark:border-slate-800">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">Notification Settings</h3>
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
           <X className="h-4 w-4" />
@@ -191,7 +191,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Notification Types</h4>
           <div className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden divide-y divide-slate-200 dark:divide-slate-800">
             {[
-              { type: 'new_message' as NotificationType, label: 'New messages', sub: 'When someone sends you a message' },
               { type: 'mention' as NotificationType, label: 'Mentions', sub: 'When someone @mentions you' },
               { type: 'friend_request' as NotificationType, label: 'Friend requests', sub: 'When someone adds you' },
               { type: 'community_invitation' as NotificationType, label: 'Community invitations', sub: 'When invited to a community' },
@@ -310,6 +309,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
   );
 
   const filtered = notifications.filter((n) => {
+    if (n.type === 'new_message') return false;
     if (activeFilter === 'unread')   return !n.isRead;
     if (activeFilter === 'mentions') return n.type === 'mention';
     if (activeFilter === 'requests') return n.type === 'friend_request' || n.type === 'community_invitation';
@@ -322,11 +322,11 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
-      <div className="absolute right-0 top-full mt-2 z-50 w-[360px] max-h-[80vh] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl shadow-black/20 dark:shadow-black/60 flex flex-col overflow-hidden animate-in slide-in-from-top-2 duration-200">
+      <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-20 sm:top-full sm:mt-2 z-50 w-auto sm:w-[360px] max-h-[calc(100dvh-6rem)] sm:max-h-[80vh] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl shadow-black/20 dark:shadow-black/60 flex flex-col overflow-hidden animate-in slide-in-from-top-2 duration-200">
 
         {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
+        <div className="flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
           <div className="flex items-center gap-2">
             <Bell className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Notifications</h2>
@@ -378,12 +378,12 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
           </div>
         </div>
 
-        <div className="flex gap-1 px-4 py-2 border-b border-slate-200 dark:border-slate-800/60 flex-shrink-0">
+        <div className="flex gap-1 px-2 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-800/60 flex-shrink-0">
           {(['all', 'unread', 'mentions', 'requests'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setActiveFilter(f)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium capitalize transition-colors ${
+              className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium capitalize transition-colors ${
                 activeFilter === f
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'

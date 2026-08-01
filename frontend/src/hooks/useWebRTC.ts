@@ -13,6 +13,22 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   };
   const state = () => useCallStore.getState();
 
+  const requestMediaWithRecovery = async (constraints: MediaStreamConstraints) => {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      const denied = error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name);
+      if (!denied) throw error;
+      toast.info('Camera or microphone permission was denied. Allow it in the browser site controls; SK Connect will ask once more.');
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (retryError) {
+        toast.error('Permission is still blocked. Enable Camera and Microphone for this site, then tap the call button again.');
+        throw retryError;
+      }
+    }
+  };
   const startLocalStream = async (type: 'voice' | 'video') => {
     const existing = state().localStream;
     if (existing) return existing;
@@ -167,7 +183,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   };
   const stopScreenShare = async () => {
     const current = state(); if (!current.localStream || current.callType !== 'video') return;
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+    const stream = await requestMediaWithRecovery({ video: { width: 1280, height: 720 } });
     const track = stream.getVideoTracks()[0]; await replaceVideoTrack(track); current.setScreenSharing(false);
   };
 

@@ -12,13 +12,13 @@ export const getNotifications = async (req: Request, res: Response, next: NextFu
     const skip   = (page - 1) * limit;
 
     const [notifications, totalUnread] = await Promise.all([
-      Notification.find({ recipientId: userId })
+      Notification.find({ recipientId: userId, type: { $ne: 'new_message' } })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('actorId', 'username avatar')
         .lean(),
-      Notification.countDocuments({ recipientId: userId, isRead: false }),
+      Notification.countDocuments({ recipientId: userId, isRead: false, type: { $ne: 'new_message' } }),
     ]);
 
     res.json({ notifications, totalUnread, page, limit });
@@ -31,7 +31,7 @@ export const getNotifications = async (req: Request, res: Response, next: NextFu
 export const getUnreadCount = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
-    const count  = await Notification.countDocuments({ recipientId: userId, isRead: false });
+    const count  = await Notification.countDocuments({ recipientId: userId, isRead: false, type: { $ne: 'new_message' } });
     res.json({ count });
   } catch (err) {
     next(err);
