@@ -17,6 +17,11 @@ type CentralPayload = {
 };
 
 const centralApiUrl = (process.env.SK_CENTRAL_API_URL || 'https://www.sk-hub.in/api').replace(/\/$/, '');
+const validCentralAvatar = (value: unknown) => {
+  if (typeof value !== 'string' || value.length > 250_000) return '';
+  const avatar = value.trim();
+  return /^(https:\/\/|data:image\/(?:png|jpe?g|webp|gif);base64,)/i.test(avatar) ? avatar : '';
+};
 
 const isCentralPayload = (value: unknown): value is CentralPayload => {
   if (!value || typeof value !== 'object') return false;
@@ -82,10 +87,13 @@ export const centralLogin = async (req: Request, res: Response, next: NextFuncti
         username: await uniqueUsername(payload.name, email),
         isVerified: true,
         role: payload.role === 'admin' ? 'admin' : 'user',
+        avatar: validCentralAvatar(req.body?.centralAvatar),
       });
     } else {
       user.isVerified = true;
       user.role = payload.role === 'admin' ? 'admin' : 'user';
+      const centralAvatar = validCentralAvatar(req.body?.centralAvatar);
+      if (centralAvatar) user.avatar = centralAvatar;
       await user.save();
     }
 

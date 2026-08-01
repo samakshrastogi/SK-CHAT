@@ -293,7 +293,7 @@ export default function ChatDashboard() {
   const {
     chats, fetchChats, activeChat, setActiveChat, messages, sendChatMessage,
     editChatMessage, deleteChatMessage, reactToMessage, starMessageToggle, voteInPoll,
-    typingUsers, setTypingUser, togglePinChatMessage, unreadCounts, upsertChat, removeChat, replaceChat
+    typingUsers, setTypingUser, togglePinChatMessage, unreadCounts, upsertChat, removeChat, hideChatLocally, replaceChat
   } = useChatStore();
 
   const callStore = useCallStore();
@@ -2507,23 +2507,18 @@ export default function ChatDashboard() {
                 </div>
 
                 <div className="flex items-center gap-0.5 sm:gap-2 shrink-0">
-                    {/* E2EE Secret Chat Toggle (Direct Chats Only) */}
-                    {!activeChat.isGroup && (
-                      <button
-                        onClick={() => {
-                          if (isSecretMode) {
-                            setIsSecretMode(false);
-                            setE2eeSharedKey(null);
-                          } else {
-                            startSecretMode();
-                          }
-                        }}
-                        className={`p-2 rounded-lg transition-all ${isSecretMode ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-500/10'}`}
-                        title={isSecretMode ? `End-to-End Encryption Enabled${e2eeFingerprint ? ` · ${formatFingerprint(e2eeFingerprint)}` : ''}` : 'Initiate Secret Chat (E2EE)'}
-                      >
-                        <Shield className="h-4.5 w-4.5" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        hideChatLocally(activeChat._id);
+                        setIsGroupInfoOpen(false);
+                      }}
+                      className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                      title="Remove chat from this device"
+                      aria-label="Remove chat from this device"
+                    >
+                      <Trash className="h-4.5 w-4.5" />
+                    </button>
+
 
                     {/* Whiteboard and Events Tab Toggles (Community Channels Only) */}
                     {activeChat.isCommunity && (

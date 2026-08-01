@@ -106,13 +106,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     authCheckPromise = (async () => {
       try {
         const centralToken = await requestCentralAppToken();
+        const centralProfile = getCentralProfile();
         const response = await apiClient.post('/auth/central', {
           token: centralToken,
           deviceType: navigator.userAgent,
           deviceId: getBrowserDeviceId(),
+          centralAvatar: centralProfile?.avatarUrl,
         });
         const { accessToken, user } = response.data;
-        const centralProfile = getCentralProfile();
         const connectedUser = {
           ...user,
           avatar: centralProfile?.avatarUrl || user.avatar,

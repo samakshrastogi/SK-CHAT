@@ -13,6 +13,17 @@ type OutboxItem = {
   createdAt: string;
 };
 const OUTBOX_KEY = 'sk_connect_outbox';
+const hiddenChatsKey = () => {
+  const user = useAuthStore.getState().user;
+  return `sk_connect_hidden_chats:${user?._id || user?.id || 'anonymous'}`;
+};
+const readHiddenChats = (): Set<string> => {
+  if (typeof window === 'undefined') return new Set();
+  try { return new Set(JSON.parse(window.localStorage.getItem(hiddenChatsKey()) || '[]')); } catch { return new Set(); }
+};
+const writeHiddenChats = (chatIds: Set<string>) => {
+  if (typeof window !== 'undefined') window.localStorage.setItem(hiddenChatsKey(), JSON.stringify([...chatIds]));
+};
 const readOutbox = (): OutboxItem[] => {
   if (typeof window === 'undefined') return [];
   try { return JSON.parse(window.localStorage.getItem(OUTBOX_KEY) || '[]'); } catch { return []; }
@@ -65,6 +76,7 @@ interface ChatState {
   clearUnread: (chatId: string) => void;
   upsertChat: (chat: Chat) => void;
   removeChat: (chatId: string) => void;
+  hideChatLocally: (chatId: string) => void;
   replaceChat: (chat: Chat) => void;
   localUpdateMessage: (chatId: string, message: Message) => void;
   localMarkMessageDeleted: (chatId: string | undefined, messageId: string, isDeletedForEveryone?: boolean) => void;
@@ -87,7 +99,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoadingChats: true });
     try {
       const response = await apiClient.get('/chats');
-      const chats = response.data.chats || [];
+      const hiddenChats = readHiddenChats();
+      const chats = (response.data.chats || []).filter((chat: Chat) => !hiddenChats.has(chat._id));
       const unreadCounts: { [chatId: string]: number } = {};
       chats.forEach((chat: any) => {
         unreadCounts[chat._id] = chat.unreadCount || 0;
@@ -168,6 +181,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   upsertChat: (chat) => {
+    if (readHiddenChats().has(chat._id)) return;
     set((state) => {
       const existing = state.chats.find((c) => c._id === chat._id);
       const mergedChat = existing
@@ -210,6 +224,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         typingUsers
       };
     });
+  },
+
+  hideChatLocally: (chatId) => {
+    const hiddenChats = readHiddenChats();
+    hiddenChats.add(chatId);
+    writeHiddenChats(hiddenChats);
+    get().removeChat(chatId);
   },
 
   flushOutbox: async () => {
