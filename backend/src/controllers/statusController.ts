@@ -29,9 +29,13 @@ export const createStatus = async (req: AuthenticatedRequest, res: Response, nex
     if (req.file) finalContent = (await uploadMedia(req.file, 'statuses')).url;
     if (!finalContent) throw new CustomError('Status content or media file is required', 400);
 
-    const audience = req.body.audience || 'contacts';
-    if (!['public', 'contacts', 'selected'].includes(audience)) throw new CustomError('Invalid story audience', 400);
+    const requestedAudience = req.body.audience || 'contacts';
+    if (!['contacts', 'selected'].includes(requestedAudience)) throw new CustomError('Stories can only be shared with personal connections', 400);
+    const audience = requestedAudience;
     const allowedUsers = parseJson<string[]>(req.body.allowedUsers, []);
+    const owner = await User.findById(req.user!.id).select('friends').lean();
+    const friendIds = new Set((owner?.friends || []).map((id) => id.toString()));
+    if (allowedUsers.some((id) => !friendIds.has(id))) throw new CustomError('Story viewers must be personal connections', 403);
     const excludedUsers = parseJson<string[]>(req.body.excludedUsers, []);
     if (audience === 'selected' && !allowedUsers.length) throw new CustomError('Select at least one story viewer', 400);
 

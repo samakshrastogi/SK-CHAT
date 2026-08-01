@@ -10,7 +10,8 @@ export const getCallHistory = async (req: AuthenticatedRequest, res: Response, n
     const calls = await Call.find({
       $or: [
         { callerId: req.user!.id },
-        { receiverId: req.user!.id }
+        { receiverId: req.user!.id },
+        { participants: req.user!.id }
       ]
     })
       .populate('callerId', 'username avatar')
@@ -28,18 +29,21 @@ export const logCallStart = async (req: AuthenticatedRequest, res: Response, nex
   try {
     const { receiverId, chatId, type } = req.body;
 
-    if (!receiverId || receiverId === req.user!.id) {
-      throw new CustomError('A valid receiver is required', 400);
-    }
+    if (receiverId === req.user!.id) throw new CustomError('A valid receiver is required', 400);
     if (!['voice', 'video'].includes(type)) {
       throw new CustomError('Call type must be voice or video', 400);
     }
-    const chat = await Chat.findOne({ _id: chatId, participants: { $all: [req.user!.id, receiverId] } });
+    const chat = await Chat.findOne({ _id: chatId, participants: req.user!.id });
     if (!chat) throw new CustomError('Call chat not found or access denied', 404);
+    if (!chat.isGroup && !receiverId) throw new CustomError('A receiver is required for direct calls', 400);
+    if (receiverId && !chat.participants.some((id) => id.toString() === receiverId)) throw new CustomError('Receiver is not a chat member', 403);
+    const participants = chat.participants.filter((id) => id.toString() !== req.user!.id);
+    if (chat.isGroup && participants.length === 0) throw new CustomError('No other group members are available', 400);
 
     const call = await Call.create({
       callerId: req.user!.id,
-      receiverId,
+      receiverId: receiverId || undefined,
+      participants: chat.isGroup ? chat.participants : [req.user!.id, receiverId],
       chatId,
       type,
       status: 'initiated',
@@ -59,7 +63,7 @@ export const logCallEnd = async (req: AuthenticatedRequest, res: Response, next:
 
     const call = await Call.findOne({
       _id: callId,
-      $or: [{ callerId: req.user!.id }, { receiverId: req.user!.id }],
+      $or: [{ callerId: req.user!.id }, { receiverId: req.user!.id }, { participants: req.user!.id }],
     });
     if (!call) {
       throw new CustomError('Call record not found', 404);

@@ -22,7 +22,10 @@ import {
   getGroupSharedMedia,
   getGroupSharedFiles,
   getChatPreferences,
-  updateChatPreferences
+  updateChatPreferences,
+  getGroupJoinRequests,
+  actionGroupJoinRequest,
+  discoverPublicGroups
 } from '../controllers/chatController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { upload } from '../middleware/uploadMiddleware.js';
@@ -36,9 +39,12 @@ router.post('/', createChat as any);
 router.get('/', getChats as any);
 router.get('/search/messages', searchMessages as any);
 router.get('/starred', getStarredMessages as any);
+router.get('/discover', discoverPublicGroups as any);
 router.post('/:chatId/invite-link', generateInviteLink as any);
 router.post('/join/:codeOrToken', joinChatGroup as any);
 router.patch('/:chatId/settings', updateChatSettings as any);
+router.get('/:chatId/join-requests', getGroupJoinRequests as any);
+router.post('/:chatId/join-requests/:requestId', actionGroupJoinRequest as any);
 router.put('/:chatId', upload.single('avatar'), validateUploadedMedia as any, updateGroupProfile as any);
 router.post('/:chatId/members', addGroupMember as any);
 router.delete('/:chatId/members/:userId', removeGroupMember as any);

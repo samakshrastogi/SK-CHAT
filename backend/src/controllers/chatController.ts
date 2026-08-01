@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { getJwtAccessSecret } from '../config/env.js';
 import { Chat } from '../models/Chat.js';
+import { ChatJoinRequest } from '../models/ChatJoinRequest.js';
 import { ChatPreference } from '../models/ChatPreference.js';
 import { Message } from '../models/Message.js';
 import { User } from '../models/User.js';
@@ -16,12 +17,24 @@ import crypto from 'crypto';
 
 export const createChat = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { isGroup, participantId, name, description, isCommunity, communityId, isBroadcast } = req.body;
+    const { isGroup, participantId, name, description, isCommunity, communityId, isBroadcast, approvalRequired } = req.body;
 
     if (!isGroup) {
       // 1-on-1 Chat
       if (!participantId) {
         throw new CustomError('Participant ID is required for direct chats', 400);
+      }
+
+      const [currentUser, targetUser] = await Promise.all([
+        User.findById(req.user!.id).select('friends blockedUsers'),
+        User.findById(participantId).select('friends blockedUsers'),
+      ]);
+      const mutuallyConnected = currentUser?.friends.some((id) => id.toString() === participantId)
+        && targetUser?.friends.some((id) => id.toString() === req.user!.id);
+      if (!mutuallyConnected) throw new CustomError('Connect using a temporary code before starting a direct chat', 403);
+      if (currentUser?.blockedUsers.some((id) => id.toString() === participantId)
+        || targetUser?.blockedUsers.some((id) => id.toString() === req.user!.id)) {
+        throw new CustomError('Direct chat is unavailable', 403);
       }
 
       // Check if chat already exists between the two
@@ -65,6 +78,7 @@ export const createChat = async (req: AuthenticatedRequest, res: Response, next:
       isGroup: true,
       isCommunity: !!isCommunity,
       isBroadcast: !!isBroadcast,
+      approvalRequired: Boolean(approvalRequired),
       communityId: communityId || undefined,
       creatorId: req.user!.id,
       admins: [req.user!.id],
@@ -797,6 +811,17 @@ export const joinChatGroup = async (req: AuthenticatedRequest, res: Response, ne
       });
     }
 
+    if (chat.approvalRequired) {
+      const request = await ChatJoinRequest.findOneAndUpdate(
+        { chatId: chat._id, userId },
+        { $set: { status: 'pending' } },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
+      for (const adminId of chat.admins) {
+        req.app.get('io')?.to(`user:${adminId.toString()}`).emit('chat:join-request', { chatId: chat.id, requestId: request.id });
+      }
+      return res.status(202).json({ success: true, pendingApproval: true, message: 'Join request sent to the group administrators.' });
+    }
     // Add user as participant
     chat.participants.push(participantObjectId);
     await chat.save();
@@ -1210,4 +1235,50 @@ export const updateChatPreferences = async (req: AuthenticatedRequest, res: Resp
   } catch (error) {
     next(error);
   }
+};
+
+export const getGroupJoinRequests = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const chat = await Chat.findOne({ _id: req.params.chatId, isGroup: true });
+    if (!chat) throw new CustomError('Group not found', 404);
+    const isAdmin = chat.creatorId?.toString() === req.user!.id || chat.admins.some((id) => id.toString() === req.user!.id);
+    if (!isAdmin) throw new CustomError('Group administrator access required', 403);
+    const requests = await ChatJoinRequest.find({ chatId: chat._id, status: 'pending' }).populate('userId', 'username avatar bio');
+    res.json({ success: true, requests });
+  } catch (error) { next(error); }
+};
+
+export const actionGroupJoinRequest = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const chat = await Chat.findOne({ _id: req.params.chatId, isGroup: true });
+    if (!chat) throw new CustomError('Group not found', 404);
+    const isAdmin = chat.creatorId?.toString() === req.user!.id || chat.admins.some((id) => id.toString() === req.user!.id);
+    if (!isAdmin) throw new CustomError('Group administrator access required', 403);
+    if (!['approve', 'reject'].includes(req.body.action)) throw new CustomError('Action must be approve or reject', 400);
+    const request = await ChatJoinRequest.findOne({ _id: req.params.requestId, chatId: chat._id, status: 'pending' });
+    if (!request) throw new CustomError('Pending join request not found', 404);
+    request.status = req.body.action === 'approve' ? 'approved' : 'rejected';
+    await request.save();
+    if (request.status === 'approved') {
+      if (!chat.participants.some((id) => id.toString() === request.userId.toString())) chat.participants.push(request.userId);
+      await chat.save();
+      const populated = await Chat.findById(chat._id).populate('participants', 'username avatar status lastSeen bio').populate('admins', 'username avatar');
+      req.app.get('io')?.to(`user:${request.userId.toString()}`).emit('chat:created', populated);
+    }
+    res.json({ success: true, status: request.status });
+  } catch (error) { next(error); }
+};
+export const discoverPublicGroups = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const search = String(req.query.q || '').trim();
+    if (!search) return res.json({ success: true, rooms: [] });
+    const rooms = await Chat.find({
+      isGroup: true,
+      isBroadcast: { $ne: true },
+      approvalRequired: { $ne: true },
+      participants: { $ne: req.user!.id },
+      name: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },
+    }).select('name description avatar inviteCode participants').limit(30).lean();
+    res.json({ success: true, rooms });
+  } catch (error) { next(error); }
 };

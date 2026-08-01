@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface ICall extends Document {
   callerId: Types.ObjectId;
   receiverId?: Types.ObjectId; // Optional for group calls
+  participants: Types.ObjectId[];
   chatId: Types.ObjectId;
   type: 'voice' | 'video';
   status: 'initiated' | 'ringing' | 'connected' | 'rejected' | 'missed' | 'completed' | 'busy';
@@ -16,6 +17,7 @@ export interface ICall extends Document {
 const CallSchema = new Schema<ICall>({
   callerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   receiverId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+  participants: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   chatId: { type: Schema.Types.ObjectId, ref: 'Chat', required: true, index: true },
   type: { type: String, enum: ['voice', 'video'], required: true },
   status: {

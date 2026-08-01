@@ -97,12 +97,12 @@ const VoiceMessagePlayer: React.FC<{ mediaUrl: string; isMe: boolean }> = ({ med
 
   return (
     <div className={`flex items-center gap-3 p-3 rounded-2xl border ${
-      isMe 
-        ? 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/20 text-slate-800 dark:text-white' 
+      isMe
+        ? 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/20 text-slate-800 dark:text-white'
         : 'bg-white dark:bg-slate-900 border-slate-205 dark:border-slate-800 text-slate-800 dark:text-white'
     } min-w-[240px] max-w-[280px] shadow-sm mb-2 text-left`}>
       <audio ref={audioRef} src={mediaUrl} preload="metadata" />
-      
+
       <button
         type="button"
         onClick={togglePlay}
@@ -127,8 +127,8 @@ const VoiceMessagePlayer: React.FC<{ mediaUrl: string; isMe: boolean }> = ({ med
                 className="flex-1 rounded-full transition-all"
                 style={{
                   height: `${h * 10}%`,
-                  backgroundColor: isActive 
-                    ? '#6366f1' 
+                  backgroundColor: isActive
+                    ? '#6366f1'
                     : isMe ? 'rgba(99, 102, 241, 0.25)' : 'rgba(100, 116, 139, 0.25)'
                 }}
               />
@@ -295,7 +295,7 @@ export default function ChatDashboard() {
     editChatMessage, deleteChatMessage, reactToMessage, starMessageToggle, voteInPoll,
     typingUsers, setTypingUser, togglePinChatMessage, unreadCounts, upsertChat, removeChat, replaceChat
   } = useChatStore();
-  
+
   const callStore = useCallStore();
   const themeStore = useThemeStore();
   const { addIncomingNotification, requestBrowserPermission } = useNotificationStore();
@@ -405,7 +405,7 @@ export default function ChatDashboard() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
-    
+
     recognition.onresult = (event: any) => {
       const transcript = Array.from(event.results)
         .map((result: any) => result[0])
@@ -413,7 +413,7 @@ export default function ChatDashboard() {
         .join('');
       setLiveCaptions([transcript]);
     };
-    
+
     recognition.start();
     setIsCaptioningActive(true);
   };
@@ -434,7 +434,8 @@ export default function ChatDashboard() {
 
   const { socket, emitEvent } = useSocket();
   const {
-    makeCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
+    makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
+    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleParticipantLeft,
     startScreenShare, stopScreenShare, hangUp
   } = useWebRTC(emitEvent);
 
@@ -496,7 +497,7 @@ export default function ChatDashboard() {
   };
 
   const connStore = useConnectionsStore();
-  
+
   // Group Info Sidebar & Invite States
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [isEditingGroupProfile, setIsEditingGroupProfile] = useState(false);
@@ -507,6 +508,7 @@ export default function ChatDashboard() {
   const [groupSharedFiles, setGroupSharedFiles] = useState<any[]>([]);
   const [activeCommunity, setActiveCommunity] = useState<any>(null);
   const [communityRequests, setCommunityRequests] = useState<any[]>([]);
+  const [groupJoinRequests, setGroupJoinRequests] = useState<any[]>([]);
   const [isEditingCommunity, setIsEditingCommunity] = useState(false);
   const [editCommName, setEditCommName] = useState('');
   const [editCommDesc, setEditCommDesc] = useState('');
@@ -546,11 +548,12 @@ export default function ChatDashboard() {
 
   // Searching/Creating models
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupParticipants, setGroupParticipants] = useState<string[]>([]);
   const [isBroadcastGroup, setIsBroadcastGroup] = useState(false);
+  const [groupApprovalRequired, setGroupApprovalRequired] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [showBrandingLabel, setShowBrandingLabel] = useState(false);
   const [brandingHovered, setBrandingHovered] = useState(false);
@@ -563,7 +566,7 @@ export default function ChatDashboard() {
     document.addEventListener("pointerdown", closeOutside);
     return () => document.removeEventListener("pointerdown", closeOutside);
   }, [showBrandingLabel]);
-  
+
   // Statuses & calls states
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [activeStatusViewer, setActiveStatusViewer] = useState<Status[] | null>(null);
@@ -587,7 +590,7 @@ export default function ChatDashboard() {
   const [storyQuestion, setStoryQuestion] = useState('');
   const [storyEmojiSliderTarget, setStoryEmojiSliderTarget] = useState('🔥');
   const [storySliderEnabled, setStorySliderEnabled] = useState(false);
-  const [storyAudience, setStoryAudience] = useState<'public' | 'contacts'>('contacts');
+  const [storyAudience, setStoryAudience] = useState<'contacts'>('contacts');
   const [storyReplyText, setStoryReplyText] = useState('');
 
   // Communities state
@@ -606,6 +609,7 @@ export default function ChatDashboard() {
 
   // Text inputs & attachments
   const [messageText, setMessageText] = useState('');
+  const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
   useEffect(() => {
     if (!activeChat?._id) {
       setMessageText('');
@@ -626,7 +630,7 @@ export default function ChatDashboard() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
-  
+
   // Voice Message Recording details (separate from call recording)
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceMediaRecorder, setVoiceMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -703,7 +707,7 @@ export default function ChatDashboard() {
   // Sync active message window scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    
+
     // Fetch smart replies when active chat changes
     if (activeChat) {
       fetchSmartReplies(activeChat._id);
@@ -714,12 +718,17 @@ export default function ChatDashboard() {
   useEffect(() => {
     if (!socket) return;
 
-    const onCallAccepted = ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-      handleCallAccepted(answer);
+    const onCallAccepted = ({ answer, receiverId }: { answer: RTCSessionDescriptionInit; receiverId?: string }) => {
+      handleCallAccepted(answer, receiverId);
     };
-    const onCallCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-      handleIceCandidate(candidate);
+    const onCallCandidate = ({ candidate, senderId }: { candidate: RTCIceCandidateInit; senderId?: string }) => {
+      handleIceCandidate(candidate, senderId);
     };
+    const onGroupParticipantJoined = (payload: { userId: string; username?: string }) => { void handleGroupParticipantJoined(payload); };
+    const onPeerOffer = (payload: { senderId: string; senderName?: string; offer: RTCSessionDescriptionInit }) => { void handlePeerOffer(payload); };
+    const onPeerAnswer = (payload: { senderId: string; answer: RTCSessionDescriptionInit }) => { void handlePeerAnswer(payload); };
+    const onPeerCandidate = ({ candidate, senderId }: { candidate: RTCIceCandidateInit; senderId: string }) => { void handleIceCandidate(candidate, senderId); };
+    const onParticipantLeft = (payload: { userId: string }) => handleParticipantLeft(payload);
     const onCallRejected = ({ reason }: { reason: string }) => {
       toast.error(`Call rejected: ${reason}`);
       callStore.resetCallStore();
@@ -760,6 +769,11 @@ export default function ChatDashboard() {
 
     socket.on('call:accepted', onCallAccepted);
     socket.on('call:candidate', onCallCandidate);
+    socket.on('call:participant-joined', onGroupParticipantJoined);
+    socket.on('call:peer-offer', onPeerOffer);
+    socket.on('call:peer-answer', onPeerAnswer);
+    socket.on('call:peer-candidate', onPeerCandidate);
+    socket.on('call:participant-left', onParticipantLeft);
     socket.on('call:rejected', onCallRejected);
     socket.on('notification:new', onNotificationNew);
     const onStatusRefresh = () => { void fetchStatuses(); };
@@ -779,6 +793,11 @@ export default function ChatDashboard() {
     return () => {
       socket.off('call:accepted', onCallAccepted);
       socket.off('call:candidate', onCallCandidate);
+      socket.off('call:participant-joined', onGroupParticipantJoined);
+      socket.off('call:peer-offer', onPeerOffer);
+      socket.off('call:peer-answer', onPeerAnswer);
+      socket.off('call:peer-candidate', onPeerCandidate);
+      socket.off('call:participant-left', onParticipantLeft);
       socket.off('call:rejected', onCallRejected);
       socket.off('notification:new', onNotificationNew);
       socket.off('status:refresh', onStatusRefresh);
@@ -829,6 +848,10 @@ export default function ChatDashboard() {
   };
 
   // ── E2EE Web Crypto Helpers ──
+  useEffect(() => {
+    if (!isGroupInfoOpen || !activeChat?.isGroup) return;
+    apiClient.get(`/chats/${activeChat._id}/join-requests`).then((response) => setGroupJoinRequests(response.data.requests || [])).catch(() => setGroupJoinRequests([]));
+  }, [isGroupInfoOpen, activeChat?._id]);
   const base64ToBuf = (b64: string) => {
     const binStr = window.atob(b64);
     const len = binStr.length;
@@ -861,7 +884,7 @@ export default function ChatDashboard() {
       setE2eeKeyPair(identity);
       setE2eeFingerprint(identity.fingerprint);
       await apiClient.put('/e2ee/keys/current', { publicKey: identity.publicKey });
-      
+
       const opponent = activeChat.participants.find(p => p._id !== (user?._id || user?.id));
       if (opponent && socket) {
         socket.emit('e2ee:key_exchange', {
@@ -882,7 +905,7 @@ export default function ChatDashboard() {
   useEffect(() => {
     if (!e2eeSharedKey || !activeChat) return;
     const rawMsgs = messages[activeChat._id] || [];
-    
+
     rawMsgs.forEach(async (msg) => {
       if (msg.isEncrypted && msg.ciphertext && msg.iv && !decryptedCache[msg._id]) {
         try {
@@ -906,7 +929,7 @@ export default function ChatDashboard() {
   // Key Exchange socket listener
   useEffect(() => {
     if (!socket) return;
-    
+
     const handleE2eeKeyExchange = async ({ senderId, chatId, keyData }: { senderId: string; chatId: string; keyData: any }) => {
       if (!activeChat || activeChat._id !== chatId || activeChat.isGroup) return;
       try {
@@ -1111,7 +1134,7 @@ export default function ChatDashboard() {
     } catch (e) {}
   };
 
-  // Searching Users
+  // Room-only discovery. Personal profiles are intentionally never searchable.
   const handleUserSearch = async (val: string) => {
     setSearchQuery(val);
     if (val.trim().length === 0) {
@@ -1119,9 +1142,24 @@ export default function ChatDashboard() {
       return;
     }
     try {
-      const resp = await apiClient.get(`/users/search?q=${val}`);
-      setSearchResults(resp.data.users);
-    } catch (e) {}
+      const resp = await apiClient.get(`/chats/discover?q=${encodeURIComponent(val.trim())}`);
+      setSearchResults(resp.data.rooms || []);
+    } catch (e) {
+      setSearchResults([]);
+    }
+  };
+
+  const handleJoinDiscoveredRoom = async (room: any) => {
+    try {
+      const resp = await apiClient.post(`/chats/join/${room.inviteCode}`);
+      toast.success(resp.data.message || 'Joined public group');
+      if (resp.data.chat) upsertChat(resp.data.chat);
+      setSearchQuery('');
+      setSearchResults([]);
+      await Promise.all([fetchCommunities(), fetchChats()]);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Could not join this room');
+    }
   };
 
   // Starting a direct chat
@@ -1366,17 +1404,29 @@ export default function ChatDashboard() {
         isGroup: true,
         name: groupName,
         participants: groupParticipants,
-        isBroadcast: isBroadcastGroup
+        isBroadcast: isBroadcastGroup,
+        approvalRequired: groupApprovalRequired
       });
       upsertChat(resp.data.chat);
       setActiveChat(resp.data.chat);
       setGroupName('');
       setGroupParticipants([]);
       setIsBroadcastGroup(false);
+      setGroupApprovalRequired(false);
       setCreateGroupOpen(false);
     } catch (e) {}
   };
 
+
+  const handleGroupJoinRequest = async (requestId: string, action: 'approve' | 'reject') => {
+    if (!activeChat) return;
+    try {
+      await apiClient.post(`/chats/${activeChat._id}/join-requests/${requestId}`, { action });
+      setGroupJoinRequests((requests) => requests.filter((request) => request._id !== requestId));
+      await fetchChats();
+      toast.success(`Request ${action}d`);
+    } catch (error: any) { toast.error(error.response?.data?.message || 'Could not process join request'); }
+  };
   // Communities actions
   const handleCreateCommunity = async () => {
     if (!communityName.trim()) return;
@@ -1464,7 +1514,7 @@ export default function ChatDashboard() {
       setSelectedFile(null);
       setReplyingTo(null);
       setUploadProgress(0);
-      
+
       // Notify active sockets of new message
       if (socket) {
         socket.emit('typing:stop', activeChatId);
@@ -1562,7 +1612,7 @@ export default function ChatDashboard() {
         if (poll) formData.append('poll', JSON.stringify(poll));
         if (question) formData.append('question', JSON.stringify(question));
         if (slider) formData.append('slider', JSON.stringify(slider));
-        
+
         await apiClient.post('/status', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
@@ -1579,7 +1629,7 @@ export default function ChatDashboard() {
           slider
         });
       }
-      
+
       // Reset values
       setTextStatusContent('');
       setStoryFile(null);
@@ -1606,7 +1656,7 @@ export default function ChatDashboard() {
     const targetStatus = activeStatusViewer[activeStatusIndex];
     const targetUserId = targetStatus.userId._id;
     if (targetUserId === user?._id) return;
-    
+
     try {
       // Start/Get a direct chat with the status owner
       const resp = await apiClient.post('/chats', {
@@ -1614,12 +1664,12 @@ export default function ChatDashboard() {
         participantId: targetUserId
       });
       const chat = resp.data.chat;
-      
+
       // Post the reply message
       await apiClient.post(`/chats/${chat._id}/messages`, {
         content: `Replied to your story: "${storyReplyText}"`
       });
-      
+
       setStoryReplyText('');
       toast.success('Reply sent successfully!');
     } catch (e) {
@@ -1769,7 +1819,7 @@ export default function ChatDashboard() {
 
   return (
     <div className="h-screen w-screen flex bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden relative font-sans">
-      
+
       {/* Soft colorful backdrop blobs for vibrant design aesthetics */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-400/20 dark:bg-indigo-600/10 blur-[120px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[20%] w-[45%] h-[45%] rounded-full bg-pink-400/15 dark:bg-purple-600/10 blur-[130px] pointer-events-none z-0" />
@@ -1777,7 +1827,7 @@ export default function ChatDashboard() {
 
       {/* Left Column: List Panel + Bottom Navigation Bar */}
       <section className={`w-full md:w-96 glass-panel border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col z-10 shrink-0 relative overflow-hidden transition-all duration-300 ${activeChat ? 'hidden md:flex' : 'flex'}`}>
-        
+
         {/* App Branding Top Header */}
         <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800/40 flex items-center justify-between bg-white/30 dark:bg-slate-900/30">
           <div className="flex items-center gap-2.5">
@@ -1792,7 +1842,7 @@ export default function ChatDashboard() {
             <NotificationPanel isOpen={isNotifPanelOpen} onClose={() => setIsNotifPanelOpen(false)} />
           </div>
         </div>
-        
+
         {/* Tab 1: Chats */}
         {activeTab === 'chats' && (
           <div className="flex flex-col h-full">
@@ -1801,7 +1851,7 @@ export default function ChatDashboard() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search users or rooms..."
+                  placeholder="Search public room names..."
                   value={searchQuery}
                   onChange={(e) => handleUserSearch(e.target.value)}
                   className="w-full h-10 pl-10 pr-4 rounded-xl text-xs font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
@@ -1815,19 +1865,20 @@ export default function ChatDashboard() {
               {searchResults.length > 0 ? (
                 <div className="p-2">
                   <p className="text-xs text-slate-500 font-semibold px-3 mb-2">Search Results</p>
-                  {searchResults.map((usr) => (
+                  {searchResults.map((room) => (
                     <button
-                      key={usr._id}
-                      onClick={() => handleStartDirectChat(usr)}
+                      key={room._id}
+                      onClick={() => handleJoinDiscoveredRoom(room)}
                       className="w-full flex items-center gap-3 p-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-2xl transition-colors text-left"
                     >
-                      <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 flex-shrink-0 overflow-hidden">
-                        {usr.avatar ? <img src={usr.avatar} alt="" className="h-full w-full object-cover" /> : null}
+                      <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                        {room.avatar ? <img src={room.avatar} alt="" className="h-full w-full object-cover" /> : <Users className="h-5 w-5 text-indigo-500" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate text-slate-800 dark:text-white">{usr.username}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{usr.bio}</p>
+                        <p className="text-sm font-semibold truncate text-slate-800 dark:text-white">{room.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{room.description || 'Public room'}</p>
                       </div>
+                      <span className="text-[10px] font-bold text-indigo-500">Join</span>
                     </button>
                   ))}
                 </div>
@@ -1836,14 +1887,14 @@ export default function ChatDashboard() {
                   <div className="flex items-center justify-between px-3 py-2">
                     <span className="text-xs text-slate-500 font-semibold">Active Chats</span>
                     <div className="flex items-center gap-2.5">
-                      <button 
+                      <button
                         onClick={() => setConnectModalOpen(true)}
                         className="text-xs font-bold text-indigo-550 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-0.5"
                         title="Connect with new friends via 4-digit code"
                       >
                         <UserPlus className="h-3.5 w-3.5" /> Connect
                       </button>
-                      <button 
+                      <button
                         onClick={() => setCreateGroupOpen(true)}
                         className="text-xs font-bold text-indigo-550 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-0.5"
                       >
@@ -1856,13 +1907,13 @@ export default function ChatDashboard() {
                     const isGroup = chat.isGroup;
                     const targetParticipant = chat.participants.find(p => p._id !== (user?._id || user?.id));
                     const titleName = isGroup ? chat.name : (targetParticipant?.username || 'Chat room');
-                    
+
                     const activeTypers = Object.values(typingUsers[chat._id] || {});
                     const isSomeoneTyping = activeTypers.length > 0;
                     const typingText = isSomeoneTyping ? `${activeTypers[0]} is typing...` : '';
-                    
-                    const subtitle = chat.lastMessage?.isDeleted 
-                      ? 'Deleted message' 
+
+                    const subtitle = chat.lastMessage?.isDeleted
+                      ? 'Deleted message'
                       : (chat.lastMessage?.content || chat.description || 'No messages yet');
                     const unread = !active ? (unreadCounts[chat._id] || 0) : 0;
 
@@ -1871,8 +1922,8 @@ export default function ChatDashboard() {
                         key={chat._id}
                         onClick={() => { setActiveChat(chat); }}
                         className={`w-full flex items-center gap-3.5 p-3 rounded-2xl transition-all text-left ${
-                          active 
-                            ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400' 
+                          active
+                            ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400'
                             : 'hover:bg-slate-100 dark:hover:bg-slate-800/30'
                         }`}
                       >
@@ -2051,7 +2102,7 @@ export default function ChatDashboard() {
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{comm.description}</p>
-                  
+
                   {/* Community groups navigation */}
                   <div className="pt-2 border-t border-slate-200 dark:border-slate-800/40 space-y-1">
                     {comm.groupIds.map((channel: any) => (
@@ -2085,7 +2136,7 @@ export default function ChatDashboard() {
 
             {/* Profile Avatar Card */}
             <div className="p-5 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center text-center relative group">
-              <div 
+              <div
                 onClick={handleAvatarClick}
                 className="h-20 w-20 rounded-full border-2 border-indigo-500 bg-slate-200 dark:bg-slate-800 overflow-hidden relative cursor-pointer group/avatar"
                 title="Change Profile Photo"
@@ -2165,8 +2216,8 @@ export default function ChatDashboard() {
               <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
                 {sessions && sessions.length > 0 ? (
                   sessions.map((sess) => (
-                    <div 
-                      key={sess.id} 
+                    <div
+                      key={sess.id}
                       className="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs"
                     >
                       <div className="min-w-0">
@@ -2197,7 +2248,7 @@ export default function ChatDashboard() {
             {/* Customization Settings section */}
             <div className="pt-4 border-t border-slate-200 dark:border-slate-800/40 space-y-4 text-left">
               <h3 className="text-[10px] font-bold text-slate-500 dark:text-slate-405 uppercase tracking-widest">Customization & Settings</h3>
-              
+
               <div>
                 <span className="text-[10px] text-slate-505 dark:text-slate-400 font-bold uppercase tracking-wider">Appearance Mode</span>
                 <div className="flex gap-2 mt-2">
@@ -2278,7 +2329,7 @@ export default function ChatDashboard() {
         {activeTab === 'admin' && (
           <div className="flex flex-col h-full p-4 space-y-6 overflow-y-auto">
             <h2 className="text-xl font-bold tracking-tight text-amber-400">Admin Dashboard</h2>
-            
+
             {/* Stats blocks */}
             {adminStats && (
               <div className="grid grid-cols-2 gap-3 text-center">
@@ -2353,8 +2404,8 @@ export default function ChatDashboard() {
                   key={btn.id}
                   onClick={() => { setActiveTab(btn.id as any); }}
                   className={`flex flex-col items-center justify-center h-11 w-11 rounded-xl transition-all relative ${
-                    active 
-                      ? 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10 dark:border-indigo-500/20' 
+                    active
+                      ? 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10 dark:border-indigo-500/20'
                       : 'text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
                   }`}
                   title={btn.label}
@@ -2364,7 +2415,7 @@ export default function ChatDashboard() {
                 </button>
               );
             })}
-            
+
             {/* Conditional Admin bottom link */}
             {(user?.role === 'admin' || user?.role === 'moderator') && (
               <button
@@ -2394,7 +2445,7 @@ export default function ChatDashboard() {
               <div className="flex-1 flex overflow-hidden h-full relative">
                 {/* Message List Pane */}
                 <div className="flex-1 flex flex-col h-full justify-between overflow-hidden border-r border-slate-200 dark:border-slate-800/40">
-                
+
                 {/* Active chat header */}
                 <header className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 md:px-6 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 shrink-0">
                   <div className="flex items-center gap-2.5 max-w-[75%]">
@@ -2407,7 +2458,7 @@ export default function ChatDashboard() {
                       <ChevronLeft className="h-5 w-5" />
                     </button>
 
-                    <div 
+                    <div
                       className="flex items-center gap-3 cursor-pointer group truncate"
                       onClick={() => {
                         setIsGroupInfoOpen(!isGroupInfoOpen);
@@ -2517,6 +2568,16 @@ export default function ChatDashboard() {
                       </>
                     )}
 
+                    {activeChat.isGroup && (
+                      <>
+                        <button onClick={() => makeGroupCall(activeChat._id, 'voice')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-500 rounded-lg hover:bg-indigo-500/10 transition-all" title="Group voice call">
+                          <Phone className="h-4.5 w-4.5" />
+                        </button>
+                        <button onClick={() => makeGroupCall(activeChat._id, 'video')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-500 rounded-lg hover:bg-indigo-500/10 transition-all" title="Group video call">
+                          <Video className="h-4.5 w-4.5" />
+                        </button>
+                      </>
+                    )}
                     {/* AI Companion Toggle */}
                     <button
                       onClick={() => setIsAiOpen(!isAiOpen)}
@@ -2555,8 +2616,8 @@ export default function ChatDashboard() {
               const pinnedMsg = (messages[activeChat._id] || []).find(m => activeChat.pinnedMessages?.includes(m._id));
               return pinnedMsg ? (
                 <div className="bg-indigo-500/10 border-b border-indigo-500/20 px-6 py-2 flex items-center justify-between text-[11px] text-indigo-600 dark:text-indigo-400 backdrop-blur-md z-10 shrink-0">
-                  <div 
-                    className="flex items-center gap-2 cursor-pointer truncate mr-4" 
+                  <div
+                    className="flex items-center gap-2 cursor-pointer truncate mr-4"
                     onClick={() => {
                       const el = document.getElementById(`msg-${pinnedMsg._id}`);
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2566,8 +2627,8 @@ export default function ChatDashboard() {
                     <span className="font-bold">Pinned Message:</span>
                     <span className="truncate max-w-[500px] text-slate-600 dark:text-slate-350">{pinnedMsg.content || '[Attachment]'}</span>
                   </div>
-                  <button 
-                    onClick={() => togglePinChatMessage(activeChat._id, pinnedMsg._id)} 
+                  <button
+                    onClick={() => togglePinChatMessage(activeChat._id, pinnedMsg._id)}
                     className="font-bold hover:text-red-500 transition-colors shrink-0"
                   >
                     Unpin
@@ -2583,13 +2644,13 @@ export default function ChatDashboard() {
                 const filteredMsgs = chatSearchQuery.trim()
                   ? rawMsgs.filter(m => m.content.toLowerCase().includes(chatSearchQuery.toLowerCase()))
                   : rawMsgs;
-                
+
                 return filteredMsgs.map((msg) => {
                   const currentUserId = user?._id || user?.id;
                   const msgSenderId = typeof msg.senderId === 'object' ? (msg.senderId as any)?._id || (msg.senderId as any)?.id : msg.senderId;
                   const isMe = !!(currentUserId && msgSenderId && currentUserId.toString() === msgSenderId.toString());
                   const senderName = isMe ? 'You' : ((msg.senderId as any)?.username || 'User');
-                  
+
                   return (
                     <div
                       key={msg._id}
@@ -2606,8 +2667,8 @@ export default function ChatDashboard() {
 
                       <div
                         className={`pl-5 pr-14 pt-3.5 pb-4 rounded-2xl relative group shadow-sm transition-all duration-200 ${
-                          isMe 
-                            ? 'bg-slate-100 dark:bg-gradient-to-br dark:from-indigo-500 dark:to-indigo-650 text-slate-900 dark:text-white rounded-tr-none border border-slate-250 dark:border-transparent' 
+                          isMe
+                            ? 'bg-slate-100 dark:bg-gradient-to-br dark:from-indigo-500 dark:to-indigo-650 text-slate-900 dark:text-white rounded-tr-none border border-slate-250 dark:border-transparent'
                             : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 rounded-tl-none'
                         }`}
                       >
@@ -2625,8 +2686,8 @@ export default function ChatDashboard() {
                           target="_blank"
                           rel="noreferrer"
                           className={`flex items-center justify-between gap-3 mb-2.5 p-3 rounded-xl border transition-all duration-300 ${
-                            isMe 
-                              ? 'bg-white dark:bg-white/10 hover:bg-slate-50 dark:hover:bg-white/15 border-slate-200 dark:border-white/20 text-slate-900 dark:text-white' 
+                            isMe
+                              ? 'bg-white dark:bg-white/10 hover:bg-slate-50 dark:hover:bg-white/15 border-slate-200 dark:border-white/20 text-slate-900 dark:text-white'
                               : 'bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200'
                           }`}
                         >
@@ -2716,11 +2777,11 @@ export default function ChatDashboard() {
                       )}
 
                       {/* Emojis hover popup (centered above bubble to prevent cut-off) */}
-                      <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 hidden group-hover:flex gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-20">
+                      <div className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 ${openReactionMessageId === msg._id ? 'flex' : 'hidden group-hover:flex'} gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-30`}>
                         {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emo) => (
                           <button
                             key={emo}
-                            onClick={() => reactToMessage(msg._id, emo)}
+                            onClick={() => { void reactToMessage(msg._id, emo); setOpenReactionMessageId(null); }}
                             className="hover:scale-125 transition-transform"
                           >
                             {emo}
@@ -2732,15 +2793,18 @@ export default function ChatDashboard() {
                       <div className={`absolute top-1/2 -translate-y-1/2 hidden group-hover:flex gap-1.5 px-2 py-1 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-20 ${
                         isMe ? 'right-full mr-2' : 'left-full ml-2'
                       }`}>
+                        <button onClick={() => setOpenReactionMessageId((current) => current === msg._id ? null : msg._id)} className="text-slate-400 hover:text-amber-300" title="React" aria-expanded={openReactionMessageId === msg._id}>
+                          <Smile className="h-3.5 w-3.5" />
+                        </button>
                         <button onClick={() => setReplyingTo(msg)} className="text-slate-400 hover:text-white" title="Reply">
                           <CornerUpLeft className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => handleTranslateMessage(msg, 'Spanish')} className="text-indigo-400 hover:text-white" title="Translate">
                           <Languages className="h-3.5 w-3.5" />
                         </button>
-                        <button 
-                          onClick={() => togglePinChatMessage(activeChat._id, msg._id)} 
-                          className={`transition-colors ${activeChat.pinnedMessages?.includes(msg._id) ? 'text-amber-500 hover:text-red-500' : 'text-slate-400 hover:text-amber-400'}`} 
+                        <button
+                          onClick={() => togglePinChatMessage(activeChat._id, msg._id)}
+                          className={`transition-colors ${activeChat.pinnedMessages?.includes(msg._id) ? 'text-amber-500 hover:text-red-500' : 'text-slate-400 hover:text-amber-400'}`}
                           title={activeChat.pinnedMessages?.includes(msg._id) ? 'Unpin' : 'Pin'}
                         >
                           <Pin className="h-3.5 w-3.5 rotate-45" />
@@ -2787,7 +2851,7 @@ export default function ChatDashboard() {
 
             {/* Bottom input area */}
             <div className="p-2.5 sm:p-4 border-t border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shrink-0">
-              
+
               {/* Replying feedback */}
               {replyingTo && (
                 <div className="mb-2 p-2 px-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
@@ -2817,9 +2881,9 @@ export default function ChatDashboard() {
                       <p className="text-[10px] text-slate-500 font-medium">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                     </div>
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} 
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
                     className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-650 dark:hover:text-slate-300 transition-colors"
                   >
                     <X className="h-4 w-4" />
@@ -2913,7 +2977,7 @@ export default function ChatDashboard() {
                       placeholder="Type a message..."
                       className="w-full h-11 pl-4 pr-18 rounded-xl text-sm font-medium glass-input text-slate-800 dark:text-white placeholder:text-slate-500"
                     />
-                    
+
                     {/* Speech Recognition Sparkles trigger */}
                     <button
                       type="button"
@@ -2938,7 +3002,7 @@ export default function ChatDashboard() {
 
                 <button
                   type="submit"
-                  disabled={!aiConsent || aiChatLoading}
+                  disabled={!messageText.trim() && !selectedFile}
                   className="h-11 w-11 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20"
                 >
                   <Send className="h-5 w-5" />
@@ -2959,7 +3023,7 @@ export default function ChatDashboard() {
             (() => {
               const community = communities.find(c => c._id === activeChat.communityId);
               const isCommAdmin = community && (community.creatorId === user?._id || community.admins.some((a: any) => (typeof a === 'string' ? a === user?._id : a._id === user?._id)));
-              
+
               return (
                 <div className="w-80 md:w-96 border-l border-slate-200 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md flex flex-col h-full shrink-0 z-10 overflow-hidden animate-in slide-in-from-right duration-300">
                   <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
@@ -3097,8 +3161,8 @@ export default function ChatDashboard() {
               {/* Header */}
               <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
                 <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Group Details</span>
-                <button 
-                  onClick={() => setIsGroupInfoOpen(false)} 
+                <button
+                  onClick={() => setIsGroupInfoOpen(false)}
                   className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white"
                 >
                   <X className="h-4.5 w-4.5" />
@@ -3165,7 +3229,7 @@ export default function ChatDashboard() {
                     </div>
                     <h3 className="text-base font-bold text-slate-850 dark:text-white truncate">{activeChat.name}</h3>
                     <p className="text-xs text-slate-500 mt-1">{activeChat.description || 'No group description provided.'}</p>
-                    
+
                     {(() => {
                       const isOwner = activeChat.creatorId === user?._id || activeChat.ownerId === user?._id;
                       const isAdmin = activeChat.admins?.some((adm: any) => (typeof adm === 'string' ? adm === user?._id : adm._id === user?._id));
@@ -3257,20 +3321,20 @@ export default function ChatDashboard() {
                 {(() => {
                   const isOwner = activeChat.creatorId === user?._id || activeChat.ownerId === user?._id;
                   const isAdmin = activeChat.admins?.some((adm: any) => (typeof adm === 'string' ? adm === user?._id : adm._id === user?._id));
-                  
+
                   if (!isOwner && !isAdmin) return null;
-                  
+
                   return (
                     <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-4 text-left">
                       <div className="flex items-center justify-between">
                         <h4 className="text-xs font-bold text-slate-800 dark:text-slate-300">Group Settings</h4>
                         <Settings className="h-4 w-4 text-indigo-500" />
                       </div>
-                      
+
                       {/* Slow Mode dropdown */}
                       <div className="space-y-1">
                         <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-500">Slow Mode Delay</label>
-                        <select 
+                        <select
                           value={activeChat.slowMode || 0}
                           onChange={(e) => handleUpdateGroupSettings({ slowMode: Number(e.target.value) })}
                           className="w-full h-8 rounded-lg text-[10px] px-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 outline-none"
@@ -3289,7 +3353,7 @@ export default function ChatDashboard() {
                           <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-500">Announcement Mode</label>
                           <p className="text-[7.5px] text-slate-500">Only admins can post messages</p>
                         </div>
-                        <input 
+                        <input
                           type="checkbox"
                           checked={activeChat.announcementMode || false}
                           onChange={(e) => handleUpdateGroupSettings({ announcementMode: e.target.checked })}
@@ -3303,7 +3367,7 @@ export default function ChatDashboard() {
                           <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-500">Approval Gate</label>
                           <p className="text-[7.5px] text-slate-500">Require admin consent to join</p>
                         </div>
-                        <input 
+                        <input
                           type="checkbox"
                           checked={activeChat.approvalRequired || false}
                           onChange={(e) => handleUpdateGroupSettings({ approvalRequired: e.target.checked })}
@@ -3311,6 +3375,10 @@ export default function ChatDashboard() {
                         />
                       </div>
 
+
+                      {groupJoinRequests.length > 0 && (
+                        <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3"><p className="text-[9px] uppercase tracking-wider font-bold text-slate-500">Pending join requests</p>{groupJoinRequests.map((request) => (<div key={request._id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-slate-950 p-2"><span className="text-xs font-semibold truncate">{request.userId?.username || 'User'}</span><div className="flex gap-1"><button onClick={() => handleGroupJoinRequest(request._id, 'approve')} className="px-2 py-1 rounded bg-emerald-500 text-white text-[9px] font-bold">Approve</button><button onClick={() => handleGroupJoinRequest(request._id, 'reject')} className="px-2 py-1 rounded bg-red-500 text-white text-[9px] font-bold">Reject</button></div></div>))}</div>
+                      )}
                       {/* Group Rules */}
                       <div className="space-y-1">
                         <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-500">Group Guidelines / Rules</label>
@@ -3366,7 +3434,7 @@ export default function ChatDashboard() {
                       const isOwner = member._id === activeChat.creatorId || member._id === activeChat.ownerId;
                       const isAdmin = activeChat.admins?.some((adm: any) => (typeof adm === 'string' ? adm === member._id : adm._id === member._id));
                       const isMod = activeChat.moderators?.some((mod: any) => (typeof mod === 'string' ? mod === member._id : mod._id === member._id));
-                      
+
                       const isMe = member._id === (user?._id || user?.id);
                       const myRole = activeChat.creatorId === user?._id || activeChat.ownerId === user?._id
                         ? 'owner'
@@ -3503,7 +3571,7 @@ export default function ChatDashboard() {
 
               {/* Scroll Container */}
               <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                
+
                 {/* Banner & Logo */}
                 <div className="relative rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center pb-4">
                   <div className="h-20 w-full bg-indigo-500 overflow-hidden">
@@ -3602,7 +3670,7 @@ export default function ChatDashboard() {
                   return (
                     <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-250 dark:border-slate-800/80 rounded-2xl text-left space-y-4">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Server Settings</span>
-                      
+
                       {isEditingCommunity ? (
                         <div className="space-y-3">
                           <div className="space-y-1">
@@ -3726,10 +3794,10 @@ export default function ChatDashboard() {
                     {activeCommunity.members?.map((member: any) => {
                       const isOwner = member._id === activeCommunity.creatorId;
                       const isAdmin = activeCommunity.admins?.some((adm: any) => (typeof adm === 'string' ? adm === member._id : adm._id === member._id));
-                      
+
                       const customMemberRole = activeCommunity.memberRoles?.find((mr: any) => mr.userId.toString() === member._id.toString());
                       const customRoleObj = activeCommunity.roles?.find((r: any) => r.name === customMemberRole?.roleName);
-                      
+
                       return (
                         <div key={member._id} className="flex items-center gap-2 p-1 hover:bg-slate-50 dark:hover:bg-slate-905 rounded-lg">
                           <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0">
@@ -3745,7 +3813,7 @@ export default function ChatDashboard() {
                               <p className="text-[7.5px] text-slate-500">{isOwner ? 'Server Owner' : isAdmin ? 'Administrator' : 'Member'}</p>
                             )}
                           </div>
-                          
+
                           {/* Role Selector Trigger */}
                           {isCommAdmin && member._id !== user?._id && (
                             <select
@@ -3784,8 +3852,8 @@ export default function ChatDashboard() {
               {/* Header */}
               <div className="h-16 border-b border-slate-200 dark:border-slate-800/60 px-4 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md shrink-0">
                 <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Contact Profile</span>
-                <button 
-                  onClick={() => setIsGroupInfoOpen(false)} 
+                <button
+                  onClick={() => setIsGroupInfoOpen(false)}
                   className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white"
                 >
                   <X className="h-4.5 w-4.5" />
@@ -3862,7 +3930,7 @@ export default function ChatDashboard() {
             className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
           >
             <div className="w-full max-w-3xl glass-panel rounded-[24px] sm:rounded-[32px] overflow-hidden p-4 sm:p-6 shadow-2xl relative flex flex-col items-center justify-center gap-4 sm:gap-6">
-              
+
               {/* Outgoing Panel */}
               {callStore.callStatus === 'outgoing' && (
                 <div className="text-center space-y-4">
@@ -3884,11 +3952,11 @@ export default function ChatDashboard() {
                   <div className="flex gap-4 justify-center">
                     <button
                       onClick={() => {
-                        if (callStore.callerId && callStore.incomingOffer) {
+                        if (callStore.callerId && (callStore.isGroupCall || callStore.incomingOffer)) {
                           answerCall(callStore.callerId, callStore.incomingOffer);
                         }
                       }}
-                      disabled={!callStore.incomingOffer}
+                      disabled={!callStore.isGroupCall && !callStore.incomingOffer}
                       className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-full text-sm font-bold shadow-lg shadow-emerald-500/20"
                     >
                       Accept
@@ -3906,22 +3974,35 @@ export default function ChatDashboard() {
               {/* Connected Video Layout */}
               {callStore.callStatus === 'connected' && (
                 <div className="w-full aspect-video rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 relative">
-                  {/* Remote Video Stream */}
+                  {/* Responsive participant grid for direct and group calls */}
                   {callStore.callType === 'video' ? (
-                    <video
-                      ref={remoteVideoRef}
-                      autoPlay
-                      playsInline
-                      className={`h-full w-full object-cover transition-all duration-300 ${isBgBlurActive ? 'blur-md' : ''}`}
-                    />
+                    callStore.isGroupCall ? (
+                      <div className={`h-full w-full grid gap-2 p-2 ${Object.keys(callStore.remoteParticipants).length >= 3 ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                        <div className="relative rounded-xl overflow-hidden bg-slate-850 border border-white/10 min-h-0">
+                          <video ref={localVideoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                          <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white">You</span>
+                        </div>
+                        {Object.values(callStore.remoteParticipants).map((participant) => (
+                          <div key={participant.userId} className="relative rounded-xl overflow-hidden bg-slate-850 border border-white/10 min-h-0">
+                            <video ref={(element) => { if (element) element.srcObject = participant.stream; }} autoPlay playsInline className="h-full w-full object-cover" />
+                            <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white">{participant.name || 'Participant'}</span>
+                          </div>
+                        ))}
+                        {Object.keys(callStore.remoteParticipants).length === 0 && (
+                          <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-700 text-sm text-slate-400">Waiting for group members to join…</div>
+                        )}
+                      </div>
+                    ) : (
+                      <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover transition-all duration-300 ${isBgBlurActive ? 'blur-md' : ''}`} />
+                    )
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center bg-slate-900">
-                      <Volume2 className="h-16 w-16 text-indigo-400" />
+                    <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950/50 gap-4">
+                      <div className="h-24 w-24 rounded-full bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center"><Volume2 className="h-12 w-12 text-indigo-300" /></div>
+                      <p className="text-sm font-semibold text-slate-300">{callStore.isGroupCall ? `${Object.keys(callStore.remoteParticipants).length + 1} people in this voice call` : 'Voice call connected'}</p>
                     </div>
                   )}
-
                   {/* Local video thumbnail (PIP) */}
-                  {callStore.callType === 'video' && (
+                  {callStore.callType === 'video' && !callStore.isGroupCall && (
                     <div className="absolute top-4 right-4 w-40 aspect-video rounded-lg overflow-hidden border border-slate-700 bg-slate-900 shadow-xl">
                       <video
                         ref={localVideoRef}
@@ -3987,7 +4068,7 @@ export default function ChatDashboard() {
                         >
                           <Share2 className="h-5 w-5" />
                         </button>
-                        
+
                         {/* Background Blur */}
                         <button
                           onClick={() => setIsBgBlurActive(!isBgBlurActive)}
@@ -4084,6 +4165,7 @@ export default function ChatDashboard() {
                 if (e.target === e.currentTarget) {
                   setCreateGroupOpen(false);
                   setIsBroadcastGroup(false);
+      setGroupApprovalRequired(false);
                   setGroupParticipants([]);
                   setContactSearchQuery('');
                 }
@@ -4107,13 +4189,14 @@ export default function ChatDashboard() {
                     </div>
                     <span className="tracking-tight">Create Group</span>
                   </h3>
-                  <button 
-                    onClick={() => { 
-                      setCreateGroupOpen(false); 
-                      setIsBroadcastGroup(false); 
-                      setGroupParticipants([]); 
+                  <button
+                    onClick={() => {
+                      setCreateGroupOpen(false);
+                      setIsBroadcastGroup(false);
+      setGroupApprovalRequired(false);
+                      setGroupParticipants([]);
                       setContactSearchQuery('');
-                    }} 
+                    }}
                     className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                   >
                     <X className="h-5 w-5" />
@@ -4132,7 +4215,7 @@ export default function ChatDashboard() {
                         className="w-full h-10 rounded-xl text-xs font-semibold pl-3 pr-8 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/10 focus:shadow-[0_0_12px_rgba(99,102,241,0.15)]"
                       />
                       {groupName.trim() && (
-                        <button 
+                        <button
                           onClick={() => setGroupName('')}
                           className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
                         >
@@ -4143,11 +4226,11 @@ export default function ChatDashboard() {
                   </div>
 
                   {/* Broadcast Option */}
-                  <div 
+                  <div
                     onClick={() => setIsBroadcastGroup(!isBroadcastGroup)}
                     className={`flex items-center justify-between p-3 rounded-2xl border transition-all duration-300 cursor-pointer select-none ${
-                      isBroadcastGroup 
-                        ? 'bg-indigo-500/10 border-indigo-500/30 dark:bg-indigo-500/10 dark:border-indigo-500/35 shadow-[0_0_12px_rgba(99,102,241,0.05)]' 
+                      isBroadcastGroup
+                        ? 'bg-indigo-500/10 border-indigo-500/30 dark:bg-indigo-500/10 dark:border-indigo-500/35 shadow-[0_0_12px_rgba(99,102,241,0.05)]'
                         : 'bg-slate-50/50 dark:bg-slate-950/20 border-slate-200/60 dark:border-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-950/30'
                     }`}
                   >
@@ -4164,13 +4247,18 @@ export default function ChatDashboard() {
                         </span>
                       </div>
                     </div>
-                    
+
                     {/* Custom Toggle Switch */}
                     <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-300 shrink-0 ${isBroadcastGroup ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
                       <div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform duration-300 ${isBroadcastGroup ? 'translate-x-3.5' : 'translate-x-0'}`} />
                     </div>
                   </div>
 
+
+                  <div onClick={() => setGroupApprovalRequired((value) => !value)} className="flex items-center justify-between p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800/40 cursor-pointer select-none bg-slate-50/50 dark:bg-slate-950/20">
+                    <div className="flex items-start gap-2.5"><Shield className={`h-4 w-4 mt-0.5 ${groupApprovalRequired ? 'text-amber-500' : 'text-emerald-500'}`} /><div className="text-left"><span className="text-xs font-bold text-slate-850 dark:text-white">{groupApprovalRequired ? 'Private group' : 'Public group'}</span><p className="text-[10px] text-slate-500">{groupApprovalRequired ? 'New members require administrator approval.' : 'Anyone with the room link can join immediately.'}</p></div></div>
+                    <div className={`w-8 h-4.5 rounded-full p-0.5 ${groupApprovalRequired ? 'bg-amber-500' : 'bg-emerald-500'}`}><div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform ${groupApprovalRequired ? 'translate-x-3.5' : ''}`} /></div>
+                  </div>
                   {/* Member selection */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -4181,7 +4269,7 @@ export default function ChatDashboard() {
                         </span>
                       )}
                     </div>
-                    
+
                     {contactsList.length > 0 && (
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -4193,7 +4281,7 @@ export default function ChatDashboard() {
                           className="w-full h-8 rounded-lg text-xs pl-8 pr-7 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-slate-800 dark:text-white"
                         />
                         {contactSearchQuery && (
-                          <button 
+                          <button
                             onClick={() => setContactSearchQuery('')}
                             className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400"
                           >
@@ -4202,15 +4290,15 @@ export default function ChatDashboard() {
                         )}
                       </div>
                     )}
-                    
+
                     <div className="max-h-[160px] overflow-y-auto space-y-1.5 pr-1 custom-scrollbar animate-fadeIn">
                       {contactsList.length > 0 ? (
                         filteredContacts.length > 0 ? (
                           filteredContacts.map((contact) => {
                             const isSelected = groupParticipants.includes(contact._id);
                             return (
-                              <div 
-                                key={contact._id} 
+                              <div
+                                key={contact._id}
                                 onClick={() => {
                                   if (isSelected) {
                                     setGroupParticipants(groupParticipants.filter(id => id !== contact._id));
@@ -4219,8 +4307,8 @@ export default function ChatDashboard() {
                                   }
                                 }}
                                 className={`flex items-center justify-between p-2 rounded-xl border transition-all duration-200 cursor-pointer ${
-                                  isSelected 
-                                    ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 dark:bg-indigo-500/10 dark:border-indigo-500/35' 
+                                  isSelected
+                                    ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 dark:bg-indigo-500/10 dark:border-indigo-500/35'
                                     : 'bg-transparent border-slate-200/50 dark:border-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-950/30 text-slate-700 dark:text-slate-350'
                                 }`}
                               >
@@ -4236,11 +4324,11 @@ export default function ChatDashboard() {
                                   </div>
                                   <span className="text-xs font-bold truncate">{contact.username}</span>
                                 </div>
-                                
+
                                 {/* Custom Checkbox */}
                                 <div className={`h-4 w-4 rounded border transition-all flex items-center justify-center shrink-0 ${
-                                  isSelected 
-                                    ? 'bg-indigo-500 border-indigo-500 text-white shadow-sm shadow-indigo-500/20' 
+                                  isSelected
+                                    ? 'bg-indigo-500 border-indigo-500 text-white shadow-sm shadow-indigo-500/20'
                                     : 'border-slate-300 dark:border-slate-800 bg-transparent'
                                 }`}>
                                   {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
@@ -4313,8 +4401,8 @@ export default function ChatDashboard() {
                   </div>
                   <span className="tracking-tight">New Community</span>
                 </h3>
-                <button 
-                  onClick={() => setCreateCommunityOpen(false)} 
+                <button
+                  onClick={() => setCreateCommunityOpen(false)}
                   className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                 >
                   <X className="h-5 w-5" />
@@ -4333,7 +4421,7 @@ export default function ChatDashboard() {
                       className="w-full h-10 rounded-xl text-xs font-semibold pl-3 pr-8 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/10 focus:shadow-[0_0_12px_rgba(99,102,241,0.15)]"
                     />
                     {communityName.trim() && (
-                      <button 
+                      <button
                         onClick={() => setCommunityName('')}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
                       >
@@ -4342,7 +4430,7 @@ export default function ChatDashboard() {
                     )}
                   </div>
                 </div>
-                
+
                 <div className="space-y-1">
                   <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Description</label>
                   <textarea
@@ -4429,12 +4517,12 @@ export default function ChatDashboard() {
       {/* 10. Connect via Code Modal Overlay */}
       <AnimatePresence>
         {connectModalOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
-                setConnectModalOpen(false); 
-                setMyConnectionCode(''); 
+                setConnectModalOpen(false);
+                setMyConnectionCode('');
                 setMyCodeExpiresAt(null);
                 setEnterConnectionCode('');
                 setConnectError('');
@@ -4442,7 +4530,7 @@ export default function ChatDashboard() {
               }
             }}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
@@ -4460,15 +4548,15 @@ export default function ChatDashboard() {
                   </div>
                   <span className="tracking-tight">Connect with Code</span>
                 </h3>
-                <button 
-                  onClick={() => { 
-                    setConnectModalOpen(false); 
-                    setMyConnectionCode(''); 
+                <button
+                  onClick={() => {
+                    setConnectModalOpen(false);
+                    setMyConnectionCode('');
                     setMyCodeExpiresAt(null);
                     setEnterConnectionCode('');
                     setConnectError('');
                     setConnectSuccess('');
-                  }} 
+                  }}
                   className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                 >
                   <X className="h-5 w-5" />
@@ -4509,7 +4597,7 @@ export default function ChatDashboard() {
               <div className="space-y-4 text-center relative z-10">
                 <div>
                   <p className="text-[9.5px] font-black text-slate-500 dark:text-slate-455 uppercase tracking-widest mb-2.5">Share Your Temporary Code</p>
-                  
+
                   {myConnectionCode ? (
                     <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-500/5 to-purple-500/5 dark:from-indigo-550/10 dark:to-purple-550/10 border border-indigo-500/15 dark:border-indigo-500/25 flex flex-col items-center gap-2.5 shadow-inner">
                       <span className="text-4xl font-extrabold tracking-[0.2em] bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 font-mono select-all">
@@ -4553,15 +4641,15 @@ export default function ChatDashboard() {
       </AnimatePresence>
 
       {/* Footer Branding Widget */}
-      <div 
+      <div
         ref={brandingRef}
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-2 pointer-events-auto select-none"
+        className="fixed bottom-20 right-4 z-40 flex items-center gap-2 pointer-events-auto select-none"
         onMouseEnter={() => setBrandingHovered(true)}
         onMouseLeave={() => setBrandingHovered(false)}
       >
         <AnimatePresence>
           {(showBrandingLabel || brandingHovered) && (
-            <motion.a 
+            <motion.a
               href="https://www.linkedin.com/in/samaksh-rastogi-9638b9254/"
               target="_blank"
               rel="noopener noreferrer"
@@ -4577,8 +4665,8 @@ export default function ChatDashboard() {
             </motion.a>
           )}
         </AnimatePresence>
-        
-        <button 
+
+        <button
           onClick={() => setShowBrandingLabel((current) => !current)}
           className="h-10 w-10 rounded-full bg-[#0f172a] dark:bg-slate-950 flex items-center justify-center text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)] shrink-0 transition-all hover:scale-105 active:scale-95 cursor-pointer"
           title="Developer Info"

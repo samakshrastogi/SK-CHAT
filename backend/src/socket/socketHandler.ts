@@ -18,6 +18,7 @@ export const socketHandler = (io: Server) => {
   // Wire the notification service so it can emit real-time events
   initNotificationService(io);
   const activeSocketsByUser = new Map<string, Set<string>>();
+  const activeGroupCalls = new Map<string, Set<string>>();
 
   // ── Authentication middleware ────────────────────────────────────────────
   io.use(async (socket: Socket, next) => {
@@ -276,6 +277,55 @@ export const socketHandler = (io: Server) => {
     });
 
     // ── WebRTC Calling Signaling ───────────────────────────────────────────
+    // Authorized mesh group-call signaling.
+    socket.on('call:initiate-group', async ({ chatId, callId, type }) => {
+      const call = await Call.findOne({ _id: callId, chatId, callerId: user.id, participants: user.id }).lean();
+      if (!call) return;
+      const room = `call:${callId}`;
+      socket.join(room);
+      activeGroupCalls.set(callId, new Set([user.id]));
+      await Call.findByIdAndUpdate(callId, { status: 'ringing' });
+      for (const participant of call.participants || []) {
+        const participantId = participant.toString();
+        if (participantId !== user.id) io.to(`user:${participantId}`).emit('call:incoming', {
+          callerId: user.id, callerName: user.username, callId, chatId, type, isGroupCall: true,
+        });
+      }
+    });
+
+    socket.on('call:join-group', async ({ callId }) => {
+      if (!await Call.exists({ _id: callId, participants: user.id })) return;
+      const room = `call:${callId}`;
+      const joined = activeGroupCalls.get(callId) || new Set<string>();
+      socket.join(room);
+      socket.to(room).emit('call:participant-joined', { userId: user.id, username: user.username });
+      joined.add(user.id); activeGroupCalls.set(callId, joined);
+      await Call.findByIdAndUpdate(callId, { status: 'connected' });
+    });
+
+    const relayGroupSignal = async (event: string, targetId: string, callId: string, payload: Record<string, unknown>) => {
+      const joined = activeGroupCalls.get(callId);
+      if (!joined?.has(user.id) || !joined.has(targetId)) return;
+      if (await Call.exists({ _id: callId, participants: { $all: [user.id, targetId] } })) {
+        io.to(`user:${targetId}`).emit(event, { senderId: user.id, senderName: user.username, ...payload });
+      }
+    };
+    socket.on('call:peer-offer', ({ targetId, callId, offer }) => relayGroupSignal('call:peer-offer', targetId, callId, { offer }));
+    socket.on('call:peer-answer', ({ targetId, callId, answer }) => relayGroupSignal('call:peer-answer', targetId, callId, { answer }));
+    socket.on('call:peer-candidate', ({ targetId, callId, candidate }) => relayGroupSignal('call:peer-candidate', targetId, callId, { candidate }));
+
+    socket.on('call:leave-group', async ({ callId }) => {
+      const joined = activeGroupCalls.get(callId);
+      if (!joined?.has(user.id)) return;
+      joined.delete(user.id); socket.leave(`call:${callId}`);
+      socket.to(`call:${callId}`).emit('call:participant-left', { userId: user.id });
+      if (joined.size === 0) activeGroupCalls.delete(callId); else activeGroupCalls.set(callId, joined);
+      const call = await Call.findById(callId);
+      if (call && call.callerId.toString() === user.id) {
+        call.status = 'completed'; call.endedAt = new Date(); await call.save();
+        io.to(`call:${callId}`).emit('call:ended', { senderId: user.id }); activeGroupCalls.delete(callId);
+      }
+    });
     socket.on('call:initiate', async ({ receiverId, callId, type, offer }) => {
       const call = await Call.findOne({ _id: callId, callerId: user.id, receiverId });
       if (!call) return;
@@ -387,6 +437,16 @@ export const socketHandler = (io: Server) => {
         const connectedUserSockets = await io.in(`user:${user.id}`).fetchSockets();
         if (connectedUserSockets.length > 0) return;
 
+        for (const [callId, joined] of activeGroupCalls) {
+          if (!joined.delete(user.id)) continue;
+          io.to(`call:${callId}`).emit('call:participant-left', { userId: user.id });
+          const call = await Call.findById(callId);
+          if (call?.callerId.toString() === user.id) {
+            call.status = 'completed'; call.endedAt = new Date(); await call.save();
+            io.to(`call:${callId}`).emit('call:ended', { senderId: user.id });
+            activeGroupCalls.delete(callId);
+          } else if (joined.size === 0) activeGroupCalls.delete(callId);
+        }
         const lastSeen = new Date();
         await User.findByIdAndUpdate(user.id, { status: 'offline', lastSeen });
         const userChats = await Chat.find({ participants: user.id });

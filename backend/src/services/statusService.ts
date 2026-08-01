@@ -9,16 +9,13 @@ export const buildStatusVisibilityQuery = (
   $or: [
     { userId: new Types.ObjectId(viewerId) },
     {
-      audience: 'public',
-      excludedUsers: { $ne: new Types.ObjectId(viewerId) },
-    },
-    {
       audience: 'contacts',
       userId: { $in: friendIds.map((id) => new Types.ObjectId(id.toString())) },
       excludedUsers: { $ne: new Types.ObjectId(viewerId) },
     },
     {
       audience: 'selected',
+      userId: { $in: friendIds.map((id) => new Types.ObjectId(id.toString())) },
       allowedUsers: new Types.ObjectId(viewerId),
       excludedUsers: { $ne: new Types.ObjectId(viewerId) },
     },

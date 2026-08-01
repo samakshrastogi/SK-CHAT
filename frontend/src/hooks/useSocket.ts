@@ -281,8 +281,8 @@ export const useSocket = () => {
     });
 
     // WebRTC Signaling
-    socket.on('call:incoming', ({ callerId, callerName, callId, type, offer }) => {
-      setIncomingCall(callerId, callerName, callId, type, offer);
+    socket.on('call:incoming', ({ callerId, callerName, callId, type, offer, isGroupCall, chatId }) => {
+      setIncomingCall(callerId, callerName, callId, type, offer, { isGroupCall, chatId });
     });
 
     socket.on('call:ended', () => {

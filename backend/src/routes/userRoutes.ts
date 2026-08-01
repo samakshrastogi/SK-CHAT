@@ -38,14 +38,14 @@ router.put(
   updateProfile as any
 );
 
-router.get('/search', searchUsers as any);
+router.get('/search', (_req, res) => res.status(200).json({ success: true, users: [], message: 'User discovery is disabled. Connect using a temporary code.' }));
 router.put('/theme', updateThemeSettings as any);
 router.post('/block', blockUser as any);
 router.get('/blocked', getBlockedUsers as any);
 
-router.get('/discovery', getDiscoveryUsers as any);
-router.post('/friends/request', sendFriendRequest as any);
-router.post('/friends/accept', acceptFriendRequest as any);
+router.get('/discovery', (_req, res) => res.status(200).json({ success: true, recentlyJoined: [], suggestedUsers: [] }));
+router.post('/friends/request', (_req, res) => res.status(410).json({ success: false, message: 'Connections can only be created with a temporary code.' }));
+router.post('/friends/accept', (_req, res) => res.status(410).json({ success: false, message: 'Connections can only be created with a temporary code.' }));
 router.post('/friends/reject', rejectFriendRequest as any);
 router.post('/friends/cancel', cancelFriendRequest as any);
 router.post('/friends/remove', removeFriend as any);

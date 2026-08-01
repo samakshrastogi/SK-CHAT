@@ -3,13 +3,13 @@ import { Types } from 'mongoose';
 import { buildStatusVisibilityQuery, presentStatus } from './statusService.js';
 
 describe('story privacy and presentation', () => {
-  it('builds audience clauses for self, public, contacts, and selected viewers', () => {
+  it('builds audience clauses only for self and personal connections', () => {
     const viewer = new Types.ObjectId();
     const friend = new Types.ObjectId();
     const query = buildStatusVisibilityQuery(viewer.toString(), [friend]);
-    expect(query.$or).toHaveLength(4);
-    expect(query.$or[2]).toMatchObject({ audience: 'contacts' });
-    expect(query.$or[3]).toMatchObject({ audience: 'selected' });
+    expect(query.$or).toHaveLength(3);
+    expect(query.$or[1]).toMatchObject({ audience: 'contacts' });
+    expect(query.$or[2]).toMatchObject({ audience: 'selected', userId: { $in: [friend] } });
   });
 
   it('hides voter identities and private answers from viewers', () => {

@@ -3,252 +3,188 @@ import { toast } from '../store/toastStore.js';
 import { useCallStore } from '../store/callStore.js';
 import { apiClient } from '../api/client.js';
 
-
 export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
-  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const ringTimeoutRef = useRef<number | null>(null);
-  const clearRingTimeout = () => {
-    if (ringTimeoutRef.current) window.clearTimeout(ringTimeoutRef.current);
-    ringTimeoutRef.current = null;
-  };
+  const clearRingTimeout = () => { if (ringTimeoutRef.current) window.clearTimeout(ringTimeoutRef.current); ringTimeoutRef.current = null; };
   const getRtcConfiguration = async (): Promise<RTCConfiguration> => {
     const response = await apiClient.get('/calls/ice-servers');
     return { iceServers: response.data.iceServers };
   };
-  const callStore = useCallStore();
+  const state = () => useCallStore.getState();
 
-  const startLocalStream = async (type: 'voice' | 'video', audioDeviceId?: string, videoDeviceId?: string) => {
+  const startLocalStream = async (type: 'voice' | 'video') => {
+    const existing = state().localStream;
+    if (existing) return existing;
     try {
-      const constraints = {
-        audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true,
-        video: type === 'video' ? { width: 1280, height: 720, facingMode: 'user', ...(videoDeviceId ? { deviceId: { exact: videoDeviceId } } : {}) } : false
-      };
-      
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      callStore.setLocalStream(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+      });
+      state().setLocalStream(stream);
       return stream;
-    } catch (err: any) {
-      console.error('Error getting media devices:', err.message);
+    } catch (error) {
       toast.error('Could not open camera or microphone. Please grant access.');
-      throw err;
+      throw error;
     }
   };
 
-  const initializePeerConnection = async (
-    localStream: MediaStream,
-    targetId: string,
-    onRemoteStream: (stream: MediaStream) => void,
-    callId: string
-  ) => {
-    const pc = new RTCPeerConnection(await getRtcConfiguration());
-    pcRef.current = pc;
-
-    // Add local tracks to peer
-    localStream.getTracks().forEach((track) => {
-      pc.addTrack(track, localStream);
-    });
-
-    // Remote track listener
-    pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        onRemoteStream(event.streams[0]);
-      }
+  const createPeer = async (targetId: string, callId: string, localStream: MediaStream, group = false, name?: string) => {
+    const existing = peersRef.current.get(targetId);
+    if (existing) return existing;
+    const peer = new RTCPeerConnection(await getRtcConfiguration());
+    peersRef.current.set(targetId, peer);
+    state().setPeerConnection(targetId, peer);
+    localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
+    peer.ontrack = (event) => {
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      state().setCallConnected(stream, peer, targetId, name);
     };
-
-    // Gather ICE candidates and emit to peer
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socketEmit('call:candidate', {
-          targetId,
-          callId,
-          candidate: event.candidate
-        });
-      }
+    peer.onicecandidate = (event) => {
+      if (!event.candidate) return;
+      socketEmit(group ? 'call:peer-candidate' : 'call:candidate', {
+        targetId, callId, candidate: event.candidate,
+      });
     };
-
-    return pc;
+    peer.onconnectionstatechange = () => {
+      if (['failed', 'closed'].includes(peer.connectionState)) state().removeRemoteParticipant(targetId);
+    };
+    return peer;
   };
 
   const makeCall = async (receiverId: string, chatId: string, type: 'voice' | 'video') => {
     try {
-      // Create the authorized backend call record before signaling.
       const logResp = await apiClient.post('/calls/start', { receiverId, chatId, type });
       const callId = logResp.data.call._id;
-      callStore.setOutgoingCall(receiverId, callId, type);
-
-      const localStream = await startLocalStream(type);
-      
-      const pc = await initializePeerConnection(localStream, receiverId, (remoteStream) => {
-        callStore.setCallConnected(remoteStream, pc);
-      }, callId);
-
-      // Create SDP Offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // Signal target
-      socketEmit('call:initiate', {
-        receiverId,
-        callId,
-        type,
-        offer
-      });
-
-      // Cache reference to backend call log id in localStorage to end it cleanly
+      state().setOutgoingCall(receiverId, callId, type);
+      const stream = await startLocalStream(type);
+      const peer = await createPeer(receiverId, callId, stream);
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      socketEmit('call:initiate', { receiverId, callId, type, offer });
       localStorage.setItem('active_backend_call_id', callId);
       clearRingTimeout();
       ringTimeoutRef.current = window.setTimeout(() => {
         socketEmit('call:end', { targetId: receiverId, callId });
-        void apiClient.put(`/calls/${callId}/end`, { status: 'missed' });
-        callStore.resetCallStore();
+        void apiClient.put('/calls/' + callId + '/end', { status: 'missed' });
+        state().resetCallStore();
       }, 30_000);
-    } catch (e) {
-      callStore.resetCallStore();
+    } catch {
+      state().resetCallStore();
     }
   };
 
-  const answerCall = async (callerId: string, offer: RTCSessionDescriptionInit) => {
+  const makeGroupCall = async (chatId: string, type: 'voice' | 'video') => {
     try {
-      const localStream = await startLocalStream(callStore.callType || 'video');
-      
-      const callId = callStore.callId;
-      if (!callId) throw new Error('Missing call identifier');
-      const pc = await initializePeerConnection(localStream, callerId, (remoteStream) => {
-        callStore.setCallConnected(remoteStream, pc);
-      }, callId);
-
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      
-      // Create SDP Answer
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      // Signal acceptance
-      socketEmit('call:accept', {
-        callerId,
-        callId,
-        answer
-      });
-    } catch (e) {
-      rejectCall(callerId, 'Failed to establish connection tracks');
+      const response = await apiClient.post('/calls/start', { chatId, type });
+      const callId = response.data.call._id;
+      state().setOutgoingGroupCall(chatId, callId, type);
+      await startLocalStream(type);
+      socketEmit('call:initiate-group', { chatId, callId, type });
+      localStorage.setItem('active_backend_call_id', callId);
+      state().markConnected();
+    } catch {
+      state().resetCallStore();
+      toast.error('Could not start the group call.');
     }
+  };
+
+  const answerCall = async (callerId: string, offer?: RTCSessionDescriptionInit | null) => {
+    const current = state();
+    if (current.isGroupCall) {
+      try {
+        await startLocalStream(current.callType || 'video');
+        socketEmit('call:join-group', { callId: current.callId });
+        current.markConnected();
+      } catch { state().resetCallStore(); }
+      return;
+    }
+    if (!offer || !current.callId) return;
+    try {
+      const stream = await startLocalStream(current.callType || 'video');
+      const peer = await createPeer(callerId, current.callId, stream);
+      await peer.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      socketEmit('call:accept', { callerId, callId: current.callId, answer });
+    } catch { rejectCall(callerId, 'Failed to establish connection tracks'); }
   };
 
   const rejectCall = (callerId: string, reason = 'declined') => {
-    socketEmit('call:reject', { callerId, callId: callStore.callId, reason });
-    callStore.resetCallStore();
+    const current = state();
+    socketEmit(current.isGroupCall ? 'call:leave-group' : 'call:reject', { callerId, callId: current.callId, reason });
+    current.resetCallStore();
   };
 
-  const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
-    if (pcRef.current) {
-      try {
-        await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (e) {
-        console.error('Error adding ICE candidate:', e);
-      }
-    }
+  const handleGroupParticipantJoined = async ({ userId, username }: { userId: string; username?: string }) => {
+    const current = state();
+    if (!current.callId || !current.localStream || userId === current.callerId) return;
+    const peer = await createPeer(userId, current.callId, current.localStream, true, username);
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    socketEmit('call:peer-offer', { targetId: userId, callId: current.callId, offer });
   };
 
-  const handleCallAccepted = async (answer: RTCSessionDescriptionInit) => {
+  const handlePeerOffer = async ({ senderId, senderName, offer }: { senderId: string; senderName?: string; offer: RTCSessionDescriptionInit }) => {
+    const current = state();
+    if (!current.callId) return;
+    const stream = await startLocalStream(current.callType || 'video');
+    const peer = await createPeer(senderId, current.callId, stream, true, senderName);
+    await peer.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peer.createAnswer();
+    await peer.setLocalDescription(answer);
+    socketEmit('call:peer-answer', { targetId: senderId, callId: current.callId, answer });
+  };
+
+  const handlePeerAnswer = async ({ senderId, answer }: { senderId: string; answer: RTCSessionDescriptionInit }) => {
+    await peersRef.current.get(senderId)?.setRemoteDescription(new RTCSessionDescription(answer));
+  };
+  const handleIceCandidate = async (candidate: RTCIceCandidateInit, senderId?: string) => {
+    const peer = senderId ? peersRef.current.get(senderId) : peersRef.current.values().next().value;
+    if (peer) await peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => undefined);
+  };
+  const handleCallAccepted = async (answer: RTCSessionDescriptionInit, receiverId?: string) => {
     clearRingTimeout();
-    if (pcRef.current) {
-      try {
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-      } catch (e) {
-        console.error('Error setting remote description:', e);
-      }
-    }
+    const peer = receiverId ? peersRef.current.get(receiverId) : peersRef.current.values().next().value;
+    if (peer) await peer.setRemoteDescription(new RTCSessionDescription(answer));
+  };
+  const handleParticipantLeft = ({ userId }: { userId: string }) => {
+    peersRef.current.get(userId)?.close(); peersRef.current.delete(userId); state().removeRemoteParticipant(userId);
   };
 
+  const replaceVideoTrack = async (track: MediaStreamTrack) => {
+    await Promise.all([...peersRef.current.values()].map(async (peer) => {
+      const sender = peer.getSenders().find((item) => item.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(track);
+    }));
+  };
   const startScreenShare = async () => {
     try {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const videoTrack = displayStream.getVideoTracks()[0];
-      
-      if (pcRef.current) {
-        const senders = pcRef.current.getSenders();
-        const videoSender = senders.find((s) => s.track?.kind === 'video');
-        
-        if (videoSender) {
-          videoSender.replaceTrack(videoTrack);
-        }
-      }
-
-      callStore.setScreenSharing(true);
-
-      // Handle user stopping screen share from browser default popup controls
-      videoTrack.onended = () => {
-        stopScreenShare();
-      };
-    } catch (e) {
-      console.error('Failed to share screen:', e);
-    }
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const track = stream.getVideoTracks()[0]; await replaceVideoTrack(track); state().setScreenSharing(true);
+      track.onended = () => { void stopScreenShare(); };
+    } catch { toast.error('Screen sharing could not be started.'); }
   };
-
   const stopScreenShare = async () => {
-    try {
-      const { localStream, callType } = callStore;
-      if (!localStream) return;
-
-      // Re-trigger standard user camera stream
-      const constraints = {
-        video: callType === 'video' ? { width: 1280, height: 720 } : false
-      };
-      
-      const freshCamStream = await navigator.mediaDevices.getUserMedia(constraints);
-      const camTrack = freshCamStream.getVideoTracks()[0];
-
-      if (pcRef.current) {
-        const senders = pcRef.current.getSenders();
-        const videoSender = senders.find((s) => s.track?.kind === 'video');
-        if (videoSender && camTrack) {
-          videoSender.replaceTrack(camTrack);
-        }
-      }
-
-      callStore.setScreenSharing(false);
-    } catch (e) {
-      console.error('Failed to stop screen share:', e);
-    }
+    const current = state(); if (!current.localStream || current.callType !== 'video') return;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+    const track = stream.getVideoTracks()[0]; await replaceVideoTrack(track); current.setScreenSharing(false);
   };
-
-  const listMediaDevices = async () => navigator.mediaDevices.enumerateDevices();
 
   const hangUp = async () => {
     clearRingTimeout();
-    const activeCallRecordId = localStorage.getItem('active_backend_call_id');
-    const target = callStore.callerId || callStore.receiverId;
-
-    if (target) {
-      socketEmit('call:end', { targetId: target, callId: callStore.callId });
+    const current = state();
+    if (current.isGroupCall) socketEmit('call:leave-group', { callId: current.callId });
+    else {
+      const target = current.callerId || current.receiverId;
+      if (target) socketEmit('call:end', { targetId: target, callId: current.callId });
     }
-
-    if (activeCallRecordId) {
-      // Put call log completion update in backend
-      try {
-        await apiClient.put(`/calls/${activeCallRecordId}/end`, {
-          status: 'completed'
-        });
-      } catch (err) {}
-      localStorage.removeItem('active_backend_call_id');
-    }
-
-    callStore.resetCallStore();
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
+    if (current.callId) await apiClient.put('/calls/' + current.callId + '/end', { status: 'completed' }).catch(() => undefined);
+    localStorage.removeItem('active_backend_call_id');
+    peersRef.current.forEach((peer) => peer.close()); peersRef.current.clear(); current.resetCallStore();
   };
 
-  return {
-    makeCall,
-    answerCall,
-    rejectCall,
-    handleIceCandidate,
-    handleCallAccepted,
-    startScreenShare,
-    stopScreenShare,
-    hangUp,
-    listMediaDevices
-  };
+  return { makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
+    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleParticipantLeft,
+    startScreenShare, stopScreenShare, hangUp, listMediaDevices: () => navigator.mediaDevices.enumerateDevices() };
 };

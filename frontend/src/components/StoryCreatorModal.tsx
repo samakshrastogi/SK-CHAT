@@ -30,8 +30,8 @@ interface StoryCreatorModalProps {
   setStoryEmojiSliderTarget: (val: string) => void;
   storySliderEnabled: boolean;
   setStorySliderEnabled: (val: boolean) => void;
-  storyAudience: 'public' | 'contacts';
-  setStoryAudience: (val: 'public' | 'contacts') => void;
+  storyAudience: 'contacts';
+  setStoryAudience: (val: 'contacts') => void;
   storyFile: File | null;
   setStoryFile: (file: File | null) => void;
   storyFileUrl: string | null;
@@ -70,7 +70,6 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
   storySliderEnabled,
   setStorySliderEnabled,
   storyAudience,
-  setStoryAudience,
   storyFile,
   setStoryFile,
   storyFileUrl,
@@ -319,10 +318,8 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
               <div className="flex items-end gap-3 justify-end pt-4 border-t border-slate-850 shrink-0">
                 <label className="mr-auto text-[9px] uppercase tracking-wider font-bold text-slate-400">
                   Audience
-                  <select value={storyAudience} onChange={(event) => setStoryAudience(event.target.value as 'public' | 'contacts')} className="block mt-1 h-9 rounded-lg bg-slate-950 border border-slate-700 px-2 text-xs text-white normal-case">
-                    <option value="contacts">Contacts</option>
-                    <option value="public">Public</option>
-                  </select>
+                  <span className="block mt-1 text-xs text-emerald-300 normal-case">Personal connections only</span>
+
                 </label>
                 <button 
                   onClick={onClose}

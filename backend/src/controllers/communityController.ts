@@ -196,6 +196,15 @@ export const joinCommunity = async (req: AuthenticatedRequest, res: Response, ne
 
     if (isCommunityBanned(community, req.user!.id)) throw new CustomError('You are banned from this community', 403);
 
+    if (community.privacyType !== 'public') {
+      await CommunityJoinRequest.findOneAndUpdate(
+        { communityId: community._id, userId: req.user!.id },
+        { $set: { status: 'pending' } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      return res.status(202).json({ success: true, isJoined: false, message: 'Request submitted for administrator approval.' });
+    }
+
     // Check if user is already a member
 
     if (community.members.includes(req.user!.id as any)) {
@@ -494,7 +503,7 @@ export const searchPublicCommunities = async (req: AuthenticatedRequest, res: Re
     }
 
     const communities = await Community.find(query)
-      .select('name description avatar banner members admins welcomeMessage guidelines')
+      .select('name description avatar banner members admins welcomeMessage guidelines inviteCode privacyType')
       .populate('admins', 'username avatar')
       .limit(30);
 

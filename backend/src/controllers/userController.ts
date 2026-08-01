@@ -582,6 +582,21 @@ export const resolveConnectionCode = async (req: AuthenticatedRequest, res: Resp
       throw new CustomError('You cannot connect with yourself', 400);
     }
 
+    const [currentUser, targetUserDocument] = await Promise.all([
+      User.findById(currentUserId).select('blockedUsers'),
+      User.findById(targetUserId).select('blockedUsers'),
+    ]);
+    if (!currentUser || !targetUserDocument) throw new CustomError('User not found', 404);
+    if (currentUser.blockedUsers.some((id) => id.toString() === targetUserId)
+      || targetUserDocument.blockedUsers.some((id) => id.toString() === currentUserId)) {
+      throw new CustomError('Connection is unavailable', 403);
+    }
+
+    await Promise.all([
+      User.findByIdAndUpdate(currentUserId, { $addToSet: { friends: targetUserId } }),
+      User.findByIdAndUpdate(targetUserId, { $addToSet: { friends: currentUserId } }),
+    ]);
+
     // Connect: create or get 1-on-1 chat
     let chat = await Chat.findOne({
       isGroup: false,
