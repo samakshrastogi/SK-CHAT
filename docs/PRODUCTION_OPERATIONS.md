@@ -15,6 +15,8 @@ Configure these as secret values in Render; never commit them:
 
 Set `FRONTEND_URL=https://connect.sk-hub.in`, `BACKEND_URL` to the deployed Render service, and keep `ALLOWED_ORIGINS` limited to owned origins.
 
+Set `REQUIRE_REDIS=true`, `REQUIRE_PERSISTENT_MEDIA=true`, and `REQUIRE_TURN=true` only after their credentials are present. These production gates deliberately stop startup or readiness instead of silently degrading chat delivery, media durability, or calls.
+
 ## Mandatory one-time actions
 
 Repository changes cannot rotate third-party credentials. Before production rollout:
@@ -36,7 +38,7 @@ Repository changes cannot rotate third-party credentials. Before production roll
 6. Deploy the frontend.
 7. Verify SSO, two-user messaging/receipts, one voice call over a non-local network, one media upload, a private story, and global logout.
 
-Do not use `/health` as the deployment gate; it is retained for compatibility. Readiness checks MongoDB, Redis configuration, and Cloudinary configuration.
+Do not use `/health` as the deployment gate; it is retained for compatibility. Readiness checks MongoDB and enforces Redis and Cloudinary when their `REQUIRE_*` production gates are enabled.
 
 ## Rollback
 

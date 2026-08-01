@@ -4,6 +4,7 @@ export interface IStatus extends Document {
   userId: Types.ObjectId;
   type: 'text' | 'image' | 'video' | 'gif';
   content: string;
+  mediaPublicId?: string;
   caption?: string;
   backgroundColor?: string;
   audience: 'public' | 'contacts' | 'selected';
@@ -37,6 +38,7 @@ const StatusSchema = new Schema<IStatus>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   type: { type: String, enum: ['text', 'image', 'video', 'gif'], required: true },
   content: { type: String, required: true, maxlength: 5000 },
+  mediaPublicId: { type: String, select: false },
   caption: { type: String, default: '', maxlength: 1000 },
   backgroundColor: { type: String, default: '#000000' },
   audience: { type: String, enum: ['public', 'contacts', 'selected'], default: 'contacts', index: true },

@@ -35,6 +35,7 @@ export interface IMessage extends Document {
   clientId?: string;
   messageType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice' | 'location' | 'poll' | 'contact';
   mediaUrl?: string;
+  mediaPublicId?: string;
   mediaSize?: number;
   fileName?: string;
   pollData?: IPollData;
@@ -96,6 +97,7 @@ const MessageSchema = new Schema<IMessage>({
     default: 'text'
   },
   mediaUrl: { type: String },
+  mediaPublicId: { type: String, select: false },
   mediaSize: { type: Number },
   fileName: { type: String },
   pollData: { type: PollDataSchema },

@@ -4,7 +4,7 @@ import { Status } from '../models/Status.js';
 import { User } from '../models/User.js';
 import { CustomError } from '../utils/customError.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
-import { uploadMedia } from '../services/cloudinaryService.js';
+import { deleteMedia, uploadMedia } from '../services/cloudinaryService.js';
 import { buildStatusVisibilityQuery, presentStatus } from '../services/statusService.js';
 import { createNotification } from '../services/notificationService.js';
 
@@ -14,7 +14,19 @@ const findVisibleStatus = async (statusId: string, userId: string) => {
   return Status.findOne({ _id: statusId, ...buildStatusVisibilityQuery(userId, viewer.friends || []) });
 };
 
-const emitRefresh = (req: AuthenticatedRequest) => req.app.get('io')?.emit('status:refresh');
+const emitRefresh = async (req: AuthenticatedRequest, status: any) => {
+  const io = req.app.get('io');
+  if (!io || !status) return;
+  const ownerId = status.userId?._id?.toString?.() || status.userId?.toString?.();
+  if (!ownerId) return;
+  const owner = await User.findById(ownerId).select('friends').lean();
+  const excluded = new Set((status.excludedUsers || []).map((id: any) => id.toString()));
+  const candidates = status.audience === 'selected'
+    ? (status.allowedUsers || []).map((id: any) => id.toString())
+    : (owner?.friends || []).map((id) => id.toString());
+  const viewers = new Set([ownerId, ...candidates.filter((id: string) => !excluded.has(id))]);
+  viewers.forEach((viewerId) => io.to(`user:${viewerId}`).emit('status:refresh'));
+};
 
 const parseJson = <T>(value: unknown, fallback: T): T => {
   if (!value) return fallback;
@@ -26,7 +38,12 @@ export const createStatus = async (req: AuthenticatedRequest, res: Response, nex
   try {
     const { type, content, caption, backgroundColor } = req.body;
     let finalContent = content;
-    if (req.file) finalContent = (await uploadMedia(req.file, 'statuses')).url;
+    let mediaPublicId: string | undefined;
+    if (req.file) {
+      const upload = await uploadMedia(req.file, 'statuses');
+      finalContent = upload.url;
+      mediaPublicId = upload.publicId;
+    }
     if (!finalContent) throw new CustomError('Status content or media file is required', 400);
 
     const requestedAudience = req.body.audience || 'contacts';
@@ -64,6 +81,7 @@ export const createStatus = async (req: AuthenticatedRequest, res: Response, nex
       userId: req.user!.id,
       type: type || (req.file ? (req.file.mimetype.startsWith('video/') ? 'video' : 'image') : 'text'),
       content: finalContent,
+      mediaPublicId,
       caption: caption || '',
       backgroundColor: backgroundColor || '#1e1b4b',
       audience,
@@ -78,7 +96,7 @@ export const createStatus = async (req: AuthenticatedRequest, res: Response, nex
       likes: [],
     });
     const populated = await Status.findById(status._id).populate('userId', 'username avatar');
-    emitRefresh(req);
+    await emitRefresh(req, status);
     res.status(201).json({ success: true, status: presentStatus(populated, req.user!.id) });
   } catch (error) { next(error); }
 };
@@ -118,7 +136,7 @@ export const likeStatus = async (req: AuthenticatedRequest, res: Response, next:
     const liked = index < 0;
     if (liked) status.likes.push(req.user!.id as any); else status.likes.splice(index, 1);
     await status.save();
-    emitRefresh(req);
+    await emitRefresh(req, status);
     if (liked && status.userId.toString() !== req.user!.id) {
       await createNotification({
         recipientId: status.userId.toString(), actorId: req.user!.id, type: 'reaction',
@@ -142,7 +160,7 @@ export const voteStatusPoll = async (req: AuthenticatedRequest, res: Response, n
     }
     selected.voters.push(req.user!.id as any);
     await status.save();
-    emitRefresh(req);
+    await emitRefresh(req, status);
     res.json({ success: true, status: presentStatus(status, req.user!.id) });
   } catch (error) { next(error); }
 };
@@ -157,7 +175,7 @@ export const answerStatusQuestion = async (req: AuthenticatedRequest, res: Respo
     if (existing) { existing.text = text; existing.createdAt = new Date(); }
     else status.question.answers.push({ userId: req.user!.id as any, text, createdAt: new Date() });
     await status.save();
-    emitRefresh(req);
+    await emitRefresh(req, status);
     if (status.userId.toString() !== req.user!.id) {
       await createNotification({
         recipientId: status.userId.toString(), actorId: req.user!.id, type: 'reply',
@@ -180,16 +198,17 @@ export const respondStatusSlider = async (req: AuthenticatedRequest, res: Respon
     if (existing) existing.value = value;
     else status.slider.responses.push({ userId: req.user!.id as any, value });
     await status.save();
-    emitRefresh(req);
+    await emitRefresh(req, status);
     res.json({ success: true, status: presentStatus(status, req.user!.id) });
   } catch (error) { next(error); }
 };
 
 export const deleteStatus = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const status = await Status.findOneAndDelete({ _id: req.params.statusId, userId: req.user!.id });
+    const status = await Status.findOneAndDelete({ _id: req.params.statusId, userId: req.user!.id }).select('+mediaPublicId');
     if (!status) throw new CustomError('Status not found or unauthorized', 404);
-    emitRefresh(req);
+    if (status.mediaPublicId) await deleteMedia(status.mediaPublicId);
+    await emitRefresh(req, status);
     res.json({ success: true, message: 'Status deleted successfully' });
   } catch (error) { next(error); }
 };

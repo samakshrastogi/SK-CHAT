@@ -304,8 +304,10 @@ export const socketHandler = (io: Server) => {
     });
 
     const relayGroupSignal = async (event: string, targetId: string, callId: string, payload: Record<string, unknown>) => {
-      const joined = activeGroupCalls.get(callId);
-      if (!joined?.has(user.id) || !joined.has(targetId)) return;
+      const room = `call:${callId}`;
+      const roomSockets = await io.in(room).fetchSockets();
+      const joinedUsers = new Set(roomSockets.map((joinedSocket) => joinedSocket.data.user?.id).filter(Boolean));
+      if (!joinedUsers.has(user.id) || !joinedUsers.has(targetId)) return;
       if (await Call.exists({ _id: callId, participants: { $all: [user.id, targetId] } })) {
         io.to(`user:${targetId}`).emit(event, { senderId: user.id, senderName: user.username, ...payload });
       }
@@ -385,6 +387,21 @@ export const socketHandler = (io: Server) => {
       io.to(`user:${targetId}`).emit('call:candidate', { senderId: user.id, candidate });
     });
 
+    socket.on('call:restart-offer', async ({ targetId, callId, offer }) => {
+      const authorized = await Call.exists({ _id: callId, status: 'connected', $or: [
+        { callerId: user.id, receiverId: targetId },
+        { callerId: targetId, receiverId: user.id },
+      ] });
+      if (authorized) io.to(`user:${targetId}`).emit('call:restart-offer', { senderId: user.id, offer });
+    });
+
+    socket.on('call:restart-answer', async ({ targetId, callId, answer }) => {
+      const authorized = await Call.exists({ _id: callId, status: 'connected', $or: [
+        { callerId: user.id, receiverId: targetId },
+        { callerId: targetId, receiverId: user.id },
+      ] });
+      if (authorized) io.to(`user:${targetId}`).emit('call:restart-answer', { senderId: user.id, answer });
+    });
     socket.on('call:end', async ({ targetId, callId }) => {
       const call = await Call.findOne({ _id: callId, $or: [{ callerId: user.id, receiverId: targetId }, { callerId: targetId, receiverId: user.id }] });
       if (!call) return;

@@ -434,7 +434,7 @@ export default function ChatDashboard() {
   const { socket, emitEvent } = useSocket();
   const {
     makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
-    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleParticipantLeft,
+    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleRestartOffer, handleRestartAnswer, handleParticipantLeft,
     startScreenShare, stopScreenShare, hangUp
   } = useWebRTC(emitEvent);
 
@@ -734,6 +734,8 @@ export default function ChatDashboard() {
     const onGroupParticipantJoined = (payload: { userId: string; username?: string }) => { void handleGroupParticipantJoined(payload); };
     const onPeerOffer = (payload: { senderId: string; senderName?: string; offer: RTCSessionDescriptionInit }) => { void handlePeerOffer(payload); };
     const onPeerAnswer = (payload: { senderId: string; answer: RTCSessionDescriptionInit }) => { void handlePeerAnswer(payload); };
+    const onRestartOffer = (payload: { senderId: string; offer: RTCSessionDescriptionInit }) => { void handleRestartOffer(payload); };
+    const onRestartAnswer = (payload: { senderId: string; answer: RTCSessionDescriptionInit }) => { void handleRestartAnswer(payload); };
     const onPeerCandidate = ({ candidate, senderId }: { candidate: RTCIceCandidateInit; senderId: string }) => { void handleIceCandidate(candidate, senderId); };
     const onParticipantLeft = (payload: { userId: string }) => handleParticipantLeft(payload);
     const onCallRejected = ({ reason }: { reason: string }) => {
@@ -783,6 +785,8 @@ export default function ChatDashboard() {
     socket.on('call:participant-joined', onGroupParticipantJoined);
     socket.on('call:peer-offer', onPeerOffer);
     socket.on('call:peer-answer', onPeerAnswer);
+    socket.on('call:restart-offer', onRestartOffer);
+    socket.on('call:restart-answer', onRestartAnswer);
     socket.on('call:peer-candidate', onPeerCandidate);
     socket.on('call:participant-left', onParticipantLeft);
     socket.on('call:rejected', onCallRejected);
@@ -808,6 +812,8 @@ export default function ChatDashboard() {
       socket.off('call:participant-joined', onGroupParticipantJoined);
       socket.off('call:peer-offer', onPeerOffer);
       socket.off('call:peer-answer', onPeerAnswer);
+      socket.off('call:restart-offer', onRestartOffer);
+      socket.off('call:restart-answer', onRestartAnswer);
       socket.off('call:peer-candidate', onPeerCandidate);
       socket.off('call:participant-left', onParticipantLeft);
       socket.off('call:rejected', onCallRejected);
@@ -1527,9 +1533,9 @@ export default function ChatDashboard() {
       if (socket) {
         socket.emit('typing:stop', activeChatId);
       }
-    } catch (err) {
+    } catch (err: any) {
       setUploadProgress(0);
-      toast.error('Failed to send message.');
+      toast.error(err?.response?.data?.message || 'Failed to send message. Your attachment is still selected so you can retry.');
     } finally {
       sendInFlightRef.current = false;
       setIsSendingMessage(false);

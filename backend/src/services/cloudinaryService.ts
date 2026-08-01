@@ -1,6 +1,8 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { logger } from '../utils/logger.js';
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isConfiguredEnvValue } from '../config/env.js';
 
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -91,8 +93,16 @@ export const deleteMedia = async (publicId: string): Promise<boolean> => {
       const result = await cloudinary.uploader.destroy(publicId);
       return result.result === 'ok';
     }
-    // Local delete would require file unlink - we can support it if needed.
-    logger.info(`Mock/Local media delete executed for: ${publicId}`);
+    if (path.basename(publicId) !== publicId) {
+      logger.warn(`Rejected unsafe local media identifier: ${publicId}`);
+      return false;
+    }
+    const serviceDir = path.dirname(fileURLToPath(import.meta.url));
+    const localPath = path.resolve(serviceDir, '../../uploads', publicId);
+    await fs.unlink(localPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+    logger.info(`Deleted local media file: ${publicId}`);
     return true;
   } catch (error: any) {
     logger.error(`Error deleting media: ${error.message}`);

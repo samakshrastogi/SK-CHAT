@@ -79,8 +79,25 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
         targetId, callId, candidate: event.candidate,
       });
     };
+    let iceRestartAttempted = false;
     peer.onconnectionstatechange = () => {
-      if (['failed', 'closed'].includes(peer.connectionState)) state().removeRemoteParticipant(targetId);
+      if (peer.connectionState === 'connected') iceRestartAttempted = false;
+      if (peer.connectionState === 'failed' && !iceRestartAttempted) {
+        iceRestartAttempted = true;
+        void (async () => {
+          try {
+            peer.restartIce();
+            const offer = await peer.createOffer({ iceRestart: true });
+            await peer.setLocalDescription(offer);
+            socketEmit(group ? 'call:peer-offer' : 'call:restart-offer', { targetId, callId, offer });
+            toast.info('Connection interrupted. Reconnecting the call…');
+          } catch {
+            state().removeRemoteParticipant(targetId);
+            toast.error('The call connection could not be restored.');
+          }
+        })();
+      }
+      if (peer.connectionState === 'closed') state().removeRemoteParticipant(targetId);
     };
     return peer;
   };
@@ -196,6 +213,23 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     await peer.setRemoteDescription(new RTCSessionDescription(answer));
     await flushCandidates(targetId, peer);
   };
+  const handleRestartOffer = async ({ senderId, offer }: { senderId: string; offer: RTCSessionDescriptionInit }) => {
+    const current = state();
+    if (!current.callId) return;
+    const stream = await startLocalStream(current.callType || 'video');
+    const peer = await createPeer(senderId, current.callId, stream);
+    await peer.setRemoteDescription(new RTCSessionDescription(offer));
+    await flushCandidates(senderId, peer);
+    const answer = await peer.createAnswer();
+    await peer.setLocalDescription(answer);
+    socketEmit('call:restart-answer', { targetId: senderId, callId: current.callId, answer });
+  };
+  const handleRestartAnswer = async ({ senderId, answer }: { senderId: string; answer: RTCSessionDescriptionInit }) => {
+    const peer = peersRef.current.get(senderId);
+    if (!peer) return;
+    await peer.setRemoteDescription(new RTCSessionDescription(answer));
+    await flushCandidates(senderId, peer);
+  };
   const handleParticipantLeft = ({ userId }: { userId: string }) => {
     peersRef.current.get(userId)?.close(); peersRef.current.delete(userId); state().removeRemoteParticipant(userId);
   };
@@ -233,6 +267,6 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   };
 
   return { makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
-    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleParticipantLeft,
+    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleRestartOffer, handleRestartAnswer, handleParticipantLeft,
     startScreenShare, stopScreenShare, hangUp, listMediaDevices: () => navigator.mediaDevices.enumerateDevices() };
 };

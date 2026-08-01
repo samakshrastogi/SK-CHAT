@@ -52,6 +52,8 @@ export const getReadiness = async () => {
     : { status: 'not_configured' };
 
   const dependencies = { mongodb, redis, cloudinary };
-  const ready = mongodb.status === 'healthy' && redis.status !== 'unhealthy';
+  const redisReady = process.env.REQUIRE_REDIS === 'true' ? redis.status === 'healthy' : redis.status !== 'unhealthy';
+  const mediaReady = process.env.REQUIRE_PERSISTENT_MEDIA === 'true' ? cloudinary.status === 'healthy' : true;
+  const ready = mongodb.status === 'healthy' && redisReady && mediaReady;
   return { ready, dependencies };
 };

@@ -57,12 +57,18 @@ services:
         sync: false
       - key: TURN_CREDENTIAL_TTL_SECONDS
         value: 3600
+      - key: REQUIRE_TURN
+        sync: false
+      - key: REQUIRE_PERSISTENT_MEDIA
+        sync: false
+      - key: REQUIRE_REDIS
+        sync: false
       - key: UPLOAD_DAILY_QUOTA_MB
         value: 250
       - key: UPLOAD_DAILY_FILE_LIMIT
         value: 100
       - key: MALWARE_SCAN_REQUIRED
-        value: false
+        sync: false
       - key: MALWARE_SCAN_URL
         sync: false
       - key: MALWARE_SCAN_TOKEN

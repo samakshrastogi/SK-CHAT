@@ -45,4 +45,27 @@ describe('production environment validation', () => {
 
     expect(() => validateProductionEnv()).toThrow(/must either all be configured or all be omitted/);
   });
-});
+
+  it('requires persistent media credentials when enforcement is enabled', () => {
+    setRequiredProductionEnv();
+    process.env.REQUIRE_PERSISTENT_MEDIA = 'true';
+    delete process.env.CLOUDINARY_CLOUD_NAME;
+    delete process.env.CLOUDINARY_API_KEY;
+    delete process.env.CLOUDINARY_API_SECRET;
+    expect(() => validateProductionEnv()).toThrow(/CLOUDINARY_CLOUD_NAME/);
+  });
+
+  it('requires TURN URLs and a secret when call relay enforcement is enabled', () => {
+    setRequiredProductionEnv();
+    process.env.REQUIRE_TURN = 'true';
+    delete process.env.TURN_URLS;
+    delete process.env.TURN_SHARED_SECRET;
+    expect(() => validateProductionEnv()).toThrow(/TURN_URLS/);
+  });
+
+  it('requires Redis when realtime enforcement is enabled', () => {
+    setRequiredProductionEnv();
+    process.env.REQUIRE_REDIS = 'true';
+    delete process.env.REDIS_URL;
+    expect(() => validateProductionEnv()).toThrow(/REDIS_URL/);
+  });});

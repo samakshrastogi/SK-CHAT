@@ -11,7 +11,7 @@ import { Message } from '../models/Message.js';
 import { User } from '../models/User.js';
 import { CustomError } from '../utils/customError.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
-import { uploadMedia } from '../services/cloudinaryService.js';
+import { deleteMedia, uploadMedia } from '../services/cloudinaryService.js';
 import { scheduleSelfDestruct } from '../utils/selfDestruct.js';
 import crypto from 'crypto';
 
@@ -243,6 +243,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
     }
 
     let mediaUrl = undefined;
+    let mediaPublicId = undefined;
     let fileName = undefined;
     let mediaSize = undefined;
     let uploadedMessageType: 'image' | 'video' | 'audio' | 'document' | undefined;
@@ -250,6 +251,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
     if (req.file) {
       const upload = await uploadMedia(req.file, 'attachments');
       mediaUrl = upload.url;
+      mediaPublicId = upload.publicId;
       fileName = req.file.originalname;
       mediaSize = req.file.size;
       uploadedMessageType = req.file.mimetype.startsWith('image/')
@@ -320,6 +322,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
       clientId: clientId || undefined,
       messageType: finalMessageType,
       mediaUrl: finalMediaUrl,
+      mediaPublicId,
       fileName: finalFileName,
       mediaSize: finalMediaSize,
       pollData: cleanPollData,
@@ -497,7 +500,7 @@ export const deleteMessage = async (req: AuthenticatedRequest, res: Response, ne
     const { messageId } = req.params;
     const { deleteForEveryone } = req.body;
 
-    const message = await Message.findById(messageId);
+    const message = await Message.findById(messageId).select('+mediaPublicId');
     if (!message) {
       throw new CustomError('Message not found', 404);
     }
@@ -512,9 +515,11 @@ export const deleteMessage = async (req: AuthenticatedRequest, res: Response, ne
       if (message.senderId.toString() !== req.user!.id) {
         throw new CustomError('Only the sender can delete a message for everyone', 403);
       }
+      if (message.mediaPublicId) await deleteMedia(message.mediaPublicId);
       message.content = 'This message was deleted';
       message.isDeleted = true;
       message.mediaUrl = undefined;
+      message.mediaPublicId = undefined;
       message.pollData = undefined;
       message.locationData = undefined;
       message.contactData = undefined;

@@ -44,6 +44,13 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = (props) => {
   const [isPosting, setIsPosting] = React.useState(false);
   const canPost = props.storyType === 'text' ? Boolean(props.textStatusContent.trim()) : Boolean(props.storyFile);
 
+  React.useEffect(() => {
+    const previewUrl = props.storyFileUrl;
+    return () => {
+      if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+    };
+  }, [props.storyFileUrl]);
+
   const postStory = async () => {
     if (!canPost || isPosting) return;
     setIsPosting(true);
