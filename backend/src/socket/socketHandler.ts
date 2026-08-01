@@ -332,7 +332,16 @@ export const socketHandler = (io: Server) => {
       call.status = 'ringing';
       await call.save();
       logger.info(`Call initiated by ${user.id} to ${receiverId} for call ${callId}`);
-      socket.to(`user:${receiverId}`).emit('call:incoming', {
+      const receiverRoom = `user:${receiverId}`;
+      const receiverSockets = await io.in(receiverRoom).fetchSockets();
+      if (receiverSockets.length === 0) {
+        call.status = 'missed';
+        call.endedAt = new Date();
+        await call.save();
+        io.to(`user:${user.id}`).emit('call:unavailable', { receiverId, reason: 'User is offline' });
+        return;
+      }
+      io.to(receiverRoom).emit('call:incoming', {
         callerId: user.id,
         callerName: user.username,
         callId,
@@ -347,7 +356,7 @@ export const socketHandler = (io: Server) => {
       call.status = 'connected';
       await call.save();
       logger.info(`Call accepted by ${user.id} for caller ${callerId}`);
-      socket.to(`user:${callerId}`).emit('call:accepted', { receiverId: user.id, callId, answer });
+      io.to(`user:${callerId}`).emit('call:accepted', { receiverId: user.id, callId, answer });
     });
 
     socket.on('call:reject', async ({ callerId, callId, reason }) => {
@@ -373,7 +382,7 @@ export const socketHandler = (io: Server) => {
 
     socket.on('call:candidate', async ({ targetId, callId, candidate }) => {
       if (!await Call.exists({ _id: callId, $or: [{ callerId: user.id, receiverId: targetId }, { callerId: targetId, receiverId: user.id }] })) return;
-      socket.to(`user:${targetId}`).emit('call:candidate', { senderId: user.id, candidate });
+      io.to(`user:${targetId}`).emit('call:candidate', { senderId: user.id, candidate });
     });
 
     socket.on('call:end', async ({ targetId, callId }) => {

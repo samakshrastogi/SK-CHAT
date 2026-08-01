@@ -636,6 +636,10 @@ export default function ChatDashboard() {
   // Voice Message Recording details (separate from call recording)
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceMediaRecorder, setVoiceMediaRecorder] = useState<MediaRecorder | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceRecordingChatIdRef = useRef<string | null>(null);
+  const voiceRecordingCancelledRef = useRef(false);
   const [voiceChunks, setVoiceChunks] = useState<Blob[]>([]);
 
   // Admin analytical panel details
@@ -736,6 +740,10 @@ export default function ChatDashboard() {
       toast.error(`Call rejected: ${reason}`);
       callStore.resetCallStore();
     };
+    const onCallUnavailable = ({ reason }: { reason: string }) => {
+      toast.info(reason || 'This user is not available for a call.');
+      callStore.resetCallStore();
+    };
     const onNotificationNew = (notif: any) => {
       addIncomingNotification(notif);
     };
@@ -778,6 +786,7 @@ export default function ChatDashboard() {
     socket.on('call:peer-candidate', onPeerCandidate);
     socket.on('call:participant-left', onParticipantLeft);
     socket.on('call:rejected', onCallRejected);
+    socket.on('call:unavailable', onCallUnavailable);
     socket.on('notification:new', onNotificationNew);
     const onStatusRefresh = () => { void fetchStatuses(); };
     socket.on('status:refresh', onStatusRefresh);
@@ -802,6 +811,7 @@ export default function ChatDashboard() {
       socket.off('call:peer-candidate', onPeerCandidate);
       socket.off('call:participant-left', onParticipantLeft);
       socket.off('call:rejected', onCallRejected);
+      socket.off('call:unavailable', onCallUnavailable);
       socket.off('notification:new', onNotificationNew);
       socket.off('status:refresh', onStatusRefresh);
       socket.off('status:new', onStatusNew);
@@ -1537,60 +1547,73 @@ export default function ChatDashboard() {
   // Voice Note Recorder triggers
   const startRecording = async () => {
     try {
+      if (!activeChat?._id || voiceRecorderRef.current?.state === 'recording') return;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
+      const preferredMimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
+      voiceChunksRef.current = [];
+      voiceRecordingChatIdRef.current = activeChat._id;
+      voiceRecordingCancelledRef.current = false;
 
-      recorder.ondataavailable = (ev) => {
-        if (ev.data.size > 0) chunks.push(ev.data);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) voiceChunksRef.current.push(event.data);
       };
 
       recorder.onstop = async () => {
-        const voiceBlob = new Blob(chunks, { type: 'audio/webm' });
-        const voiceFile = new File([voiceBlob], `voice-note-${Date.now()}.webm`, { type: 'audio/webm' });
+        stream.getTracks().forEach((track) => track.stop());
+        const chunks = voiceChunksRef.current;
+        const chatId = voiceRecordingChatIdRef.current;
+        const cancelled = voiceRecordingCancelledRef.current;
+        const mimeType = recorder.mimeType || chunks[0]?.type || 'audio/webm';
+        const extension = mimeType.includes('mp4') ? 'm4a' : 'webm';
+        const voiceBlob = new Blob(chunks, { type: mimeType });
+        voiceChunksRef.current = [];
+        voiceRecorderRef.current = null;
+        setVoiceMediaRecorder(null);
 
-        if (activeChat) {
-          await sendChatMessage(activeChat._id, '', voiceFile, 'voice');
+        if (!cancelled && chatId) {
+          if (voiceBlob.size < 256) {
+            toast.error('The recording was empty. Hold the microphone button a little longer and try again.');
+            return;
+          }
+          const voiceFile = new File([voiceBlob], `voice-note-${Date.now()}.${extension}`, { type: mimeType });
+          try {
+            await sendChatMessage(chatId, '', voiceFile, 'voice');
+          } catch {
+            toast.error('Voice message could not be uploaded. Please try again.');
+          }
         }
       };
 
-      recorder.start();
+      recorder.start(250);
+      voiceRecorderRef.current = recorder;
       setVoiceMediaRecorder(recorder);
       setIsVoiceRecording(true);
 
-      // Web Audio Waveform Analyzer
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
-
       audioContextRef.current = audioCtx;
       analyserRef.current = analyser;
-
-      setTimeout(() => {
-        drawWaveform();
-      }, 100);
-    } catch (err) {
-      toast.error('Could not record voice. Check microphone authorizations.');
+      setTimeout(() => drawWaveform(), 100);
+    } catch {
+      toast.error('Could not record voice. Check microphone permissions.');
     }
   };
 
   const stopRecording = () => {
-    if (voiceMediaRecorder && isVoiceRecording) {
-      voiceMediaRecorder.stop();
+    const recorder = voiceRecorderRef.current;
+    if (recorder && recorder.state === 'recording') {
+      recorder.requestData();
+      recorder.stop();
       setIsVoiceRecording(false);
-      voiceMediaRecorder.stream.getTracks().forEach((track) => track.stop());
-
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (audioContextRef.current) void audioContextRef.current.close();
     }
   };
-
   // Status/Story posting
   const handlePostStory = async () => {
     const meta: any = {};
@@ -1614,9 +1637,7 @@ export default function ChatDashboard() {
         if (question) formData.append('question', JSON.stringify(question));
         if (slider) formData.append('slider', JSON.stringify(slider));
 
-        await apiClient.post('/status', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        await apiClient.post('/status', formData);
       } else {
         if (!textStatusContent.trim()) return;
         await apiClient.post('/status', {
@@ -2950,10 +2971,7 @@ export default function ChatDashboard() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (voiceMediaRecorder) {
-                          voiceMediaRecorder.ondataavailable = null;
-                          voiceMediaRecorder.onstop = null;
-                        }
+                        voiceRecordingCancelledRef.current = true;
                         stopRecording();
                       }}
                       className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors shrink-0"
@@ -3937,22 +3955,29 @@ export default function ChatDashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto"
+            className="fixed inset-0 bg-slate-950 flex items-center justify-center z-50 p-0 sm:p-6 overflow-hidden"
           >
-            <div className="w-full max-w-3xl glass-panel rounded-[24px] sm:rounded-[32px] overflow-hidden p-4 sm:p-6 shadow-2xl relative flex flex-col items-center justify-center gap-4 sm:gap-6">
+            <div className="h-full sm:h-auto w-full max-w-5xl bg-slate-950 sm:bg-slate-900/90 sm:border sm:border-white/10 rounded-none sm:rounded-[28px] overflow-hidden p-3 sm:p-5 shadow-2xl relative flex flex-col items-center justify-center gap-4">
 
               {/* Outgoing Panel */}
               {callStore.callStatus === 'outgoing' && (
-                <div className="text-center space-y-4">
-                  <div className="h-24 w-24 rounded-full bg-slate-800 animate-pulse border-2 border-indigo-500 mx-auto" />
-                  <h3 className="text-xl font-bold text-white">Calling...</h3>
-                  <p className="text-slate-400 text-sm">Waiting for response...</p>
-                  <button onClick={hangUp} className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-full text-sm font-bold shadow-lg shadow-red-500/20">
-                    Cancel Call
-                  </button>
+                <div className="relative flex h-full min-h-[70dvh] w-full items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950/50 sm:min-h-[540px]">
+                  {callStore.callType === 'video' && callStore.localStream?.getVideoTracks().length ? (
+                    <video ref={localVideoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full object-cover opacity-70" />
+                  ) : null}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
+                  <div className="relative z-10 flex flex-col items-center px-5 text-center">
+                    <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full border-2 border-indigo-400 bg-indigo-500/15 text-3xl font-black text-indigo-100 shadow-[0_0_0_12px_rgba(99,102,241,0.08)] animate-pulse">
+                      {getCentralInitials(activeChat?.name || 'Call')}
+                    </div>
+                    <h3 className="text-2xl font-black text-white">{activeChat?.name || (callStore.isGroupCall ? 'Group call' : 'Calling')}</h3>
+                    <p className="mt-2 text-sm text-slate-300">Ringing… The call will close automatically if they are unavailable.</p>
+                    <button onClick={hangUp} className="mt-8 flex h-14 w-14 items-center justify-center rounded-full bg-red-500 text-white shadow-xl shadow-red-500/25 transition hover:bg-red-600" aria-label="Cancel call">
+                      <Phone className="h-6 w-6 rotate-[135deg]" />
+                    </button>
+                  </div>
                 </div>
               )}
-
               {/* Incoming Panel */}
               {callStore.callStatus === 'incoming' && (
                 <div className="text-center space-y-4">
@@ -3983,7 +4008,7 @@ export default function ChatDashboard() {
 
               {/* Connected Video Layout */}
               {callStore.callStatus === 'connected' && (
-                <div className="w-full aspect-video rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 relative">
+                <div className="w-full h-[calc(100dvh-24px)] sm:h-auto sm:aspect-video rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 relative">
                   {/* Responsive participant grid for direct and group calls */}
                   {callStore.callType === 'video' ? (
                     callStore.isGroupCall ? (
@@ -4025,7 +4050,7 @@ export default function ChatDashboard() {
                   )}
                   {/* Local video thumbnail (PIP) */}
                   {callStore.callType === 'video' && !callStore.isGroupCall && (
-                    <div className="absolute top-4 right-4 w-40 aspect-video rounded-lg overflow-hidden border border-slate-700 bg-slate-900 shadow-xl">
+                    <div className="absolute top-3 right-3 w-28 sm:w-44 aspect-video rounded-xl overflow-hidden border border-white/20 bg-slate-900 shadow-xl">
                       <video
                         ref={localVideoRef}
                         autoPlay

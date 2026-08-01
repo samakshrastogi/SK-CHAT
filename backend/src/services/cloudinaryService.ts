@@ -1,10 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { logger } from '../utils/logger.js';
 import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { isConfiguredEnvValue } from '../config/env.js';
-import { CustomError } from '../utils/customError.js';
 
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -21,7 +18,7 @@ if ([cloudName, apiKey, apiSecret].every(isConfiguredEnvValue)) {
   isCloudinaryConfigured = true;
   logger.info('Cloudinary configured successfully');
 } else {
-  logger.warn('Cloudinary credentials are absent or placeholders. Media uploads are disabled in production');
+  logger.warn('Cloudinary credentials are absent or placeholders. Media uploads will use local storage');
 }
 
 export const uploadMedia = async (
@@ -49,9 +46,6 @@ export const uploadMedia = async (
         publicId: uploadResponse.public_id,
       };
     } else {
-      if (process.env.NODE_ENV === 'production') {
-        throw new CustomError('Media uploads are temporarily unavailable', 503);
-      }
       // Fallback: File is written to local filesystem by multer.
       // Multer file object contains the generated local filepath.
       // We will generate the local web asset URL.
@@ -71,7 +65,7 @@ export const uploadMedia = async (
         : `uploads/${file.filename}`;
         
       const localUrl = `${serverUrl}/${cleanPath}`;
-      logger.info(`Saved local file upload to web url: ${localUrl}`);
+      logger.warn(`Serving media from local storage at ${localUrl}. Configure Cloudinary for persistent production media.`);
       return {
         url: localUrl,
         publicId: file.filename,
@@ -81,7 +75,9 @@ export const uploadMedia = async (
     logger.error(`Error uploading media: ${error.message}`);
     throw error;
   } finally {
-    if (file.path && (isCloudinaryConfigured || process.env.NODE_ENV === 'production')) {
+    // Multer's temporary copy is only disposable after Cloudinary has persisted it.
+    // Local-storage mode serves this exact file from /uploads.
+    if (file.path && isCloudinaryConfigured) {
       await fs.unlink(file.path).catch((error: any) => {
         logger.warn(`Could not delete temporary file ${file.path}: ${error.message}`);
       });
