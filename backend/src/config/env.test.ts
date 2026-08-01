@@ -11,6 +11,7 @@ const setRequiredProductionEnv = () => {
   Object.assign(process.env, {
     NODE_ENV: 'production',
     MONGODB_URI: 'mongodb://database/app',
+    MONGODB_DATABASE: 'sk_connect',
     FRONTEND_URL: 'https://connect.example.com',
     BACKEND_URL: 'https://api.example.com',
     JWT_ACCESS_SECRET: 'access-secret',

@@ -300,7 +300,6 @@ export default function ChatDashboard() {
   const themeStore = useThemeStore();
   const { addIncomingNotification, requestBrowserPermission } = useNotificationStore();
 
-  const [expiresIn, setExpiresIn] = useState<number>(0);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [wallpaperPreset, setWallpaperPreset] = useState<string>(localStorage.getItem('wallpaper') || 'gradient-mesh');
@@ -444,6 +443,7 @@ export default function ChatDashboard() {
 
   // Connect with 4-digit code states
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [chatPendingDeletion, setChatPendingDeletion] = useState<string | null>(null);
   const [myConnectionCode, setMyConnectionCode] = useState('');
   const [myCodeExpiresAt, setMyCodeExpiresAt] = useState<string | null>(null);
   const [enterConnectionCode, setEnterConnectionCode] = useState('');
@@ -649,6 +649,7 @@ export default function ChatDashboard() {
   const storyFileInputRef = useRef<HTMLInputElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
   // Load Initial Tabs state
   useEffect(() => {
@@ -818,6 +819,11 @@ export default function ChatDashboard() {
     if (callStore.callStatus === 'connected' && callStore.remoteStream) {
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = callStore.remoteStream;
+        void remoteVideoRef.current.play().catch(() => undefined);
+      }
+      if (remoteAudioRef.current && !callStore.isGroupCall) {
+        remoteAudioRef.current.srcObject = callStore.remoteStream;
+        void remoteAudioRef.current.play().catch(() => undefined);
       }
     }
     if (callStore.localStream) {
@@ -1470,20 +1476,6 @@ export default function ChatDashboard() {
     setIsSendingMessage(true);
 
     try {
-      // Simulate file upload loading bar
-      if (selectedFile) {
-        setUploadProgress(20);
-        let interval = setInterval(() => {
-          setUploadProgress((p) => {
-            if (p >= 90) {
-              clearInterval(interval);
-              return p;
-            }
-            return p + 10;
-          });
-        }, 100);
-      }
-
       let plainText = messageText;
       let isEncrypted = false;
       let ciphertext = undefined;
@@ -1509,10 +1501,11 @@ export default function ChatDashboard() {
         selectedFile || undefined,
         selectedFile ? getMessageTypeFromFile(selectedFile) : 'text',
         replyingTo?._id,
-        expiresIn || undefined,
+        undefined,
         isEncrypted,
         ciphertext,
-        iv
+        iv,
+        selectedFile ? setUploadProgress : undefined
       );
 
       updateMessageDraft('');
@@ -2508,10 +2501,7 @@ export default function ChatDashboard() {
 
                 <div className="flex items-center gap-0.5 sm:gap-2 shrink-0">
                     <button
-                      onClick={() => {
-                        hideChatLocally(activeChat._id);
-                        setIsGroupInfoOpen(false);
-                      }}
+                      onClick={() => setChatPendingDeletion(activeChat._id)}
                       className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-all"
                       title="Remove chat from this device"
                       aria-label="Remove chat from this device"
@@ -2917,22 +2907,6 @@ export default function ChatDashboard() {
                   }}
                   className="hidden"
                 />
-
-                {/* Disappearing Messages Duration Picker */}
-                <div className="relative">
-                  <select
-                    value={expiresIn}
-                    onChange={(e) => setExpiresIn(Number(e.target.value))}
-                    className="h-10 sm:h-11 px-1.5 sm:px-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-450 text-[10px] font-bold hover:text-slate-800 dark:hover:text-white transition-all cursor-pointer outline-none w-[62px] sm:w-auto sm:min-w-[70px] text-center"
-                    title="Self-Destruct Timer"
-                  >
-                    <option value={0}>⏲️ Off</option>
-                    <option value={5}>⏲️ 5s</option>
-                    <option value={60}>⏲️ 1m</option>
-                    <option value={3600}>⏲️ 1h</option>
-                    <option value={86400}>⏲️ 1d</option>
-                  </select>
-                </div>
 
                 <button
                   type="button"
@@ -3999,7 +3973,7 @@ export default function ChatDashboard() {
                         </div>
                         {Object.values(callStore.remoteParticipants).map((participant) => (
                           <div key={participant.userId} className="relative rounded-xl overflow-hidden bg-slate-850 border border-white/10 min-h-0">
-                            <video ref={(element) => { if (element) element.srcObject = participant.stream; }} autoPlay playsInline className="h-full w-full object-cover" />
+                            <video ref={(element) => { if (element) { element.srcObject = participant.stream; void element.play().catch(() => undefined); } }} autoPlay playsInline className="h-full w-full object-cover" />
                             <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white">{participant.name || 'Participant'}</span>
                           </div>
                         ))}
@@ -4012,6 +3986,18 @@ export default function ChatDashboard() {
                     )
                   ) : (
                     <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950/50 gap-4">
+                      <audio ref={remoteAudioRef} autoPlay playsInline />
+                      {callStore.isGroupCall && Object.values(callStore.remoteParticipants).map((participant) => (
+                        <audio
+                          key={participant.userId}
+                          ref={(element) => {
+                            if (!element) return;
+                            element.srcObject = participant.stream;
+                            void element.play().catch(() => undefined);
+                          }}
+                          autoPlay
+                        />
+                      ))}
                       <div className="h-24 w-24 rounded-full bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center"><Volume2 className="h-12 w-12 text-indigo-300" /></div>
                       <p className="text-sm font-semibold text-slate-300">{callStore.isGroupCall ? `${Object.keys(callStore.remoteParticipants).length + 1} people in this voice call` : 'Voice call connected'}</p>
                     </div>
@@ -4157,6 +4143,47 @@ export default function ChatDashboard() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {chatPendingDeletion && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+            onClick={(event) => { if (event.target === event.currentTarget) setChatPendingDeletion(null); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 12 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 12 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-chat-title"
+              className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                <Trash className="h-6 w-6" />
+              </div>
+              <h2 id="delete-chat-title" className="mt-4 text-center text-lg font-extrabold text-slate-900 dark:text-white">Delete this chat?</h2>
+              <p className="mt-2 text-center text-sm leading-6 text-slate-500 dark:text-slate-400">This removes the conversation from your chat list on this device. It does not delete messages for the other person.</p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setChatPendingDeletion(null)} className="h-11 rounded-xl border border-slate-200 font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    hideChatLocally(chatPendingDeletion);
+                    setIsGroupInfoOpen(false);
+                    setChatPendingDeletion(null);
+                  }}
+                  className="h-11 rounded-xl bg-red-500 font-bold text-white shadow-lg shadow-red-500/20 hover:bg-red-600"
+                >
+                  Delete Chat
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* 5. Create Group Modal Overlay */}
       <AnimatePresence>
         {createGroupOpen && (() => {

@@ -56,7 +56,8 @@ interface ChatState {
     expiresIn?: number,
     isEncrypted?: boolean,
     ciphertext?: string,
-    iv?: string
+    iv?: string,
+    onUploadProgress?: (percentage: number) => void
   ) => Promise<void>;
   optimisticAddMessage: (chatId: string, message: Message) => void;
   updateMessageStatus: (chatId: string, messageId: string, status: 'delivered' | 'seen') => void;
@@ -251,7 +252,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn, isEncrypted, ciphertext, iv) => {
+  sendChatMessage: async (chatId, content, file, type = 'text', replyToId, expiresIn, isEncrypted, ciphertext, iv, onUploadProgress) => {
     const clientId = window.crypto.randomUUID();
     const outboxItem: OutboxItem = {
       clientId, chatId, content, type, replyToId, expiresIn, createdAt: new Date().toISOString(),
@@ -282,7 +283,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       const response = await apiClient.post(`/chats/${chatId}/messages`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        onUploadProgress: (event) => {
+          if (onUploadProgress && event.total) {
+            onUploadProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+          }
+        },
       });
       
       const newMsg = response.data.message;

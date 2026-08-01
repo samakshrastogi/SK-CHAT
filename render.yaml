@@ -13,6 +13,8 @@ services:
         value: production
       - key: MONGODB_URI
         sync: false
+      - key: MONGODB_DATABASE
+        value: sk_connect
       - key: FRONTEND_URL
         sync: false
       - key: ALLOWED_ORIGINS

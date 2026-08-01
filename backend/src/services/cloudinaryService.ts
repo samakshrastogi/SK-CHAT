@@ -81,7 +81,7 @@ export const uploadMedia = async (
     logger.error(`Error uploading media: ${error.message}`);
     throw error;
   } finally {
-    if (isCloudinaryConfigured && file.path) {
+    if (file.path && (isCloudinaryConfigured || process.env.NODE_ENV === 'production')) {
       await fs.unlink(file.path).catch((error: any) => {
         logger.warn(`Could not delete temporary file ${file.path}: ${error.message}`);
       });

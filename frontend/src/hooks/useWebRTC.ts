@@ -5,6 +5,7 @@ import { apiClient } from '../api/client.js';
 
 export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const ringTimeoutRef = useRef<number | null>(null);
   const clearRingTimeout = () => { if (ringTimeoutRef.current) window.clearTimeout(ringTimeoutRef.current); ringTimeoutRef.current = null; };
   const getRtcConfiguration = async (): Promise<RTCConfiguration> => {
@@ -33,7 +34,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     const existing = state().localStream;
     if (existing) return existing;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await requestMediaWithRecovery({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
       });
@@ -45,6 +46,16 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     }
   };
 
+  const queueCandidate = (targetId: string, candidate: RTCIceCandidateInit) => {
+    const queued = pendingCandidatesRef.current.get(targetId) || [];
+    queued.push(candidate);
+    pendingCandidatesRef.current.set(targetId, queued);
+  };
+  const flushCandidates = async (targetId: string, peer: RTCPeerConnection) => {
+    const queued = pendingCandidatesRef.current.get(targetId) || [];
+    pendingCandidatesRef.current.delete(targetId);
+    for (const candidate of queued) await peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => undefined);
+  };
   const createPeer = async (targetId: string, callId: string, localStream: MediaStream, group = false, name?: string) => {
     const existing = peersRef.current.get(targetId);
     if (existing) return existing;
@@ -120,6 +131,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       const stream = await startLocalStream(current.callType || 'video');
       const peer = await createPeer(callerId, current.callId, stream);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
+      await flushCandidates(callerId, peer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       socketEmit('call:accept', { callerId, callId: current.callId, answer });
@@ -147,22 +159,36 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     const stream = await startLocalStream(current.callType || 'video');
     const peer = await createPeer(senderId, current.callId, stream, true, senderName);
     await peer.setRemoteDescription(new RTCSessionDescription(offer));
+    await flushCandidates(senderId, peer);
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
     socketEmit('call:peer-answer', { targetId: senderId, callId: current.callId, answer });
   };
 
   const handlePeerAnswer = async ({ senderId, answer }: { senderId: string; answer: RTCSessionDescriptionInit }) => {
-    await peersRef.current.get(senderId)?.setRemoteDescription(new RTCSessionDescription(answer));
+    const peer = peersRef.current.get(senderId);
+    if (!peer) return;
+    await peer.setRemoteDescription(new RTCSessionDescription(answer));
+    await flushCandidates(senderId, peer);
   };
   const handleIceCandidate = async (candidate: RTCIceCandidateInit, senderId?: string) => {
-    const peer = senderId ? peersRef.current.get(senderId) : peersRef.current.values().next().value;
-    if (peer) await peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => undefined);
+    const targetId = senderId || [...peersRef.current.keys()][0];
+    if (!targetId) return;
+    const peer = peersRef.current.get(targetId);
+    if (!peer || !peer.remoteDescription) {
+      queueCandidate(targetId, candidate);
+      return;
+    }
+    await peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => undefined);
   };
   const handleCallAccepted = async (answer: RTCSessionDescriptionInit, receiverId?: string) => {
     clearRingTimeout();
-    const peer = receiverId ? peersRef.current.get(receiverId) : peersRef.current.values().next().value;
-    if (peer) await peer.setRemoteDescription(new RTCSessionDescription(answer));
+    const targetId = receiverId || [...peersRef.current.keys()][0];
+    if (!targetId) return;
+    const peer = peersRef.current.get(targetId);
+    if (!peer) return;
+    await peer.setRemoteDescription(new RTCSessionDescription(answer));
+    await flushCandidates(targetId, peer);
   };
   const handleParticipantLeft = ({ userId }: { userId: string }) => {
     peersRef.current.get(userId)?.close(); peersRef.current.delete(userId); state().removeRemoteParticipant(userId);
@@ -197,7 +223,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     }
     if (current.callId) await apiClient.put('/calls/' + current.callId + '/end', { status: 'completed' }).catch(() => undefined);
     localStorage.removeItem('active_backend_call_id');
-    peersRef.current.forEach((peer) => peer.close()); peersRef.current.clear(); current.resetCallStore();
+    peersRef.current.forEach((peer) => peer.close()); peersRef.current.clear(); pendingCandidatesRef.current.clear(); current.resetCallStore();
   };
 
   return { makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
