@@ -17,22 +17,25 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   const requestMediaWithRecovery = (constraints: MediaStreamConstraints) =>
     navigator.mediaDevices.getUserMedia(constraints);
 
+  const mediaConstraints = (type: 'voice' | 'video'): MediaStreamConstraints => ({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+  });
+
   const startLocalStream = async (type: 'voice' | 'video') => {
     const existing = state().localStream;
-    if (existing) return existing;
+    // An empty stream represents listen-only mode. Do not cache it forever:
+    // each explicit call action gives the browser another chance to prompt.
+    if (existing?.getTracks().length) return existing;
 
-    const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
     try {
-      const stream = await requestMediaWithRecovery({
-        audio,
-        video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
-      });
+      const stream = await requestMediaWithRecovery(mediaConstraints(type));
       state().setLocalStream(stream);
       return stream;
     } catch {
       if (type === 'video') {
         try {
-          const audioOnlyStream = await requestMediaWithRecovery({ audio, video: false });
+          const audioOnlyStream = await requestMediaWithRecovery({ audio: mediaConstraints('voice').audio, video: false });
           state().setLocalStream(audioOnlyStream);
           toast.info('Camera access is blocked. You joined with microphone only.');
           return audioOnlyStream;
@@ -43,11 +46,36 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
 
       const listenOnlyStream = new MediaStream();
       state().setLocalStream(listenOnlyStream);
-      toast.info('Camera and microphone are blocked. You joined in listen-only mode; enable site permissions to speak or share video.');
+      toast.info('Joined in listen-only mode. Allow camera/microphone in site controls, then use Retry media in the call.');
       return listenOnlyStream;
     }
   };
 
+  const retryMediaPermissions = async () => {
+    const current = state();
+    if (!current.callType) return false;
+    try {
+      const stream = await requestMediaWithRecovery(mediaConstraints(current.callType));
+      current.localStream?.getTracks().forEach((track) => track.stop());
+      current.setLocalStream(stream);
+      for (const [targetId, peer] of peersRef.current) {
+        for (const track of stream.getTracks()) {
+          const sender = peer.getSenders().find((item) => item.track?.kind === track.kind);
+          if (sender) await sender.replaceTrack(track); else peer.addTrack(track, stream);
+        }
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        socketEmit(current.isGroupCall ? 'call:peer-offer' : 'call:restart-offer', {
+          targetId, callId: current.callId, offer,
+        });
+      }
+      toast.success('Microphone and camera are connected.');
+      return true;
+    } catch {
+      toast.info('Permission is still unavailable. Enable Camera and Microphone in browser site controls, then tap Retry media again.');
+      return false;
+    }
+  };
   const queueCandidate = (targetId: string, candidate: RTCIceCandidateInit) => {
     const queued = pendingCandidatesRef.current.get(targetId) || [];
     queued.push(candidate);
@@ -118,7 +146,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
         socketEmit('call:end', { targetId: receiverId, callId });
         void apiClient.put('/calls/' + callId + '/end', { status: 'missed' });
         state().resetCallStore();
-      }, 30_000);
+      }, 90_000);
     } catch {
       state().resetCallStore();
     }
@@ -212,6 +240,9 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     if (!peer) return;
     await peer.setRemoteDescription(new RTCSessionDescription(answer));
     await flushCandidates(targetId, peer);
+    // A valid answer establishes the call even when the receiver joined
+    // listen-only and therefore has no outbound media tracks.
+    state().markConnected();
   };
   const handleRestartOffer = async ({ senderId, offer }: { senderId: string; offer: RTCSessionDescriptionInit }) => {
     const current = state();
@@ -230,6 +261,14 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     await peer.setRemoteDescription(new RTCSessionDescription(answer));
     await flushCandidates(senderId, peer);
   };
+  const handleCallTerminated = () => {
+    clearRingTimeout();
+    peersRef.current.forEach((peer) => peer.close());
+    peersRef.current.clear();
+    pendingCandidatesRef.current.clear();
+    state().resetCallStore();
+  };
+
   const handleParticipantLeft = ({ userId }: { userId: string }) => {
     peersRef.current.get(userId)?.close(); peersRef.current.delete(userId); state().removeRemoteParticipant(userId);
   };
@@ -267,6 +306,6 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   };
 
   return { makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
-    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleRestartOffer, handleRestartAnswer, handleParticipantLeft,
-    startScreenShare, stopScreenShare, hangUp, listMediaDevices: () => navigator.mediaDevices.enumerateDevices() };
+    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleRestartOffer, handleRestartAnswer, handleCallTerminated, handleParticipantLeft,
+    startScreenShare, stopScreenShare, retryMediaPermissions, hangUp, listMediaDevices: () => navigator.mediaDevices.enumerateDevices() };
 };

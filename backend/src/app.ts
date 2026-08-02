@@ -31,6 +31,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.disable('x-powered-by');
+// Render terminates TLS at its proxy and forwards the original client IP.
+// Trust only the first proxy hop so rate limiting identifies clients correctly.
+app.set('trust proxy', 1);
 app.use(requestContext);
 
 // Security Hardening using Helmet

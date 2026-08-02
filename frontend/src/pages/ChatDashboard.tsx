@@ -309,7 +309,6 @@ export default function ChatDashboard() {
   const aiAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!isAiOpen) return;
     void apiClient.get('/ai/preferences').then((response) => {
       setAiConsent(response.data.consented);
       setAiDisclosure(response.data.disclosure);
@@ -434,8 +433,8 @@ export default function ChatDashboard() {
   const { socket, emitEvent } = useSocket();
   const {
     makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,
-    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleRestartOffer, handleRestartAnswer, handleParticipantLeft,
-    startScreenShare, stopScreenShare, hangUp
+    handleGroupParticipantJoined, handlePeerOffer, handlePeerAnswer, handleRestartOffer, handleRestartAnswer, handleCallTerminated, handleParticipantLeft,
+    startScreenShare, stopScreenShare, retryMediaPermissions, hangUp
   } = useWebRTC(emitEvent);
 
   // Active Main Sidebar Tab
@@ -714,12 +713,22 @@ export default function ChatDashboard() {
   // Sync active message window scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [activeChat?._id, messages[activeChat?._id || '']?.length]);
 
-    // Fetch smart replies when active chat changes
-    if (activeChat) {
-      fetchSmartReplies(activeChat._id);
-    }
-  }, [activeChat, messages]);
+  // Smart replies send conversation data to the AI provider. Fetch only after
+  // explicit consent, debounce rapid socket updates, and cancel stale requests.
+  useEffect(() => {
+    setSmartReplies([]);
+    if (!activeChat?._id || !aiConsent) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      void fetchSmartReplies(activeChat._id, controller.signal);
+    }, 500);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [activeChat?._id, messages[activeChat?._id || '']?.length, aiConsent]);
 
   // Bind WebRTC socket triggers & real-time notification events, stories, and communities
   useEffect(() => {
@@ -740,11 +749,11 @@ export default function ChatDashboard() {
     const onParticipantLeft = (payload: { userId: string }) => handleParticipantLeft(payload);
     const onCallRejected = ({ reason }: { reason: string }) => {
       toast.error(`Call rejected: ${reason}`);
-      callStore.resetCallStore();
+      handleCallTerminated();
     };
     const onCallUnavailable = ({ reason }: { reason: string }) => {
       toast.info(reason || 'This user is not available for a call.');
-      callStore.resetCallStore();
+      handleCallTerminated();
     };
     const onNotificationNew = (notif: any) => {
       addIncomingNotification(notif);
@@ -789,6 +798,7 @@ export default function ChatDashboard() {
     socket.on('call:restart-answer', onRestartAnswer);
     socket.on('call:peer-candidate', onPeerCandidate);
     socket.on('call:participant-left', onParticipantLeft);
+    socket.on('call:ended', handleCallTerminated);
     socket.on('call:rejected', onCallRejected);
     socket.on('call:unavailable', onCallUnavailable);
     socket.on('notification:new', onNotificationNew);
@@ -816,6 +826,7 @@ export default function ChatDashboard() {
       socket.off('call:restart-answer', onRestartAnswer);
       socket.off('call:peer-candidate', onPeerCandidate);
       socket.off('call:participant-left', onParticipantLeft);
+      socket.off('call:ended', handleCallTerminated);
       socket.off('call:rejected', onCallRejected);
       socket.off('call:unavailable', onCallUnavailable);
       socket.off('notification:new', onNotificationNew);
@@ -1142,11 +1153,13 @@ export default function ChatDashboard() {
     }
   };
 
-  const fetchSmartReplies = async (cId: string) => {
+  const fetchSmartReplies = async (cId: string, signal?: AbortSignal) => {
     try {
-      const resp = await apiClient.get(`/ai/replies/${cId}`);
+      const resp = await apiClient.get(`/ai/replies/${cId}`, { signal });
       setSmartReplies(resp.data.replies);
-    } catch (e) {}
+    } catch (error: any) {
+      if (error?.code !== 'ERR_CANCELED') setSmartReplies([]);
+    }
   };
 
   const fetchAdminData = async () => {
@@ -4092,6 +4105,15 @@ export default function ChatDashboard() {
 
                   {/* Calling bottom toolbar */}
                   <div className="absolute bottom-4 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex items-center justify-center gap-2 sm:gap-3 bg-slate-950/65 backdrop-blur-md px-3 sm:px-6 py-3 rounded-2xl sm:rounded-full border border-slate-800 flex-wrap">
+                    {callStore.localStream?.getTracks().length === 0 && (
+                      <button
+                        onClick={() => { void retryMediaPermissions(); }}
+                        className="rounded-full bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
+                        title="Ask the browser for microphone and camera access again"
+                      >
+                        Retry media
+                      </button>
+                    )}
                     <button
                       onClick={() => callStore.toggleMute()}
                       className={`p-2.5 rounded-full ${callStore.isMuted ? 'bg-red-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
