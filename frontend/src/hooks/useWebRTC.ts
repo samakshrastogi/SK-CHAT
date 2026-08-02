@@ -6,6 +6,7 @@ import { apiClient } from '../api/client.js';
 export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
   const ringTimeoutRef = useRef<number | null>(null);
   const clearRingTimeout = () => { if (ringTimeoutRef.current) window.clearTimeout(ringTimeoutRef.current); ringTimeoutRef.current = null; };
   const getRtcConfiguration = async (): Promise<RTCConfiguration> => {
@@ -13,6 +14,19 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     return { iceServers: response.data.iceServers };
   };
   const state = () => useCallStore.getState();
+  const waitForIceGathering = (peer: RTCPeerConnection, timeoutMs = 4000) => new Promise<void>((resolve) => {
+    if (peer.iceGatheringState === 'complete') return resolve();
+    const timeout = window.setTimeout(done, timeoutMs);
+    function done() {
+      window.clearTimeout(timeout);
+      peer.removeEventListener('icegatheringstatechange', onStateChange);
+      resolve();
+    }
+    function onStateChange() {
+      if (peer.iceGatheringState === 'complete') done();
+    }
+    peer.addEventListener('icegatheringstatechange', onStateChange);
+  });
 
   const requestMediaWithRecovery = (constraints: MediaStreamConstraints) =>
     navigator.mediaDevices.getUserMedia(constraints);
@@ -65,8 +79,9 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
         }
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
+        await waitForIceGathering(peer);
         socketEmit(current.isGroupCall ? 'call:peer-offer' : 'call:restart-offer', {
-          targetId, callId: current.callId, offer,
+          targetId, callId: current.callId, offer: peer.localDescription,
         });
       }
       toast.success('Microphone and camera are connected.');
@@ -98,7 +113,12 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       peer.addTransceiver('video', { direction: 'recvonly' });
     }
     peer.ontrack = (event) => {
-      const stream = event.streams[0] || new MediaStream([event.track]);
+      // Keep one stable MediaStream per participant. Some mobile browsers emit
+      // audio and video as separate track events without event.streams.
+      const stream = remoteStreamsRef.current.get(targetId) || event.streams[0] || new MediaStream();
+      if (!stream.getTracks().some((track) => track.id === event.track.id)) stream.addTrack(event.track);
+      remoteStreamsRef.current.set(targetId, stream);
+      event.track.onunmute = () => state().setCallConnected(stream, peer, targetId, name);
       state().setCallConnected(stream, peer, targetId, name);
     };
     peer.onicecandidate = (event) => {
@@ -117,7 +137,8 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
             peer.restartIce();
             const offer = await peer.createOffer({ iceRestart: true });
             await peer.setLocalDescription(offer);
-            socketEmit(group ? 'call:peer-offer' : 'call:restart-offer', { targetId, callId, offer });
+            await waitForIceGathering(peer);
+            socketEmit(group ? 'call:peer-offer' : 'call:restart-offer', { targetId, callId, offer: peer.localDescription });
             toast.info('Connection interrupted. Reconnecting the call…');
           } catch {
             state().removeRemoteParticipant(targetId);
@@ -139,7 +160,8 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       const peer = await createPeer(receiverId, callId, stream, false, undefined, true);
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      socketEmit('call:initiate', { receiverId, callId, type, offer });
+      await waitForIceGathering(peer);
+      socketEmit('call:initiate', { receiverId, callId, type, offer: peer.localDescription });
       localStorage.setItem('active_backend_call_id', callId);
       clearRingTimeout();
       ringTimeoutRef.current = window.setTimeout(() => {
@@ -185,7 +207,8 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
       await flushCandidates(callerId, peer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
-      socketEmit('call:accept', { callerId, callId: current.callId, answer });
+      await waitForIceGathering(peer);
+      socketEmit('call:accept', { callerId, callId: current.callId, answer: peer.localDescription });
     } catch { rejectCall(callerId, 'Failed to establish connection tracks'); }
   };
 
@@ -201,7 +224,8 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     const peer = await createPeer(userId, current.callId, current.localStream, true, username, true);
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
-    socketEmit('call:peer-offer', { targetId: userId, callId: current.callId, offer });
+    await waitForIceGathering(peer);
+    socketEmit('call:peer-offer', { targetId: userId, callId: current.callId, offer: peer.localDescription });
   };
 
   const handlePeerOffer = async ({ senderId, senderName, offer }: { senderId: string; senderName?: string; offer: RTCSessionDescriptionInit }) => {
@@ -213,7 +237,8 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     await flushCandidates(senderId, peer);
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
-    socketEmit('call:peer-answer', { targetId: senderId, callId: current.callId, answer });
+    await waitForIceGathering(peer);
+    socketEmit('call:peer-answer', { targetId: senderId, callId: current.callId, answer: peer.localDescription });
   };
 
   const handlePeerAnswer = async ({ senderId, answer }: { senderId: string; answer: RTCSessionDescriptionInit }) => {
@@ -253,7 +278,8 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     await flushCandidates(senderId, peer);
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
-    socketEmit('call:restart-answer', { targetId: senderId, callId: current.callId, answer });
+    await waitForIceGathering(peer);
+    socketEmit('call:restart-answer', { targetId: senderId, callId: current.callId, answer: peer.localDescription });
   };
   const handleRestartAnswer = async ({ senderId, answer }: { senderId: string; answer: RTCSessionDescriptionInit }) => {
     const peer = peersRef.current.get(senderId);
@@ -266,6 +292,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     peersRef.current.forEach((peer) => peer.close());
     peersRef.current.clear();
     pendingCandidatesRef.current.clear();
+    remoteStreamsRef.current.clear();
     state().resetCallStore();
   };
 
@@ -302,7 +329,7 @@ export const useWebRTC = (socketEmit: (event: string, data: any) => void) => {
     }
     if (current.callId) await apiClient.put('/calls/' + current.callId + '/end', { status: 'completed' }).catch(() => undefined);
     localStorage.removeItem('active_backend_call_id');
-    peersRef.current.forEach((peer) => peer.close()); peersRef.current.clear(); pendingCandidatesRef.current.clear(); current.resetCallStore();
+    peersRef.current.forEach((peer) => peer.close()); peersRef.current.clear(); pendingCandidatesRef.current.clear(); remoteStreamsRef.current.clear(); current.resetCallStore();
   };
 
   return { makeCall, makeGroupCall, answerCall, rejectCall, handleIceCandidate, handleCallAccepted,

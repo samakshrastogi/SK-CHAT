@@ -14,7 +14,7 @@ import { CENTRAL_PROFILE_URL } from '../api/centralAuth.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, MessageSquare, Video, Phone, Settings, User as UserIcon, LogOut, Search, Plus, Send,
-  Paperclip, MoreVertical, X, Check, CheckCheck, Smile, Star, Trash2, Edit2, CornerUpLeft,
+  Paperclip, MoreVertical, MoreHorizontal, X, Check, CheckCheck, Smile, Star, Trash2, Edit2, CornerUpLeft,
   Pin, Shield, Mic, HelpCircle, Share2, BarChart2, ShieldAlert, Trash, PlusCircle, Globe,
   Compass, Eye, Play, Pause, Sparkles, Languages, FileText, MapPin, PhoneMissed, Volume2, VideoOff,
   UserX, CheckCircle, Ban, Download, Copy, Megaphone, Bell, Users, UserPlus, UserCheck, VolumeX, Code2
@@ -350,6 +350,7 @@ export default function ChatDashboard() {
   const [liveCaptions, setLiveCaptions] = useState<string[]>([]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isWaitingRoom, setIsWaitingRoom] = useState(false);
+  const [showCallExtras, setShowCallExtras] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -4047,7 +4048,16 @@ export default function ChatDashboard() {
                         )}
                       </div>
                     ) : (
-                      <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover transition-all duration-300 ${isBgBlurActive ? 'blur-md' : ''}`} />
+                      <div className="relative h-full w-full bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
+                        <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover transition-all duration-300 ${isBgBlurActive ? 'blur-md' : ''}`} />
+                        {!callStore.remoteStream && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-white">
+                            <div className="h-20 w-20 animate-pulse rounded-full bg-indigo-500/20 ring-1 ring-indigo-300/30" />
+                            <p className="text-base font-bold">Connecting video…</p>
+                            <p className="max-w-xs px-5 text-xs text-slate-400">Securing the direct media path. On mobile networks, an operational TURN server is required.</p>
+                          </div>
+                        )}
+                      </div>
                     )
                   ) : (
                     <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950/50 gap-4">
@@ -4103,112 +4113,43 @@ export default function ChatDashboard() {
                     </div>
                   )}
 
-                  {/* Calling bottom toolbar */}
-                  <div className="absolute bottom-4 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex items-center justify-center gap-2 sm:gap-3 bg-slate-950/65 backdrop-blur-md px-3 sm:px-6 py-3 rounded-2xl sm:rounded-full border border-slate-800 flex-wrap">
-                    {callStore.localStream?.getTracks().length === 0 && (
-                      <button
-                        onClick={() => { void retryMediaPermissions(); }}
-                        className="rounded-full bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
-                        title="Ask the browser for microphone and camera access again"
-                      >
-                        Retry media
+                  {/* Meet-style call controls: primary actions stay visible; secondary tools live in More. */}
+                  <div className="absolute bottom-3 left-1/2 z-40 -translate-x-1/2 sm:bottom-5">
+                    <AnimatePresence>
+                      {showCallExtras && callStore.callType === 'video' && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                          className="mb-3 grid grid-cols-4 gap-2 rounded-2xl border border-white/10 bg-slate-950/90 p-2.5 shadow-2xl backdrop-blur-xl"
+                        >
+                          <button onClick={() => setIsBgBlurActive(!isBgBlurActive)} className={`flex h-11 min-w-11 items-center justify-center rounded-xl bg-slate-800 px-3 text-slate-200 transition hover:bg-slate-700 ${isBgBlurActive ? 'bg-indigo-500 text-white' : ''}`} title="Background blur"><Sparkles className="h-5 w-5" /></button>
+                          <button onClick={() => setIsNoiseCancellationActive(!isNoiseCancellationActive)} className={`flex h-11 min-w-11 items-center justify-center rounded-xl bg-slate-800 px-3 text-slate-200 transition hover:bg-slate-700 ${isNoiseCancellationActive ? 'bg-indigo-500 text-white' : ''}`} title="Noise controls"><Languages className="h-5 w-5" /></button>
+                          <button onClick={() => isCaptioningActive ? stopSpeechTranscription() : startSpeechTranscription()} className={`flex h-11 min-w-11 items-center justify-center rounded-xl bg-slate-800 px-3 text-slate-200 transition hover:bg-slate-700 ${isCaptioningActive ? 'bg-indigo-500 text-white' : ''}`} title="Live captions"><Megaphone className="h-5 w-5" /></button>
+                          <button onClick={() => isRecording ? stopCallRecording() : startCallRecording()} className={`flex h-11 min-w-11 items-center justify-center rounded-xl bg-slate-800 px-3 text-slate-200 transition hover:bg-slate-700 ${isRecording ? 'bg-red-500 text-white' : ''}`} title="Record call"><Play className="h-5 w-5" /></button>
+                          <button onClick={() => setIsHandRaised(!isHandRaised)} className={`flex h-11 min-w-11 items-center justify-center rounded-xl bg-slate-800 px-3 text-slate-200 transition hover:bg-slate-700 col-span-2 text-xs font-bold ${isHandRaised ? 'bg-amber-400 text-slate-950' : ''}`}>{isHandRaised ? 'Lower hand' : 'Raise hand'}</button>
+                          <button onClick={() => { void retryMediaPermissions(); }} className="flex h-11 min-w-11 items-center justify-center rounded-xl bg-slate-800 px-3 text-slate-200 transition hover:bg-slate-700 col-span-2 text-xs font-bold">Retry media</button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-950/90 px-2.5 py-2.5 shadow-2xl backdrop-blur-xl sm:gap-3 sm:rounded-full sm:px-4">
+                      {callStore.localStream?.getTracks().length === 0 && (
+                        <button onClick={() => { void retryMediaPermissions(); }} className="h-11 rounded-full bg-amber-400 px-3 text-xs font-extrabold text-slate-950 hover:bg-amber-300">Enable media</button>
+                      )}
+                      <button onClick={() => callStore.toggleMute()} className={`flex h-11 w-11 items-center justify-center rounded-full transition sm:h-12 sm:w-12 ${callStore.isMuted ? 'bg-red-500 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}`} title={callStore.isMuted ? 'Turn microphone on' : 'Turn microphone off'}>
+                        {callStore.isMuted ? <VolumeX className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                       </button>
-                    )}
-                    <button
-                      onClick={() => callStore.toggleMute()}
-                      className={`p-2.5 rounded-full ${callStore.isMuted ? 'bg-red-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-                      title={callStore.isMuted ? 'Unmute' : 'Mute'}
-                    >
-                      <Mic className="h-5 w-5" />
-                    </button>
-                    {callStore.callType === 'video' && (
-                      <>
-                        <button
-                          onClick={() => callStore.toggleCamera()}
-                          className={`p-2.5 rounded-full ${callStore.isCameraOff ? 'bg-red-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-                          title={callStore.isCameraOff ? 'Turn Cam On' : 'Turn Cam Off'}
-                        >
-                          <VideoOff className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (callStore.isScreenSharing) {
-                              stopScreenShare();
-                            } else {
-                              startScreenShare();
-                            }
-                          }}
-                          className={`p-2.5 rounded-full ${callStore.isScreenSharing ? 'bg-indigo-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-                          title={callStore.isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
-                        >
-                          <Share2 className="h-5 w-5" />
-                        </button>
-
-                        {/* Background Blur */}
-                        <button
-                          onClick={() => setIsBgBlurActive(!isBgBlurActive)}
-                          className={`p-2.5 rounded-full ${isBgBlurActive ? 'bg-indigo-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-                          title={isBgBlurActive ? 'Disable Blur' : 'Enable Background Blur'}
-                        >
-                          <Sparkles className="h-5 w-5" />
-                        </button>
-
-                        {/* Noise Cancellation */}
-                        <button
-                          onClick={() => setIsNoiseCancellationActive(!isNoiseCancellationActive)}
-                          className={`p-2.5 rounded-full ${isNoiseCancellationActive ? 'bg-indigo-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-                          title={isNoiseCancellationActive ? 'Disable Noise Cancellation' : 'Enable Noise Cancellation'}
-                        >
-                          <Languages className="h-5 w-5" />
-                        </button>
-
-                        {/* Live Captioning Speech-to-Text */}
-                        <button
-                          onClick={() => {
-                            if (isCaptioningActive) {
-                              stopSpeechTranscription();
-                            } else {
-                              startSpeechTranscription();
-                            }
-                          }}
-                          className={`p-2.5 rounded-full ${isCaptioningActive ? 'bg-indigo-500 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-                          title={isCaptioningActive ? 'Hide Captions' : 'Show Live Captions'}
-                        >
-                          <Megaphone className="h-5 w-5" />
-                        </button>
-
-                        {/* Call Recording */}
-                        <button
-                          onClick={() => {
-                            if (isRecording) {
-                              stopCallRecording();
-                            } else {
-                              startCallRecording();
-                            }
-                          }}
-                          className={`p-2.5 rounded-full ${isRecording ? 'bg-red-650 text-white animate-pulse' : 'hover:bg-slate-800 text-slate-300'}`}
-                          title={isRecording ? 'Stop Recording' : 'Record Video Call'}
-                        >
-                          <Play className="h-5 w-5" />
-                        </button>
-
-                        {/* Raise Hand */}
-                        <button
-                          onClick={() => setIsHandRaised(!isHandRaised)}
-                          className={`p-2.5 rounded-full text-xs ${isHandRaised ? 'bg-amber-500 text-white animate-bounce' : 'hover:bg-slate-800 text-slate-300'}`}
-                          title={isHandRaised ? 'Lower Hand' : 'Raise Hand'}
-                        >
-                          🖐️
-                        </button>
-                      </>
-                    )}
-                    <button
-                      onClick={hangUp}
-                      className="p-2.5 rounded-full bg-red-500 text-white hover:bg-red-600 shadow shadow-red-500/25"
-                      title="Hang up call"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
+                      {callStore.callType === 'video' && (
+                        <>
+                          <button onClick={() => callStore.toggleCamera()} className={`flex h-11 w-11 items-center justify-center rounded-full transition sm:h-12 sm:w-12 ${callStore.isCameraOff ? 'bg-red-500 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}`} title={callStore.isCameraOff ? 'Turn camera on' : 'Turn camera off'}>
+                            {callStore.isCameraOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
+                          </button>
+                          <button onClick={() => callStore.isScreenSharing ? stopScreenShare() : startScreenShare()} className={`flex h-11 w-11 items-center justify-center rounded-full transition sm:h-12 sm:w-12 ${callStore.isScreenSharing ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}`} title={callStore.isScreenSharing ? 'Stop presenting' : 'Present screen'}><Share2 className="h-5 w-5" /></button>
+                          <button onClick={() => setShowCallExtras(!showCallExtras)} className={`flex h-11 w-11 items-center justify-center rounded-full transition sm:h-12 sm:w-12 ${showCallExtras ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}`} title="More call controls"><MoreHorizontal className="h-5 w-5" /></button>
+                        </>
+                      )}
+                      <button onClick={hangUp} className="flex h-11 w-14 items-center justify-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/25 transition hover:bg-red-600 sm:h-12 sm:w-16" title="Leave call"><Phone className="h-5 w-5 rotate-[135deg]" /></button>
+                    </div>
                   </div>
                 </div>
               )}
