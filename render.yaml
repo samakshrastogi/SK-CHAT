@@ -51,9 +51,13 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
-      - key: TURN_URLS
+      - key: TURN_PROVIDER
+        value: cloudflare
+      - key: CLOUDFLARE_ACCOUNT_ID
         sync: false
-      - key: TURN_SHARED_SECRET
+      - key: CLOUDFLARE_TURN_TOKEN_ID
+        sync: false
+      - key: CLOUDFLARE_TURN_API_TOKEN
         sync: false
       - key: TURN_CREDENTIAL_TTL_SECONDS
         value: 3600
@@ -67,9 +71,11 @@ services:
         value: 250
       - key: UPLOAD_DAILY_FILE_LIMIT
         value: 100
+      - key: MALWARE_SCAN_PROVIDER
+        value: cloudmersive
+      - key: CLOUDMERSIVE_API_KEY
+        sync: false
+      - key: MALWARE_SCAN_TIMEOUT_MS
+        value: 30000
       - key: MALWARE_SCAN_REQUIRED
-        sync: false
-      - key: MALWARE_SCAN_URL
-        sync: false
-      - key: MALWARE_SCAN_TOKEN
         sync: false

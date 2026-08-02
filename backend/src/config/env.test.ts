@@ -55,12 +55,49 @@ describe('production environment validation', () => {
     expect(() => validateProductionEnv()).toThrow(/CLOUDINARY_CLOUD_NAME/);
   });
 
-  it('requires TURN URLs and a secret when call relay enforcement is enabled', () => {
+  it('requires TURN URLs and a secret for enforced Coturn deployments', () => {
     setRequiredProductionEnv();
     process.env.REQUIRE_TURN = 'true';
+    process.env.TURN_PROVIDER = 'coturn';
     delete process.env.TURN_URLS;
     delete process.env.TURN_SHARED_SECRET;
     expect(() => validateProductionEnv()).toThrow(/TURN_URLS/);
+  });
+
+  it('accepts Cloudflare TURN credentials without Coturn variables', () => {
+    setRequiredProductionEnv();
+    process.env.REQUIRE_TURN = 'true';
+    process.env.TURN_PROVIDER = 'cloudflare';
+    process.env.CLOUDFLARE_TURN_TOKEN_ID = 'turn-token-id';
+    process.env.CLOUDFLARE_TURN_API_TOKEN = 'turn-api-token';
+    delete process.env.TURN_URLS;
+    delete process.env.TURN_SHARED_SECRET;
+    expect(() => validateProductionEnv()).not.toThrow();
+  });
+
+  it('requires both Cloudflare TURN credential fields', () => {
+    setRequiredProductionEnv();
+    process.env.TURN_PROVIDER = 'cloudflare';
+    process.env.CLOUDFLARE_TURN_TOKEN_ID = 'turn-token-id';
+    delete process.env.CLOUDFLARE_TURN_API_TOKEN;
+    expect(() => validateProductionEnv()).toThrow(/CLOUDFLARE_TURN_API_TOKEN/);
+  });
+
+  it('accepts Cloudmersive malware scanning without a generic scanner URL', () => {
+    setRequiredProductionEnv();
+    process.env.MALWARE_SCAN_REQUIRED = 'true';
+    process.env.MALWARE_SCAN_PROVIDER = 'cloudmersive';
+    process.env.CLOUDMERSIVE_API_KEY = 'cloudmersive-key';
+    delete process.env.MALWARE_SCAN_URL;
+    expect(() => validateProductionEnv()).not.toThrow();
+  });
+
+  it('requires the Cloudmersive key when malware scanning is enforced', () => {
+    setRequiredProductionEnv();
+    process.env.MALWARE_SCAN_REQUIRED = 'true';
+    process.env.MALWARE_SCAN_PROVIDER = 'cloudmersive';
+    delete process.env.CLOUDMERSIVE_API_KEY;
+    expect(() => validateProductionEnv()).toThrow(/CLOUDMERSIVE_API_KEY/);
   });
 
   it('requires Redis when realtime enforcement is enabled', () => {
@@ -68,4 +105,5 @@ describe('production environment validation', () => {
     process.env.REQUIRE_REDIS = 'true';
     delete process.env.REDIS_URL;
     expect(() => validateProductionEnv()).toThrow(/REDIS_URL/);
-  });});
+  });
+});

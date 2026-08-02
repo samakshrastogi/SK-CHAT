@@ -3,7 +3,7 @@ import { Call } from '../models/Call.js';
 import { CustomError } from '../utils/customError.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { Chat } from '../models/Chat.js';
-import { buildIceServers } from '../services/turnService.js';
+import { getIceServersForUser } from '../services/turnService.js';
 
 export const getCallHistory = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -85,7 +85,7 @@ export const logCallEnd = async (req: AuthenticatedRequest, res: Response, next:
 
 export const getIceServers = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    res.json({ success: true, ...buildIceServers(req.user!.id) });
+    res.json({ success: true, ...await getIceServersForUser(req.user!.id) });
   } catch (error) {
     next(error);
   }

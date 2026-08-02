@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { buildIceServers, createTurnCredentials } from './turnService.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildIceServers, createTurnCredentials, getIceServersForUser } from './turnService.js';
 
 const originalEnvironment = { ...process.env };
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   process.env = { ...originalEnvironment };
 });
 
@@ -32,5 +33,32 @@ describe('TURN credentials', () => {
     });
     expect(JSON.stringify(result)).not.toContain('shared-secret');
   });
-});
 
+  it('retrieves short-lived Cloudflare TURN credentials and removes port 53 URLs', async () => {
+    process.env.TURN_PROVIDER = 'cloudflare';
+    process.env.CLOUDFLARE_TURN_TOKEN_ID = 'turn-token-id';
+    process.env.CLOUDFLARE_TURN_API_TOKEN = 'secret-api-token';
+    process.env.TURN_CREDENTIAL_TTL_SECONDS = '600';
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      iceServers: [
+        { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.cloudflare.com:53'] },
+        { urls: ['turn:turn.cloudflare.com:3478?transport=udp', 'turn:turn.cloudflare.com:53?transport=udp'], username: 'u', credential: 'p' },
+      ],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getIceServersForUser('cloudflare-test-user');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://rtc.live.cloudflare.com/v1/turn/keys/turn-token-id/credentials/generate-ice-servers',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ authorization: 'Bearer secret-api-token' }),
+        body: JSON.stringify({ ttl: 600 }),
+      })
+    );
+    expect(result.expiresIn).toBe(600);
+    expect(result.iceServers.flatMap((server) => server.urls)).not.toContain('stun:stun.cloudflare.com:53');
+    expect(JSON.stringify(result)).not.toContain('secret-api-token');
+  });
+});

@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { detectMediaMime } from './mediaSecurityService.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { detectMediaMime, scanUpload } from './mediaSecurityService.js';
+
+const originalEnvironment = { ...process.env };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  process.env = { ...originalEnvironment };
+});
 
 describe('media content inspection', () => {
   it('detects supported content from bytes rather than a supplied MIME label', () => {
@@ -17,5 +24,47 @@ describe('media content inspection', () => {
   it('distinguishes WAV and WebP RIFF containers', () => {
     expect(detectMediaMime(Buffer.from('RIFF0000WAVE', 'ascii'))).toBe('audio/wav');
     expect(detectMediaMime(Buffer.from('RIFF0000WEBP', 'ascii'))).toBe('image/webp');
+  });
+
+  it('submits uploads to Cloudmersive using its multipart API contract', async () => {
+    process.env.MALWARE_SCAN_PROVIDER = 'cloudmersive';
+    process.env.CLOUDMERSIVE_API_KEY = 'cloudmersive-key';
+    process.env.MALWARE_SCAN_REQUIRED = 'true';
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      CleanResult: true,
+      FoundViruses: [],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const file = {
+      buffer: Buffer.from('%PDF-1.7\n'),
+      mimetype: 'application/pdf',
+      originalname: 'safe.pdf',
+    } as Express.Multer.File;
+
+    await expect(scanUpload(file)).resolves.toBeUndefined();
+
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.cloudmersive.com/virus/scan/file');
+    expect(options.method).toBe('POST');
+    expect(options.headers).toMatchObject({ Apikey: 'cloudmersive-key' });
+    expect(options.body).toBeInstanceOf(FormData);
+    expect((options.body as FormData).get('inputFile')).toBeInstanceOf(Blob);
+  });
+
+  it('rejects files Cloudmersive reports as infected', async () => {
+    process.env.MALWARE_SCAN_PROVIDER = 'cloudmersive';
+    process.env.CLOUDMERSIVE_API_KEY = 'cloudmersive-key';
+    process.env.MALWARE_SCAN_REQUIRED = 'true';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      CleanResult: false,
+      FoundViruses: [{ FileName: 'unsafe.pdf', VirusName: 'test-virus' }],
+    }), { status: 200 })));
+    const file = {
+      buffer: Buffer.from('%PDF-1.7\n'),
+      mimetype: 'application/pdf',
+      originalname: 'unsafe.pdf',
+    } as Express.Multer.File;
+
+    await expect(scanUpload(file)).rejects.toMatchObject({ statusCode: 422 });
   });
 });

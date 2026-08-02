@@ -58,16 +58,39 @@ export const inspectUpload = async (file: Express.Multer.File) => {
 };
 
 export const scanUpload = async (file: Express.Multer.File) => {
-  const scanUrl = process.env.MALWARE_SCAN_URL?.trim();
+  const provider = (process.env.MALWARE_SCAN_PROVIDER || 'generic').trim().toLowerCase();
   const required = process.env.MALWARE_SCAN_REQUIRED === 'true';
-  if (!scanUrl) {
-    if (required) throw new CustomError('Malware scanner is unavailable', 503);
-    return;
-  }
   const body = file.buffer || await fs.readFile(file.path);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeoutMs = Math.max(5_000, Number(process.env.MALWARE_SCAN_TIMEOUT_MS || 30_000));
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
+    if (provider === 'cloudmersive') {
+      const apiKey = process.env.CLOUDMERSIVE_API_KEY?.trim();
+      if (!apiKey) {
+        if (required) throw new CustomError('Cloudmersive malware scanner is not configured', 503);
+        return;
+      }
+      const form = new FormData();
+      form.append('inputFile', new Blob([new Uint8Array(body)], { type: file.mimetype }), file.originalname);
+      const response = await fetch('https://api.cloudmersive.com/virus/scan/file', {
+        method: 'POST',
+        headers: { Apikey: apiKey },
+        body: form,
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new CustomError('Cloudmersive file security scan failed', 503);
+      const result = await response.json() as { CleanResult?: boolean; FoundViruses?: unknown[] };
+      if (result.CleanResult !== true) throw new CustomError('Potentially unsafe file rejected', 422);
+      return;
+    }
+
+    const scanUrl = process.env.MALWARE_SCAN_URL?.trim();
+    if (!scanUrl) {
+      if (required) throw new CustomError('Malware scanner is unavailable', 503);
+      return;
+    }
     const response = await fetch(scanUrl, {
       method: 'POST',
       headers: {
@@ -81,6 +104,9 @@ export const scanUpload = async (file: Express.Multer.File) => {
     if (!response.ok) throw new CustomError('File security scan failed', 503);
     const result = await response.json() as { clean?: boolean };
     if (result.clean !== true) throw new CustomError('Potentially unsafe file rejected', 422);
+  } catch (error) {
+    if (error instanceof CustomError) throw error;
+    throw new CustomError('File security scan failed', 503);
   } finally {
     clearTimeout(timeout);
   }
